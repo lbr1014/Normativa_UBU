@@ -18,7 +18,7 @@ from urllib.parse import urljoin, urlparse
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 from datetime import datetime
 
 from playwright.sync_api import expect
@@ -202,7 +202,15 @@ def irPestana(page: Page, clave: str, timeout: float = 10_000) -> None:
 
 
 
-def extraerLicitaciones(page):
+def extraerLicitaciones(page) -> dict:
+    """
+    Recorre las licitaciones de la página entrando en cada una
+    Argumentos:
+        page: la página actual (Licitacion) de la cual queremos extrear el JSON
+
+    Return: 
+        Devuelve un diccionario con la información extraida.
+    """
     print("vy a descaragr licitaciones")
     url=page.url
     tabla = page.locator(r'#tableLicitacionesPerfilContratante')
@@ -243,7 +251,6 @@ def extraerLicitaciones(page):
             j+=1
             print(f"Licitación visitada #{i+1} Total {j}")
 
-            #page.go_back()  
             page.goto(url)
             irPestana(page, "Licitaciones")
             page.wait_for_load_state("domcontentloaded")
@@ -259,6 +266,8 @@ def extraerLicitaciones(page):
         page.wait_for_load_state("networkidle")
         pagina+=1
 
+    return resultados
+
 def extraerDetallesLicitacion(page: Page) -> dict:
     """
     Extrae los campos visibles de la página actual de licitaciones en formato JSON
@@ -273,14 +282,7 @@ def extraerDetallesLicitacion(page: Page) -> dict:
     detalles = page.locator('fieldset[id^="DetalleLicitacion"]').first
     detalles.wait_for(state="visible", timeout=30_000)
 
-    # Metadatos útiles
-    meta = {
-        "url": page.url,
-        "titulo_pagina": page.title(),
-        "extraido_iso": datetime.now().isoformat(),
-    }
-
-    #información de la tabla DetalleLicitacion
+    #información de la tabla DetalleLicitacionVIS_UOE
     tabla = page.evaluate(
         """() => {
           const root = document.querySelector('#DetalleLicitacionVIS_UOE');
@@ -304,24 +306,137 @@ def extraerDetallesLicitacion(page: Page) -> dict:
         }"""
     )
     datos={}
+    tablaNormalizada={}
     #Normalizar los datos obtenidos
     for k,v in tabla.items():
+        #Quita los espacios dejando solo uno y quita los dos puntos
         k = re.sub(r"\s+", " ",k).strip()
         k = re.sub(r":\s*$", "", k)
 
         v = re.sub(r"\s+", " ",v).strip()
 
-        datos[k]=v
+        tablaNormalizada[k]=v
+
+    datos.update(tablaNormalizada)
+
+    #información de la tabla InformacionLicitacionVIS_UOE
+    informacion=page.evaluate(
+        """() => {
+          const root = document.querySelector('#InformacionLicitacionVIS_UOE');
+          if (!root) return {};
+
+          const out = {};
+          // cada fila es un <ul>; dentro hay 2 <li>: [etiqueta, valor]
+          const filas = Array.from(root.querySelectorAll('ul'));
+          for (const ul of filas) {
+            const celdas = Array.from(ul.querySelectorAll('li'));
+            if (celdas.length < 2) continue;
+
+            const etiqueta = (celdas[0].textContent || '').trim();
+            if (!etiqueta) continue;
+
+            // valor = concatenación del texto de spans y enlaces dentro del segundo li
+            const valor = (celdas[1].textContent || '').replace(/\\s+/g, ' ').trim();
+            if (valor) out[etiqueta] = valor;
+          }
+          return out;
+        }"""
+    )
+
+    informacionNormalizada={}
+    for k, v in informacion.items():
+        k = re.sub(r"\s+", " ", k).strip()
+        k = re.sub(r":\s*$", "", k)
+        v = re.sub(r"\s+", " ", v).strip()
+        informacionNormalizada[k] = v
+
+    datos.update(informacionNormalizada)
 
     print(f"\nDatos normalizados: {datos}")
 
+    #informaciónde la tabla #myTablaDetalleVISUOE
+    documentos = page.evaluate(
+        """() => {
+          const table = document.querySelector('#myTablaDetalleVISUOE');
+          if (!table) return [];
 
+          const out = [];
+          const filas = Array.from(table.querySelectorAll('#myTablaDetalleVISUOE > tbody tr'))
 
+          for (const tr of filas) {
+            const tds = tr.querySelectorAll('td');
 
-    print(f"\nMetadatos: {meta}")
+            // 0: Publicación en plataforma
+            const publicacion = (tds[0].textContent || '').replace(/\\s+/g, ' ').trim();
 
-    return {"Metadatos": meta, "Datos": datos}
+            // 1: Documento (nombre)
+            const documento = (tds[1].textContent || '').replace(/\\s+/g, ' ').trim();
 
+            // 2: Ver documentos -> nos quedamos SOLO con el enlace cuyo texto sea "Html"
+            let html = null;
+            const links = Array.from(tds[2].querySelectorAll('a'));
+            const htmlLink = links.find(a => /\\bhtml\\b/i.test(a.textContent || ''));
+            if (htmlLink) {
+              // Devolver URL absoluta
+              html = new URL(htmlLink.getAttribute('href') || '', window.location.href).href;
+            }
+
+            out.push({ publicacion, documento, html });
+          }
+          return out;
+        }"""
+    )
+    print (f"\n Documentos: {documentos}")    
+
+    otrosDocumentos = page.evaluate(
+        r"""() => {
+        const cont = document.querySelector('#datosDocumentosGenerales');
+        if (!cont) return [];
+
+        const table = cont.querySelector('[id="viewns_Z7_AVEQAI930OBRD02JPMTPG21006_:form1:TableEx1_Aux"]');
+        if (!table) return [];
+
+        const out = [];
+        const seen = new Set();
+        const rows = Array.from(table.querySelectorAll('tbody tr'));
+
+        for (const tr of rows) {
+            const tds = tr.querySelectorAll('td');
+
+            const publicacion = (tds[0].textContent || '').trim();
+            const documento   = (tds[1].textContent || '').trim();
+
+            const verLink = Array.from(tds[2].querySelectorAll('a'))
+            .find(a => /\bver\b/i.test((a.textContent || '').trim()));
+            if (!verLink) continue;
+
+            const html = new URL(verLink.getAttribute('href') || '', window.location.href).href;
+
+            const key = `${publicacion}||${documento}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+
+            out.push({ publicacion, documento, html });
+        }
+
+        return out;
+        }"""
+    )
+
+    print (f"\n Otros Documentos: {otrosDocumentos}")    
+
+    documentos.extend(otrosDocumentos)
+
+    print(f"\nDOCUMENTOS FINAL: {documentos}")
+
+    return datos, documentos
+
+def guardarLicitacionJSON(resultados: List[Any]) -> None:
+    """
+    Guarda las licitaciones en OUTPUT_JSON como una lista de objetos { "datos": {…}, "documentos": [ … ] }
+    """
+    with open(OUTPUT_JSON, "w", encoding="utf-8") as f:
+        json.dump(resultados, f, ensure_ascii=False, indent=2)
 
 
 def main():
@@ -392,6 +507,8 @@ def main():
             resultado=[]
             if destino == "Licitaciones":
                 resultado=extraerLicitaciones(page)
+
+            guardarLicitacionJSON(resultado)
 
 
 
