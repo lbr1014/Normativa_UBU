@@ -12,11 +12,14 @@ import csv
 import json
 import random
 import sys
+import unicodedata
 import re, time
+from urllib.parse import urljoin, urlparse
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
+from datetime import datetime
 
 from playwright.sync_api import expect
 from playwright.sync_api import sync_playwright, Error, TimeoutError as PlaywrightTimeoutError
@@ -28,8 +31,8 @@ DELAY_MS = (350, 900)  # min/max para pausas semi-aleatorias
 API_DELAY = 0.35
 TIMEOUT = 30000        # 30s por acción
 OUTPUT_JSON = "resultados_playwright.json"
-query = "licitacion" 
-objetivo = "Junta de Gobierno de la Diputación Provincial de Burgos"
+QUERY = "licitacion" 
+OBJETIVO = "Junta de Gobierno de la Diputación Provincial de Burgos"
 
 # ======== Utilidades de espera ========
 def esperarFrame(page, selector, timeout=60000):
@@ -209,32 +212,119 @@ def extraerLicitaciones(page):
     total=filas.count()
     print(f"Filas en la página: {total}")
 
-    for i in range(total):
-        tabla.wait_for(state="visible", timeout=30_000)
-        fila = tabla.locator("tbody tr").nth(i)
+    botonSiguiente=page.locator(r'#viewns_Z7_AVEQAI930GRPE02BR764FO30G0_\:form1\:siguienteLink')
+    botonSiguiente.wait_for(state="visible", timeout=30_000)
+    botonSiguiente.scroll_into_view_if_needed()
+    j=0
+    pagina=1
+    resultados=[]
+    while True:
+        total=filas.count()
+        print(f"Filas en la página {pagina} : {total}")
 
-        enlace = fila.locator('td.tdExpediente a:not([target="_blank"])').first
-        enlace.wait_for(state="visible", timeout=30_000)
-        enlace.scroll_into_view_if_needed()
+        for i in range(total):
+            tabla.wait_for(state="visible", timeout=30_000)
+            fila = tabla.locator("tbody tr").nth(i)
 
-        with page.expect_navigation(wait_until="domcontentloaded"):
-            enlace.click(force=True)
+            enlace = fila.locator('td.tdExpediente a:not([target="_blank"])').first
+            enlace.wait_for(state="visible", timeout=30_000)
+            enlace.scroll_into_view_if_needed()
 
-        page.wait_for_load_state("networkidle")
+            with page.expect_navigation(wait_until="domcontentloaded"):
+                enlace.click(force=True)
 
-        page.wait_for_timeout(400)
+            page.wait_for_load_state("networkidle")
 
-        print(f"Licitación visitada #{i+1}")
+            page.wait_for_timeout(400)
 
-        #page.go_back()  
-        page.goto(url)
-        irPestana(page, "Licitaciones")
+            detalles = extraerDetallesLicitacion(page)
+            resultados.append(detalles)
+
+            j+=1
+            print(f"Licitación visitada #{i+1} Total {j}")
+
+            #page.go_back()  
+            page.goto(url)
+            irPestana(page, "Licitaciones")
+            page.wait_for_load_state("domcontentloaded")
+            tabla.wait_for(state="visible", timeout=30_000)
+            page.wait_for_load_state("networkidle")
+
+        if not botonSiguiente.is_visible():
+            break
+
+        botonSiguiente.click(force=True)
         page.wait_for_load_state("domcontentloaded")
         tabla.wait_for(state="visible", timeout=30_000)
         page.wait_for_load_state("networkidle")
+        pagina+=1
+
+def extraerDetallesLicitacion(page: Page) -> dict:
+    """
+    Extrae los campos visibles de la página actual de licitaciones en formato JSON
+    Argumentos:
+        page: la página actual de la cual queremos extrear el JSON
+
+    Return: 
+        Devuelve un diccionario con la información extraida.
+    """
+    datos=[]
+
+    detalles = page.locator('fieldset[id^="DetalleLicitacion"]').first
+    detalles.wait_for(state="visible", timeout=30_000)
+
+    # Metadatos útiles
+    meta = {
+        "url": page.url,
+        "titulo_pagina": page.title(),
+        "extraido_iso": datetime.now().isoformat(),
+    }
+
+    #información de la tabla DetalleLicitacion
+    tabla = page.evaluate(
+        """() => {
+          const root = document.querySelector('#DetalleLicitacionVIS_UOE');
+          if (!root) return {};
+
+          const out = {};
+          // cada fila es un <ul>; dentro hay 2 <li>: [etiqueta, valor]
+          const filas = Array.from(root.querySelectorAll('ul'));
+          for (const ul of filas) {
+            const celdas = Array.from(ul.querySelectorAll('li'));
+            if (celdas.length < 2) continue;
+
+            const etiqueta = (celdas[0].textContent || '').trim();
+            if (!etiqueta) continue;
+
+            // valor = concatenación del texto de spans y enlaces dentro del segundo li
+            const valor = (celdas[1].textContent || '').replace(/\\s+/g, ' ').trim();
+            if (valor) out[etiqueta] = valor;
+          }
+          return out;
+        }"""
+    )
+    datos={}
+    #Normalizar los datos obtenidos
+    for k,v in tabla.items():
+        k = re.sub(r"\s+", " ",k).strip()
+        k = re.sub(r":\s*$", "", k)
+
+        v = re.sub(r"\s+", " ",v).strip()
+
+        datos[k]=v
+
+    print(f"\nDatos normalizados: {datos}")
+
+
+
+
+    print(f"\nMetadatos: {meta}")
+
+    return {"Metadatos": meta, "Datos": datos}
+
+
 
 def main():
-    
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False)
@@ -273,7 +363,7 @@ def main():
 
 
             #Buscar la Junta de gobierno de la diputación de Burgos en el listado
-            eleccionOrgano(frame_arbol, objetivo)
+            eleccionOrgano(frame_arbol, OBJETIVO)
             print("Junta")
 
             page.wait_for_load_state("networkidle")
@@ -294,7 +384,7 @@ def main():
 
             
             page.wait_for_load_state("networkidle")
-            destino = pestanaDiputacion(query) 
+            destino = pestanaDiputacion(QUERY) 
             print(f"Iré a la pestaña: {destino}")
             irPestana(page, destino)
             print("Pestaña abierta")
