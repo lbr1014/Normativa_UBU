@@ -9,16 +9,13 @@ El script abre la plataforma, navega al "Perfil Contratante", localiza el buscad
 # ======== Imports de playwright ========
 import json
 import re, time
-from urllib.parse import urljoin, urlparse
-from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, List, Tuple, Optional
-from datetime import datetime
+from typing import Any, Dict, List, Tuple, Optional
 
 from playwright.sync_api import expect
 from playwright.sync_api import sync_playwright, Error, TimeoutError as PlaywrightTimeoutError
-from playwright.sync_api import Page, sync_playwright, TimeoutError as PWTimeoutError
+from playwright.sync_api import Page, Frame, Locator, TimeoutError as PWTimeoutError
 
 # ======== Constantes ========
 BASE_URL = "https://contrataciondelestado.es/wps/portal/plataforma"
@@ -28,7 +25,7 @@ QUERY = "licitacion"
 OBJETIVO = "Junta de Gobierno de la Diputación Provincial de Burgos"
 
 # ======== Utilidades de espera ========
-def esperarFrame(page, selector, timeout=60000)-> Tuple[Optional[object], object]:
+def esperarFrame(page: Page, selector: str, timeout: int=60000)-> Tuple[Optional[Frame], Locator]:
     """
     Espera hasta encontrar un elemento visible por selector en la raíz o en un iframes.
     Mantiene el foco en el frame donde está el elemento para devolverlo.
@@ -57,14 +54,14 @@ def esperarFrame(page, selector, timeout=60000)-> Tuple[Optional[object], object
     raise PWTimeoutError(f"No encontré '{selector}' visible en ningún iframe.")
 
 # ======== Reintentos de clic para abrir ventana ========
-def clickReintentos(boton, ventana, page, timeout=30_000, espera=400)-> bool:
+def clickReintentos(boton: Locator, ventana: Locator, page: Page, timeout: int=30_000, espera: int=400)-> bool:
     """
     Hace click sobre el boton con reintentos hasta que el locator `ventana_by_sel` sea visible
     o hasta alcanzar el timeout.    
 
      Argumentos:
-        boton: WebElement del botón a pulsar.
-        ventana: identificador la ventana/panel esperado.
+        boton: Localizador del botón a pulsar.
+        ventana: Localizador de la ventana/panel esperado.
         timeout: Tiempo máximo total de reintentos.
         espera: Pausa entre intentos.
 
@@ -95,7 +92,7 @@ def clickReintentos(boton, ventana, page, timeout=30_000, espera=400)-> bool:
                 except Exception:
                     boton.dispatch_event("click")
         except Exception:
-            pass  # ignoramos y reintentamos
+            pass  
         
         try:
             ventana.wait_for(state="visible", timeout=1500)
@@ -115,7 +112,7 @@ def clickReintentos(boton, ventana, page, timeout=30_000, espera=400)-> bool:
 
 # ======== Flujos específicos de la página ========
 
-def abrirSeleccionar(page,frame, timeout=15_000):
+def abrirSeleccionar(page: Page, frame: Frame, timeout:int=15_000)-> Tuple[Frame, Locator]:
     """
     Pulsa 'Seleccionar' y espera el árbol del popup.
 
@@ -143,7 +140,7 @@ def abrirSeleccionar(page,frame, timeout=15_000):
     return frame_arbol, loc_arbol
         
 
-def eleccionOrgano(frame_arbol, texto_objetivo) -> None:
+def eleccionOrgano(frame_arbol: Frame, texto_objetivo: str) -> None:
     """
     Selecciona en el listbox inferior (comboNombreOrgano) la option cuyo texto contiene texto_objetivo pulsa Añadir.
     
@@ -155,20 +152,20 @@ def eleccionOrgano(frame_arbol, texto_objetivo) -> None:
     sel = frame_arbol.locator(r'[id$="\:comboNombreOrgano"]').first
     sel.wait_for(state="visible")
 
-    # Espera a que tenga opciones cargadas
+    # Espera a que las opciones esten cargadas
     frame_arbol.wait_for_selector(r'[id$="\:comboNombreOrgano"] option')
 
-   # Busca la <option> por texto
+   # Busca la option por texto
     opcion = sel.locator("option", has_text=re.compile(re.escape(texto_objetivo), re.I)).first
     opcion.wait_for(state="attached")
 
-    # Selecciona por value 
+    # Selecciona por value la opción
     value = opcion.get_attribute("value")
     if not value:
         raise RuntimeError(f"No se encontró value para la opción '{texto_objetivo}'")
     sel.select_option(value=value)
 
-    # Pulsa 'Añadir'
+    # Pulsa el botón Añadir
     frame_arbol.get_by_role("button", name=re.compile(r"^Añadir$", re.I)).click()
     
 def pestanaDiputacion(busqueda: str) -> str:
@@ -241,7 +238,7 @@ def irPestana(page: Page, clave: str, timeout: float = 10_000) -> None:
 
 
 
-def extraerLicitaciones(page) -> list[dict]:
+def extraerLicitaciones(page: Page) -> list[dict]:
     """
     Recorre las licitaciones de la página entrando en cada una
     Argumentos:
@@ -483,7 +480,7 @@ def guardarLicitacionJSON(resultados: List[Any]) -> None:
 
 # ==== Main ====
 
-def main():
+def main() -> None:
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False)

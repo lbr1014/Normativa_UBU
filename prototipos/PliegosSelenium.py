@@ -12,13 +12,14 @@ import re
 import time
 import json
 from datetime import datetime
-from typing import Any, List, Tuple, Optional
+from typing import Any, List, Tuple, Optional, Dict
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import (TimeoutException, StaleElementReferenceException)
+from selenium.webdriver.remote.webelement import WebElement
 
 # ======== Constantes ========
 BASE_URL = "https://contrataciondelestado.es/wps/portal/plataforma"
@@ -54,7 +55,7 @@ def PausaMilisegundos(ms: int = 300)-> None:
     """
     time.sleep(ms / 1000.0)
 
-def visible(driver: webdriver.Chrome, by: By, sel: str, timeout: int=TIMEOUT):
+def visible(driver: webdriver.Chrome, by: By, sel: str, timeout: int=TIMEOUT) -> WebElement:
     """
     Espera y devuelve el primer elemento visible que coincide con el localizador.
 
@@ -75,7 +76,7 @@ def visible(driver: webdriver.Chrome, by: By, sel: str, timeout: int=TIMEOUT):
         EC.visibility_of_element_located((by, sel))
     )
 
-def clickSeguro(driver: webdriver.Chrome, element) -> None:
+def clickSeguro(driver: webdriver.Chrome, element: WebElement) -> None:
     """
     Click robusto que intenta múltiples estrategias para minimizar fallos por overlays/interceptaciones.
 
@@ -103,7 +104,7 @@ def clickSeguro(driver: webdriver.Chrome, element) -> None:
 
 # ======== Gestión de iframes ========
 
-def buscarVisibleEnContexto(driver: webdriver.Chrome, css_selector: str):
+def buscarVisibleEnContexto(driver: webdriver.Chrome, css_selector: str) -> Optional[WebElement]:
     """
     Busca el primer elemento de la web (WebElement) visible en el contexto actual para el selector especificado.
     
@@ -122,7 +123,7 @@ def buscarVisibleEnContexto(driver: webdriver.Chrome, css_selector: str):
         pass
     return None
 
-def iterarEnIframes(driver: webdriver.Chrome):
+def iterarEnIframes(driver: webdriver.Chrome)-> List[WebElement]:
     """
     Itera iframes/frames de PRIMER nivel del documento actual.
     """
@@ -134,7 +135,7 @@ def buscarPadres(driver: webdriver.Chrome) -> None:
     """
     driver.switch_to.default_content()
 
-def buscarIframeVisible(driver, css_selector: str) -> Tuple[Optional[str], Optional[object]]:
+def buscarIframeVisible(driver: webdriver.Chrome, css_selector: str) -> Tuple[Optional[WebElement], Optional[WebElement]]:
     """
     Busca un selector visible en raíz y en cada iframe de primer nivel.
 
@@ -166,7 +167,7 @@ def buscarIframeVisible(driver, css_selector: str) -> Tuple[Optional[str], Optio
 
     return None, None
 
-def esperarFrame(driver: webdriver.Chrome, selector: str, timeout_ms: int = 60_000) -> Tuple[Optional[object], object]:
+def esperarFrame(driver: webdriver.Chrome, selector: str, timeout_ms: int = 60_000) -> Tuple[Optional[WebElement], WebElement]:
     """
     Espera hasta encontrar un elemento visible por selector en la raíz o en un iframes.
     Mantiene el foco en el frame donde está el elemento para devolverlo.
@@ -200,7 +201,7 @@ def esperarFrame(driver: webdriver.Chrome, selector: str, timeout_ms: int = 60_0
 
 # ======== Reintentos de clic para abrir ventana ========
 
-def clickReintentos(driver, boton, ventana_by_sel: Tuple[By, str], timeout_ms=30_000, espera_ms=400) -> bool:
+def clickReintentos(driver: webdriver.Chrome, boton: WebElement, ventana_by_sel: Tuple[By, str], timeout_ms: int=30_000, espera_ms: int=400) -> bool:
     """
     Hace click sobre el boton con reintentos hasta que el locator `ventana_by_sel` sea visible
     o hasta alcanzar el timeout.
@@ -260,7 +261,7 @@ def clickReintentos(driver, boton, ventana_by_sel: Tuple[By, str], timeout_ms=30
 
 # ======== Flujos específicos de la página ========
 
-def abrirSeleccionar(driver, frame_context, timeout_ms=15_000):
+def abrirSeleccionar(driver: webdriver.Chrome, frame_context: Optional[WebElement], timeout_ms: int=15_000) -> Tuple[Optional[WebElement], WebElement]:
     """
     Pulsa 'Seleccionar' y espera el árbol del popup.
 
@@ -298,7 +299,7 @@ def abrirSeleccionar(driver, frame_context, timeout_ms=15_000):
     print(frame_arbol)
     return frame_arbol, loc_arbol
 
-def eleccionOrgano(driver, frame_arbol, texto_objetivo: str) -> None:
+def eleccionOrgano(driver: webdriver.Chrome, frame_arbol: Optional[WebElement], texto_objetivo: str) -> None:
     """
     Selecciona en el listbox inferior (comboNombreOrgano) la option cuyo texto contiene texto_objetivo pulsa Añadir.
     
@@ -370,7 +371,7 @@ def pestanaDiputacion(busqueda: str) -> str:
         return "Consultas preliminares"
     return "Perfil del Contratante"
 
-def irPestana(driver, clave: str):
+def irPestana(driver: webdriver.Chrome, clave: str) -> None:
     """
     Hace clic en la pestaña indicada en la clave.
 
@@ -411,7 +412,7 @@ def irPestana(driver, clave: str):
         pass
     PausaMilisegundos(400)
 
-def extraerLicitaciones(driver) -> list[dict]:
+def extraerLicitaciones(driver: webdriver.Chrome) -> list[dict]:
     """
     Recorre las licitaciones de la página entrando en cada una
     Argumentos:
@@ -498,7 +499,7 @@ def extraerLicitaciones(driver) -> list[dict]:
     return resultados
 
 
-def extraerDetallesLicitacion(driver) ->  tuple[dict, list[dict]]:
+def extraerDetallesLicitacion(driver: webdriver.Chrome) ->  tuple[dict, list[dict]]:
     """
     Extrae los campos visibles de la página actual de licitaciones en formato JSON
     Argumentos:
@@ -652,7 +653,7 @@ def guardarLicitacionJSON(resultados: List[Any]) -> None:
 
 # ==== Main ====
 
-def main():
+def main() -> None:
     # Configuración de Chrome
     opts = webdriver.ChromeOptions()
     opts.add_argument("--start-maximized")
