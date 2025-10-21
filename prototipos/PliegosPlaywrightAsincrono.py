@@ -9,9 +9,13 @@ from playwright.async_api import TimeoutError as PWTimeoutError
 
 # ======== Constantes ========
 BASE_URL = "https://contrataciondelestado.es/wps/portal/plataforma"
-OUTPUT_JSON = "resultados_playwright.json"
+OUTPUT_JSON = "resultados_playwright_asincrono.json"
 QUERY = "licitacion"
 OBJETIVO = "Junta de Gobierno de la Diputación Provincial de Burgos"
+
+
+def _norm(s: str) -> str:
+    return re.sub(r"\s+", " ", s).strip()
 
 
 # ---------- Funciones ----------
@@ -214,8 +218,8 @@ async def extraer_licitaciones(page: Page) -> list[dict]:
 
             await page.wait_for_timeout(400)
 
-            datos, documentos = await extraer_detalles_licitacion(page)
-            resultados.append({"datos": datos, "documentos": documentos})
+            datos = await extraer_detalles_licitacion(page)
+            resultados.append({"datos": datos})
 
             j += 1
             print(f"Licitación visitada #{i + 1} Total {j}")
@@ -238,7 +242,7 @@ async def extraer_licitaciones(page: Page) -> list[dict]:
     return resultados
 
 
-async def extraer_detalles_licitacion(page: Page) -> tuple[dict, list[dict]]:
+async def extraer_detalles_licitacion(page: Page) -> dict:
     """
     Extrae los campos visibles de la página actual de licitaciones en formato JSON
     Argumentos:
@@ -248,163 +252,61 @@ async def extraer_detalles_licitacion(page: Page) -> tuple[dict, list[dict]]:
         Devuelve un diccionario con la información extraida.
     """
     datos = []
+    print("EMPIEZA A EXTRAER DATOS")
+    tabla = page.locator(
+        r"#viewns_Z7_AVEQAI930OBRD02JPMTPG21006_\:form1 > div > div > div.row > table"
+    ).first
+    await tabla.wait_for(state="visible", timeout=20000)
+    await tabla.scroll_into_view_if_needed()
 
-    detalles = page.locator('fieldset[id^="DetalleLicitacion"]').first
-    await detalles.wait_for(state="visible", timeout=30_000)
-    print("DATOS ENCONTRADOS")
+    datos: dict[str, str] = {}
+    print(f"DATOS ENCONTRADOS: {tabla }")
 
-    # información de la tabla DetalleLicitacionVIS_UOE
-    tabla = await page.evaluate(
-        """() => {
-          const root = document.querySelector('#DetalleLicitacionVIS_UOE');
-          if (!root) return {};
+    filas = tabla.locator("tr")
+    n = await filas.count()
+    for i in range(n):
+        celdas = filas.nth(i).locator("td")
+        if await celdas.count() < 2:
+            continue
 
-          const out = {};
-          // cada fila es un <ul>; dentro hay 2 <li>: [etiqueta, valor]
-          const filas = Array.from(root.querySelectorAll('ul'));
-          for (const ul of filas) {
-            const celdas = Array.from(ul.querySelectorAll('li'));
-            if (celdas.length < 2) continue;
-
-            const etiqueta = (celdas[0].textContent || '').trim();
-            if (!etiqueta) continue;
-
-            // valor = concatenación del texto de spans y enlaces dentro del segundo li
-            const valor = (celdas[1].textContent || '').replace(/\\s+/g, ' ').trim();
-            if (valor) out[etiqueta] = valor;
-          }
-          return out;
-        }"""
-    )
-    datos = {}
-    tablaNormalizada = {}
-    # Normalizar los datos obtenidos
-    for k, v in tabla.items():
+        # Normalizar los datos obtenidos
         # Quita los espacios dejando solo uno y quita los dos puntos
-        k = re.sub(r"\s+", " ", k).strip()
-        k = re.sub(r":\s*$", "", k)
+        k_raw = await celdas.nth(0).inner_text()
+        v_raw = await celdas.nth(1).inner_text()
 
-        v = re.sub(r"\s+", " ", v).strip()
+        k = _norm(re.sub(r":\s*$", "", k_raw))
+        v = _norm(v_raw)
 
-        tablaNormalizada[k] = v
+        # Quita los dos puntos finales típicos
 
-    datos.update(tablaNormalizada)
+        if k and v:
+            datos[k] = v
 
-    # información de la tabla InformacionLicitacionVIS_UOE
-    informacion = await page.evaluate(
-        """() => {
-          const root = document.querySelector('#InformacionLicitacionVIS_UOE');
-          if (!root) return {};
+    if not datos:
+        pares = page.locator(
+            r"#viewns_Z7_AVEQAI930OBRD02JPMTPG21006_\:form1 div.flex-inline"
+        )
+        total = await pares.count()
+        for i in range(total):
+            bloque = pares.nth(i)
 
-          const out = {};
-          // cada fila es un <ul>; dentro hay 2 <li>: [etiqueta, valor]
-          const filas = Array.from(root.querySelectorAll('ul'));
-          for (const ul of filas) {
-            const celdas = Array.from(ul.querySelectorAll('li'));
-            if (celdas.length < 2) continue;
+            # etiqueta (label o span con id)
+            k_raw = await bloque.locator("label, span[id]").first.inner_text()
+            k = _norm(re.sub(r":\s*$", "", k_raw))
 
-            const etiqueta = (celdas[0].textContent || '').trim();
-            if (!etiqueta) continue;
+            # valores: span sin id, enlaces, strong, em…
+            vals = await bloque.locator(
+                "span:not([id]), a, strong, em"
+            ).all_inner_texts()
+            # all_inner_texts() devuelve lista → ¡únela antes de normalizar!
+            v = _norm(" ".join(vals)) if vals else ""
 
-            // valor = concatenación del texto de spans y enlaces dentro del segundo li
-            const valor = (celdas[1].textContent || '').replace(/\\s+/g, ' ').trim();
-            if (valor) out[etiqueta] = valor;
-          }
-          return out;
-        }"""
-    )
+            if k and v:
+                datos[k] = v
 
-    informacionNormalizada = {}
-    for k, v in informacion.items():
-        k = re.sub(r"\s+", " ", k).strip()
-        k = re.sub(r":\s*$", "", k)
-        v = re.sub(r"\s+", " ", v).strip()
-        informacionNormalizada[k] = v
+    print(f"\nLA TABLA ES: {datos}")
 
-    datos.update(informacionNormalizada)
-
-    print(f"\nDatos normalizados: {datos}")
-
-    # informaciónde la tabla #myTablaDetalleVISUOE
-    documentos = await page.evaluate(
-        """() => {
-          const table = document.querySelector('#myTablaDetalleVISUOE');
-          if (!table) return [];
-
-          const out = [];
-          const filas = Array.from(table.querySelectorAll('#myTablaDetalleVISUOE'\
-              '> tbody tr'))
-
-          for (const tr of filas) {
-            const tds = tr.querySelectorAll('td');
-
-            // 0: Publicación en plataforma
-            const publicacion = (tds[0].textContent || '').replace(/\\s+/g, ' ').trim();
-
-            // 1: Documento (nombre)
-            const documento = (tds[1].textContent || '').replace(/\\s+/g, ' ').trim();
-
-            // 2: Ver documentos, nos quedamos SOLO con el enlace cuyo texto sea "Html"
-            let html = null;
-            const links = Array.from(tds[2].querySelectorAll('a'));
-            const htmlLink = links.find(a => /\\bhtml\\b/i.test(a.textContent || ''));
-            if (htmlLink) {
-              // Devolver URL absoluta
-              html = new URL(htmlLink.getAttribute('href') \
-                  || '', window.location.href).href;
-            }
-
-            out.push({ publicacion, documento, html });
-          }
-          return out;
-        }"""
-    )
-    print(f"\n Documentos: {documentos}")
-
-    otrosDocumentos = await page.evaluate(
-        r"""() => {
-        const cont = document.querySelector('#datosDocumentosGenerales');
-        if (!cont) return [];
-
-        const table = cont.querySelector('[id="viewns_Z7_AVEQAI930OBRD02JPMTPG21006_'\
-            ':form1:TableEx1_Aux"]');
-        if (!table) return [];
-
-        const out = [];
-        const seen = new Set();
-        const rows = Array.from(table.querySelectorAll('tbody tr'));
-
-        for (const tr of rows) {
-            const tds = tr.querySelectorAll('td');
-
-            const publicacion = (tds[0].textContent || '').trim();
-            const documento   = (tds[1].textContent || '').trim();
-
-            const verLink = Array.from(tds[2].querySelectorAll('a'))
-            .find(a => /\bver\b/i.test((a.textContent || '').trim()));
-            if (!verLink) continue;
-
-            const html = new URL(verLink.getAttribute('href')\
-                || '', window.location.href).href;
-
-            const key = `${publicacion}||${documento}`;
-            if (seen.has(key)) continue;
-            seen.add(key);
-
-            out.push({ publicacion, documento, html });
-        }
-
-        return out;
-        }"""
-    )
-
-    print(f"\n Otros Documentos: {otrosDocumentos}")
-
-    documentos.extend(otrosDocumentos)
-
-    print(f"\nDOCUMENTOS FINAL: {documentos}")
-
-    return datos, documentos
+    return datos
 
 
 async def guardar_licitacion_json(resultados: List[Any]) -> None:
