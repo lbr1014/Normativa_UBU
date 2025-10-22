@@ -114,14 +114,13 @@ async def pestana_diputacion(busqueda: str) -> str:
     return "perfil"
 
 
-async def ir_pestana(page: Page, clave: str, timeout: float = 10_000) -> None:
+async def ir_pestana(page: Page, clave: str) -> None:
     """
     Hace clic en la pestaña indicada en la clave usando Playwright.
 
     Argumentos:
         page: Playwright Page.
         clave: la clave para ir a la pestaña.
-        timeout: timeout en ms para localizar/clickar.
 
     Excepciones:
         ValueError: Si la pestaña no está mapeada.
@@ -158,11 +157,11 @@ async def ir_pestana(page: Page, clave: str, timeout: float = 10_000) -> None:
 
     try:
         locator = page.locator(sel).first
-        await locator.wait_for(state="visible", timeout=timeout)
-        await locator.scroll_into_view_if_needed(timeout=timeout)
-        await expect(locator).to_be_enabled(timeout=timeout)
-        await locator.click(timeout=timeout, trial=True)
-        await locator.click(timeout=timeout)
+        await locator.wait_for(state="visible")
+        await locator.scroll_into_view_if_needed()
+        await expect(locator).to_be_enabled()
+        await locator.click(trial=True)
+        await locator.click()
     except PWTimeoutError as err:
         raise PWTimeoutError(f"No se pudo abrir la pestaña: {clave}") from err
 
@@ -194,7 +193,7 @@ async def extraer_licitaciones(page: Page) -> list[dict]:
     botonSiguiente = page.locator(
         r"#viewns_Z7_AVEQAI930GRPE02BR764FO30G0_\:form1\:siguienteLink"
     )
-    await botonSiguiente.wait_for(state="visible", timeout=30_000)
+    await botonSiguiente.wait_for(state="visible")
     await botonSiguiente.scroll_into_view_if_needed()
     j = 0
     pagina = 1
@@ -205,11 +204,11 @@ async def extraer_licitaciones(page: Page) -> list[dict]:
         print(f"Filas en la página {pagina} : {total}")
 
         for i in range(total):
-            await tabla.wait_for(state="visible", timeout=30_000)
+            await tabla.wait_for(state="visible")
             fila = tabla.locator("tbody tr").nth(i)
 
             enlace = fila.locator('td.tdExpediente a:not([target="_blank"])').first
-            await enlace.wait_for(state="visible", timeout=30_000)
+            await enlace.wait_for(state="visible")
             await enlace.scroll_into_view_if_needed()
 
             async with page.expect_navigation(wait_until="domcontentloaded"):
@@ -228,7 +227,7 @@ async def extraer_licitaciones(page: Page) -> list[dict]:
             await page.goto(url)
             await ir_pestana(page, "Licitaciones")
             await page.wait_for_load_state("domcontentloaded")
-            await tabla.wait_for(state="visible", timeout=30_000)
+            await tabla.wait_for(state="visible")
             await page.wait_for_load_state("networkidle")
 
         if not await botonSiguiente.is_visible():
@@ -236,7 +235,7 @@ async def extraer_licitaciones(page: Page) -> list[dict]:
 
         await botonSiguiente.click(force=True)
         await page.wait_for_load_state("domcontentloaded")
-        await tabla.wait_for(state="visible", timeout=30_000)
+        await tabla.wait_for(state="visible")
         await page.wait_for_load_state("networkidle")
         pagina += 1
 
@@ -473,12 +472,12 @@ async def run() -> None:
         page = await context.new_page()
 
         try:
-            await page.goto(BASE_URL, wait_until="networkidle", timeout=45_000)
+            await page.goto(BASE_URL, wait_until="networkidle")
             print("Título:", await page.title())
 
             # Abre la pestaña "Perfil Contratante"
             try:
-                async with page.expect_navigation(timeout=45_000):
+                async with page.expect_navigation():
                     await page.get_by_role(
                         "link", name="Perfil Contratante", exact=True
                     ).click()
@@ -488,7 +487,7 @@ async def run() -> None:
 
             # Pulsa "Seleccionar"
             try:
-                async with page.expect_navigation(timeout=45_000):
+                async with page.expect_navigation():
                     await page.get_by_role(
                         "link", name="Seleccionar", exact=True
                     ).click()
@@ -503,7 +502,7 @@ async def run() -> None:
             # Pulsa "Sector Público" dentro de ese frame (usar Locator, no el string)
             selector_nodo = r"#tafelTree_maceoArbol_id_1"
             nodo_sector_publico = frame_arbol.locator(selector_nodo)
-            await nodo_sector_publico.wait_for(state="attached", timeout=30_000)
+            await nodo_sector_publico.wait_for(state="attached")
             await nodo_sector_publico.scroll_into_view_if_needed()
             await nodo_sector_publico.click()
 
@@ -515,7 +514,7 @@ async def run() -> None:
             btn_buscar = page.locator(
                 r"#viewns_Z7_AVEQAI930GRPE02BR764FO30G0_\:listaperfiles\:botonbuscar"
             )
-            await btn_buscar.wait_for(state="visible", timeout=30_000)
+            await btn_buscar.wait_for(state="visible")
             await btn_buscar.scroll_into_view_if_needed()
             await btn_buscar.click(force=True)
             await page.wait_for_load_state("networkidle")
@@ -524,7 +523,7 @@ async def run() -> None:
             lnk_junta = page.locator(
                 r"#viewns_Z7_AVEQAI930GRPE02BR764FO30G0_\:listaperfiles\:enlaceExpedienteBP_0_textoEnlace"
             )
-            await lnk_junta.wait_for(state="visible", timeout=30_000)
+            await lnk_junta.wait_for(state="visible")
             await lnk_junta.scroll_into_view_if_needed()
             await lnk_junta.click(force=True)
             await page.wait_for_load_state("networkidle")
