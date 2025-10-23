@@ -119,7 +119,28 @@ Los componentes clave del \textit{pipeline} de generación son:
 \end{itemize} 
 
 \subsection{Capas de soporte}
-Además de los dos \textit{pipelines}, un sistema en producción requiere orquestación, evaluación y monitorización continua, cache semántico para reducir coste y latencia, controles de seguridad para cumplimiento normativo y seguridad frente a inyecciones en el \textit{prompt}, envenenamiento de dato o fugas de información. Todo ello se sostiene sobre una infraestructura de servicio y un RAGOps stack con capas de datos, modelos, \textit{prompting}, evaluación, orquestación, despliegue, hosting y monitorización~\cite{book:RAG_SimpleGuide}.
+Además de los dos \textit{pipelines}, un sistema en producción requiere orquestación, evaluación y monitorización continua, cache semántico para reducir coste y latencia, controles de seguridad para cumplimiento normativo y seguridad frente a inyecciones en el \textit{prompt}, envenenamiento de dato o fugas de información. Todo ello se sostiene sobre una infraestructura de servicio y un \textit{RAGOps stack} formado por capas críticas, esenciales y de mejora que aseguran operación, calidad y seguridad extremo a extremo~\cite{book:RAG_SimpleGuide}.
+\begin{enumerate}
+\tightlist
+	\item Capas críticas: son las capas imprescindibles del \textit{RAGOps stack}.
+	\begin{itemize}
+	\tightlist
+		\item Capa de datos: es la encargada de crear la base de conocimiento, para ello recolecta datos desde sistemas origen, los transforma y los almacena.
+		\item Capa de modelos: se incluyen los modelos de \textit{embeddings}, LLMs y de las tareas. Incluye el entrenamiento y la optimización de inferencia.
+		\item Despliegue de modelos: pueden ser servicios gestionados, auto-hospedados o locales.
+		\item Orquestación de la aplicación: se encarga de coordinar la consulta, la recuperación de datos y la generación. Incluye soporte multiagente y automatización de flujos de trabajo. 
+	\end{itemize}
+	\item Capas esenciales: son las capas que necesita el sistema, se encargan del rendimiento, la fiabilidad y de la seguridad.
+	\begin{itemize}
+	\tightlist
+		\item Capa de \textit{prompt}: diseño, versión y evaluación de \textit{prompts} para guiar al LLM y reducir las alucinaciones. 
+		\item Capa de evaluación: se encarga de medir, de forma periódica, la relevancia de contexto, fidelidad y relevancia de la respuesta.
+		\item Capa de monitorización: observa el proceso del RAG para encontrar fallos. Para ello monitoriza la latencia y el error.
+		\item Seguridad y privacidad del LLM: es la encargada de emplear métodos para evitar el \textit{prompt injection}. Algunos de los métodos que se emplean son validar las entradas, realizar encriptados y emplear control de accesos.
+		\item Capa de caché: emplea caché para reducir los costes y la latencia en consultas frecuentes.
+	\end{itemize}
+	\item Capas de mejora: son capas opcionales que pueden aportar beneficios dependiendo del caso de uso. Se centran en la eficiencia, usabilidad y escalabilidad del sistema.
+\end{enumerate}
 
 \section{Evaluación de calidad del RAG}
 Se hará mediante la triada de evaluación propuesta por TruEra~\cite{RAG:triad}. Estructura la calidad en tres comprobaciones entre consulta (\textit{prompt}), contexto recuperado y respuesta. Complementariamente, se emplean métricas como relevancia, precisión y \textit{recall}, y conjuntos ground truth para validación objetiva y monitorización continua en producción~\cite{book:RAG_SimpleGuide}.
