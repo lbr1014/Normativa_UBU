@@ -1,38 +1,31 @@
-[tool.poetry]
-name = "tfg-rag-prototipos"
+[project]
+name = "prototipos"
 version = "0.1.0"
-description = "Prototipos del TFG"
-authors = ["Tu Nombre <tu@email>"]
+description = "Entorno python para el web Scraping de los prototipos"
+authors = [
+    {name = "lbr1014",email = "lbr1014@alu.ubu.es"}
+]
 readme = "README.md"
-packages = [{include = "src"}]  # si usas layout src/
+requires-python = ">=3.13"
+dependencies = [
+    "requests (>=2.32.5,<3.0.0)"
+]
 
-[tool.poetry.dependencies]
-python = "^3.11"
-requests = "^2.32.0"
-playwright = "^1.55.0"
-selenium = "^4.37.0"
 
-[tool.poetry.group.dev.dependencies]
-black = "^24.0"
-ruff = "^0.5"
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
 
-[tool.black]
-line-length = 88
-target-version = ["py311"]
+[tool.poetry]
+package-mode = false
 
-[tool.ruff]
-line-length = 88
-target-version = "py311"
-select = ["E", "W", "F", "I", "B"]
-ignore = []
-fix = true
-
-[tool.ruff.format]
-quote-style = "double"
-indent-style = "space"
-
-[tool.ruff.lint.isort]
-known-first-party = ["tfg_rag_prototipos"]  
-
-[tool.poetry.scripts]
-pliegos = "tfg_rag_prototipos.cli:main" 
+[dependency-groups]
+dev = [
+    "black (>=25.9.0,<26.0.0)",
+    "pytest (>=8.4.2,<9.0.0)"
+]
+style = [
+    "black (>=25.9.0,<26.0.0)",
+    "ruff (>=0.14.2,<0.15.0)",
+    "isort (>=7.0.0,<8.0.0)"
+]

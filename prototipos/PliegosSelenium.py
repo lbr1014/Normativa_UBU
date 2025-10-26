@@ -16,7 +16,8 @@ import time
 from typing import Any, List, Optional, Tuple
 
 from selenium import webdriver
-from selenium.common.exceptions import StaleElementReferenceException, TimeoutException
+from selenium.common.exceptions import (StaleElementReferenceException,
+                                        TimeoutException)
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC

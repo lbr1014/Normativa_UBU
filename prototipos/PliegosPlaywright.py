@@ -15,9 +15,10 @@ import re
 import time
 from typing import Any, List, Optional, Tuple
 
-from playwright.sync_api import Frame, Locator, Page, expect, sync_playwright
+from playwright.sync_api import Frame, Locator, Page
 from playwright.sync_api import TimeoutError as PWTimeoutError
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import expect, sync_playwright
 
 # ======== Constantes ========
 BASE_URL = "https://contrataciondelestado.es/wps/portal/plataforma"

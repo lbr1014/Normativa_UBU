@@ -5,8 +5,9 @@ import time
 from typing import Any, List
 from urllib.parse import urljoin
 
-from playwright.async_api import Frame, Page, async_playwright, expect
+from playwright.async_api import Frame, Page
 from playwright.async_api import TimeoutError as PWTimeoutError
+from playwright.async_api import async_playwright, expect
 
 # ======== Constantes ========
 BASE_URL = "https://contrataciondelestado.es/wps/portal/plataforma"
