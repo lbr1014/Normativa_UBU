@@ -17,12 +17,34 @@ def read_pdf(path: str) -> str:
     return "\n".join(page.extract_text() or "" for page in reader.pages)
 
 
-def chunk(text: str, max_chars: int = 6000) -> str:
+def chunk(text: str, max_chars: int = 20000) -> str:
     return text[:max_chars]
 
 
 pdf_path = "DOC20251103115131003_Proyecto_visado_11E25.pdf"
 pdf_text = chunk(read_pdf(pdf_path))
+
+promp = f"""
+    Te paso el texto de un PDF entre <document>…</document>. Extrae los apartados y resume cada uno en 3–5 líneas.
+
+    REGLAS:
+    - Ignora índice, portada y cabeceras/pies.
+    - Orden original.
+    - Devuelve JSON válido.
+
+    SALIDA (JSON):
+    {{
+        "resumenes": [
+            {{ "apartado": "<titulo>", "resumen": "<3-5 lineas>" }}
+        ]
+    }}
+
+    <document>
+    {pdf_text}
+    </document>
+"""
+
+message = alpaca_format(promp, "")
 
 # Tokenizar con el tokenizer del modelo (clave para evitar errores de ids/espaciado)
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -34,7 +56,6 @@ model = AutoModelForCausalLM.from_pretrained(
     torch_dtype=torch.float16 if device == "cuda" else torch.float32,
     device_map="auto" if device == "cuda" else None,
 )
-message = alpaca_format("Escribe un párrafo sobre SFT.", "")
 
 inputs = tokenizer([message], return_tensors="pt").to(device)
 
@@ -51,4 +72,5 @@ save_dir = Path("model")
 save_dir.mkdir(exist_ok=True)
 model.save_pretrained(save_dir)
 tokenizer.save_pretrained(save_dir)
+
 
