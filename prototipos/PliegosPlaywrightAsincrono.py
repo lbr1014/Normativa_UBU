@@ -5,9 +5,8 @@ import time
 from typing import Any, List
 from urllib.parse import urljoin
 
-from playwright.async_api import Frame, Page
+from playwright.async_api import Frame, Page, async_playwright, expect
 from playwright.async_api import TimeoutError as PWTimeoutError
-from playwright.async_api import async_playwright, expect
 
 # ======== Constantes ========
 BASE_URL = "https://contrataciondelestado.es/wps/portal/plataforma"
@@ -384,20 +383,24 @@ async def extraer_detalles_licitacion(page: Page) -> dict:
 
         rows = docs_table.locator("tbody.tabla-detalle > tr")
         m = await rows.count()
+        
+        documentos: list[dict[str, str]] = []
+        
         for i in range(m):
             row = rows.nth(i)
+            doc_data: dict[str, str] = {}
 
             # Columna 1: Publicación en plataforma
             pub_td = row.locator("td:nth-of-type(1)")
             if await pub_td.count():
                 pub_text = await pub_td.inner_text()
-                datos["Publicación en plataforma"] = _norm(pub_text)
+                doc_data["Publicación en plataforma"] = _norm(pub_text)
 
             # Columna 2: Documento
             doc_td = row.locator("td:nth-of-type(2)")
             if await doc_td.count():
                 doc_text = await doc_td.inner_text()
-                datos["Documento"] = _norm(doc_text)
+                doc_data["Documento"] = _norm(doc_text)
 
             # Columna 3: Ver documentos
             links_td = row.locator("td:nth-of-type(3)")
@@ -411,7 +414,7 @@ async def extraer_detalles_licitacion(page: Page) -> dict:
                     if href and href != "#":
                         hrefs.append(urljoin(page.url, href))
             if hrefs:
-                datos["Ver documentos (urls)"] = " | ".join(hrefs)
+                doc_data["Ver documentos (urls)"] = " | ".join(hrefs)
 
             # Columna 4: DOUE
             doue_td = row.locator("td:nth-of-type(4)")
@@ -420,19 +423,33 @@ async def extraer_detalles_licitacion(page: Page) -> dict:
                 envio_span = doue_td.locator(".flex span").first
                 if await envio_span.count():
                     envio = await envio_span.inner_text()
-                    datos["DOUE - Envío"] = _norm(envio)
+                    if envio:
+                        doc_data["DOUE - Envío"] = _norm(envio)
 
                 # Publicación
                 publi_link = doue_td.locator("a[href]").last
                 if await publi_link.count():
-                    href = await publi_link.get_attribute("href")
-                    if href and href != "#":
-                        datos["DOUE - Publicación"] = urljoin(page.url, href)
+                    href_pub = await publi_link.get_attribute("href")
+                    if href_pub and href_pub != "#":
+                        doc_data["DOUE - Publicación"] = urljoin(page.url, href_pub)
+
+                    # Fecha de publicación dentro del link
+                    fecha_pub = _norm(await publi_link.inner_text())
+                    if fecha_pub:
+                        doc_data["DOUE - Publicación (fecha)"] = fecha_pub
                 else:
-                    publi_text_el = doue_td.locator(".outputText")
-                    if await publi_text_el.count():
-                        publi_text = await publi_text_el.inner_text()
-                        datos["DOUE - Publicación"] = _norm(publi_text)
+                    # En filas sin enlace, puede haber solo texto (o 'Vacío')
+                    publi_span = doue_td.locator("span.outputText").first
+                    if await publi_span.count():
+                        fecha_pub = _norm(await publi_span.inner_text())
+                        if fecha_pub:
+                            doc_data["DOUE - Publicación (fecha)"] = fecha_pub
+                        
+            if doc_data:
+                documentos.append(doc_data)
+                
+            if documentos:
+                datos["Documentos"] = documentos
 
     print(f"\nLA TABLA ES: {datos}")
 
@@ -544,7 +561,7 @@ async def run() -> None:
             print("Timeout al cargar o encontrar elementos.")
         finally:
 
-            await context.tracing.close()
+            await context.tracing.stop()
             await context.close()
             await browser.close()
 
