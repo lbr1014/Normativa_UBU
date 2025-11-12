@@ -108,7 +108,7 @@ def _make_qdrant_client() -> QdrantClient:
 qdrant = _make_qdrant_client()
 
 # =========================
-# OVM mínimo (Object–Vector Mapping) según el libro
+# OVM mínimo (Object–Vector Mapping)
 # =========================
 T = TypeVar("T", bound="VectorBaseDocument")
 
@@ -223,10 +223,71 @@ class EmbeddedSectionChunk(VectorBaseDocument):
 
 
 if __name__ == "__main__":
-    # Embebe y guarda un chunk
-    text = "Hola Qdrant desde el libro."
-    vec = embedding_model(text, to_list=True)
-    doc = EmbeddedSectionChunk(content=text, embedding=vec)
-    doc.save()
-    results = EmbeddedSectionChunk.search(query_vector=vec, limit=3)
-    print(f"Resultados: {len(results)}")
+    from pypdf import PdfReader
+
+    base_dir = Path(__file__).parent
+    pliegos_dir = base_dir / "pliegos"
+
+    if not pliegos_dir.exists():
+        raise SystemExit(f"No encuentro la carpeta {pliegos_dir}")
+
+    tokenizer = embedding_model.tokenizer
+    max_len = int(embedding_model.max_input_length * 0.8)  # margen de seguridad
+
+    def chunk_text(text: str) -> list[str]:
+        """Trocea el texto en chunks controlando el nº de tokens."""
+        chunks: list[str] = []
+        current = ""
+        current_tokens = 0
+
+        for line in text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+
+            tokens = tokenizer.tokenize(line)
+            if current_tokens + len(tokens) > max_len and current:
+                chunks.append(current.strip())
+                current = line
+                current_tokens = len(tokens)
+            else:
+                if current:
+                    current += " " + line
+                else:
+                    current = line
+                current_tokens += len(tokens)
+
+        if current.strip():
+            chunks.append(current.strip())
+
+        return chunks
+
+    for pdf_path in sorted(pliegos_dir.glob("*.pdf")):
+        print(f"Procesando {pdf_path.name} ...")
+
+        reader = PdfReader(str(pdf_path))
+        full_text = ""
+        for page in reader.pages:
+            page_text = page.extract_text() or ""
+            full_text += page_text + "\n"
+
+        chunks = chunk_text(full_text)
+        if not chunks:
+            print(f"{pdf_path.name}: sin texto extraído")
+            continue
+
+        # Embeddings para todos los chunks de este PDF
+        vectors = embedding_model(chunks, to_list=True)
+
+        docs: list[EmbeddedSectionChunk] = []
+        for chunk, vec in zip(chunks, vectors):
+            docs.append(
+                EmbeddedSectionChunk(
+                    content=chunk,
+                    embedding=vec,
+                    metadata={"filename": pdf_path.name},
+                )
+            )
+
+        EmbeddedSectionChunk.save_many(docs)
+        print(f"Guardados {len(docs)} chunks en Qdrant")
