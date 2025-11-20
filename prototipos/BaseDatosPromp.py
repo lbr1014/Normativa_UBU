@@ -364,9 +364,10 @@ class VectorBaseDocument(BaseModel, Generic[T]):
 # =========================
 # Chunks
 # =========================
-def chunk_text(text: str) -> list[str]:
+def chunk_text(text: str, overlap_ratio: float = 0.1) -> list[str]:
     """
     Trocea un texto largo en chunks controlando el nº de tokens. 
+    Añade un pequeño solapamiento (overlap)
     Para ello:
         Se recorre el texto línea a línea.
         Se tokeniza cada línea con el tokenizer del modelo.
@@ -379,8 +380,12 @@ def chunk_text(text: str) -> list[str]:
     # Márgen de seguridad, solo se usa el 80% de la capacidad del modelo
     max_len = int(embedding_model.max_input_length * 0.8)
 
+    # Tokens que se solapan entre chunks
+    overlap_tokens = max(1, int(max_len * overlap_ratio))
+
     chunks: list[str] = []
-    current = ""
+    # Guardamos las líneas y su número de tokens para hacer el solapamiento
+    current: list[tuple[str, int]] = []
     current_tokens = 0
 
     for line in text.splitlines():
@@ -394,23 +399,39 @@ def chunk_text(text: str) -> list[str]:
             # Si el tokenizer falla con una línea extraña, la ignoramos
             logger.warning("No se puede tokenizar una línea: %s", e)
             continue
-        
+                
+        line_tokens = len(tokens)
         # Si al añadir esta línea se supera el límite, se guarda el chunk actual
-        if current_tokens + len(tokens) > max_len and current:
-            chunks.append(current.strip())
-            current = line
-            current_tokens = len(tokens)
-        else:
-            # Se acumula texto en el chunk actual
-            if current:
-                current += " " + line
-            else:
-                current = line
-            current_tokens += len(tokens)
+        if current_tokens + line_tokens > max_len and current:
+            
+            # Se guarda el chunk actual
+            chunk_text_str = " ".join(long for (long, _) in current).strip()
+            if chunk_text_str:
+                chunks.append(chunk_text_str)
+                
+            # Se calcula las líneas que se reutilizan como solapamiento
+            overlap: list[tuple[str, int]] = []
+            tokens_in_overlap = 0
+            for long, t in reversed(current):
+                if tokens_in_overlap + t > overlap_tokens:
+                    break
+                overlap.append((long, t))
+                tokens_in_overlap += t
+            overlap.reverse()  # las volvemos a poner en orden original
+            
+            # Se empieza un nuevo chunk con el solapamiento
+            current = overlap.copy()
+            current_tokens = tokens_in_overlap
+        
+        # Añadimos la línea actual al chunk
+        current.append((line, line_tokens))
+        current_tokens += line_tokens
 
     # Último chunk pendiente
-    if current.strip():
-        chunks.append(current.strip())
+    if current:
+        chunk_text_str = " ".join(long for (long, _) in current).strip()
+        if chunk_text_str:
+            chunks.append(chunk_text_str)
 
     return chunks
 
@@ -484,7 +505,10 @@ def obtener_chunk_de_query(user_query: str) -> dict | None:
     }
     
     
-def obtener_mejor_chunk(user_query: str, model: str = "llama3.1:8b-instruct-q4_K_M") -> dict:
+def obtener_mejor_chunk(
+    user_query: str,
+    model: str = "llama3.1:8b-instruct-q4_K_M",
+    ) -> dict:
     """
     1) Recupera de Qdrant el chunk más parecido a la pregunta.
     2) Construye un prompt para Ollama con ese chunk.
@@ -539,15 +563,16 @@ if __name__ == "__main__":
     """
         
     collection = VectorBaseDocument.get_collection_name()
-    try:
-        qdrant.delete_collection(collection_name=collection)
-    except:
-        pass
     
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
+    
+    try:
+        qdrant.delete_collection(collection_name=collection)
+    except Exception as e:
+        logger.info("La base de datos no existe todavía: %s", e)
 
     # Carpeta del proyecto y carpeta con los pliegos
     base_dir = Path(__file__).parent
