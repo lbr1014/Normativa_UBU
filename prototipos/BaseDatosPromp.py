@@ -9,6 +9,7 @@ Script para construir la base de datos vectorial de un sistema RAG.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import time
 from contextlib import contextmanager
@@ -18,6 +19,7 @@ from pathlib import Path
 from typing import Any, Generic, Optional, Type, TypeVar
 from uuid import UUID, uuid4
 
+import requests
 from pydantic import BaseModel, Field
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError, PdfStreamError
@@ -26,7 +28,9 @@ from qdrant_client import models as qmodels
 from sentence_transformers import SentenceTransformer
 
 # Logger
-logger = logging.getLogger(__name__)    
+logger = logging.getLogger(__name__)   
+
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
 
 
 # =========================
@@ -340,27 +344,18 @@ class VectorBaseDocument(BaseModel, Generic[T]):
     # ---- búsqueda vectorial
     @classmethod
     def search(
-        cls: Type[T], 
-        query_vector: list[float], 
-        limit: int = 10, 
+        cls: Type[T],
+        query_vector: list[float],
+        limit: int = 10,
         **kwargs,
     ) -> list[T]:
-        """
-        Realiza una búsqueda vectorial en Qdrant.
-        Argumentos:
-            query_vector: vector de consulta (embedding de la pregunta o del texto).
-            limit: número máximo de resultados a devolver.
-            **kwargs: parámetros adicionales que se pasan a qdrant.search.
-        Returns:
-            Lista de instancias de la clase con los puntos más similares.
-        """
         cls._ensure_collection()
         records = qdrant.search(
             collection_name=cls.get_collection_name(),
             query_vector=query_vector,
             limit=limit,
-            with_payload=kwargs.pop("with_payload", True),
-            with_vectors=kwargs.pop("with_vectors", False),
+            with_payload=True,
+            with_vectors=False,
             **kwargs,
         )
         return [cls.from_record(r) for r in records]
@@ -371,7 +366,7 @@ class VectorBaseDocument(BaseModel, Generic[T]):
 # =========================
 def chunk_text(text: str) -> list[str]:
     """
-    Trocea un texto largo en chunks controlando el nº de tokens.
+    Trocea un texto largo en chunks controlando el nº de tokens. 
     Para ello:
         Se recorre el texto línea a línea.
         Se tokeniza cada línea con el tokenizer del modelo.
@@ -420,6 +415,120 @@ def chunk_text(text: str) -> list[str]:
     return chunks
 
 
+def recuperacion_chunk(user_query: str, k: int = 1) -> list[VectorBaseDocument]:
+    """
+    Dada una pregunta del usuario, recupera los chunks más similares
+    desde Qdrant.
+    """
+    # Embedding de la pregunta
+    query_vector = embedding_model(user_query, to_list=True)
+
+    # Búsqueda vectorial en Qdrant
+    docs = VectorBaseDocument.search(query_vector=query_vector, limit=k)
+
+    return docs
+
+
+# =========================
+# Ollama
+# =========================
+def ask_ollama(prompt: str, model: str = "llama3.1:8b-instruct-q4_K_M") -> str:
+    """
+    Envía un prompt a Ollama usando /api/generate y devuelve el texto de respuesta.
+    """
+    
+    url = f"{OLLAMA_BASE_URL}/api/generate"
+
+    full_prompt = (
+        "Responde en español de forma breve y precisa.\n\n"
+        f"{prompt}"
+    )
+
+    resp = requests.post(
+        url,
+        json={
+            "model": model,
+            "prompt": full_prompt,
+            "stream": False,
+        },
+        timeout=120,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return data.get("response", "")
+
+
+def obtener_chunk_de_query(user_query: str) -> dict | None:
+    """
+    Toma una pregunta de usuario, recupera el chunk más relevante de Qdrant
+    y devuelve:
+        - title: título del archivo
+        - filename: nombre del archivo PDF
+        - segment_index: índice de segmento/chunk
+        - chunk: texto del chunk recuperado
+
+    Devuelve None si no hay resultados.
+    """
+    docs = recuperacion_chunk(user_query, k=1)
+    if not docs:
+        return None
+
+    doc = docs[0]
+    metadata = doc.metadata or {}
+
+    return {
+        "title": metadata.get("title", ""),
+        "filename": metadata.get("filename", ""),
+        "segment_index": metadata.get("segment_index", -1),
+        "chunk": doc.content,
+    }
+    
+    
+def obtener_mejor_chunk(user_query: str, model: str = "llama3.1:8b-instruct-q4_K_M") -> dict:
+    """
+    1) Recupera de Qdrant el chunk más parecido a la pregunta.
+    2) Construye un prompt para Ollama con ese chunk.
+    3) Llama a Ollama para que genere la respuesta usando SOLO ese chunk.
+    4) Devuelve:
+        - answer: respuesta del LLM
+        - title: título del archivo
+        - filename: nombre del PDF
+        - segment_index: número de segmento
+        - chunk: texto del fragmento usado
+    """
+    info = obtener_chunk_de_query(user_query)
+    if info is None or not info.get("chunk"):
+        return {
+            "answer": "No he encontrado ningún fragmento relevante en la base de datos.",
+            "title": "",
+            "filename": "",
+            "segment_index": -1,
+            "chunk": "",
+        }
+
+    # Prompt para que Ollama conteste usando sólo ese chunk
+    prompt = f"""
+    Usa EXCLUSIVAMENTE el siguiente fragmento del pliego para responder.
+
+    Título del archivo: {info['title']}
+    Nombre del archivo: {info['filename']}
+    Índice de segmento: {info['segment_index']}
+
+    Fragmento:
+    \"\"\"{info['chunk']}\"\"\"
+
+    Pregunta del usuario:
+    {user_query}
+
+    Responde de forma breve y precisa en español.
+    """
+
+    answer = ask_ollama(prompt, model=model)
+
+    info["answer"] = answer
+    return info
+
+
 if __name__ == "__main__":
     """
     Recorre todos los PDFs de la carpeta Pliegos.
@@ -428,6 +537,12 @@ if __name__ == "__main__":
     Calcula los embeddings de cada chunk.
     Los guarda en Qdrant para poder hacer búsquedas vectoriales después.
     """
+        
+    collection = VectorBaseDocument.get_collection_name()
+    try:
+        qdrant.delete_collection(collection_name=collection)
+    except:
+        pass
     
     logging.basicConfig(
         level=logging.INFO,
@@ -484,12 +599,16 @@ if __name__ == "__main__":
             # Se forman las entidades de dominio listas para guardar en Qdrant
             with timed_block(f"guardar qdrant {pdf_path.name}"):
                 docs: list[VectorBaseDocument] = []
-                for chunk, vec in zip(chunks, vectors):
+                for idx, (chunk, vec) in enumerate(zip(chunks, vectors)):
                     docs.append(
                         VectorBaseDocument(
                             content=chunk,
                             embedding=vec,
-                            metadata={"filename": pdf_path.name, "title": title},
+                            metadata={
+                                "filename": pdf_path.name, 
+                                "title": title, 
+                                "segment_index": idx,
+                            },
                         )
                     )
                 # Se guardan en la colección correspondiente
