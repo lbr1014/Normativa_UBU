@@ -16,17 +16,17 @@ SECCIONES = re.compile(
     r"^(?P<num>[IVXLCDM]+)\.\s*$"
 )
 
-# Secciones tipo G.2.2. (letra + niveles numéricos)
+# Secciones tipo G.2.2. (letra + numéricos)
 SECCIONES_ALFANUM = re.compile(
     r"^(?P<code>[A-Z](?:\.\d+)+\.)\s*$"
 )
 
-# Sección numérica simple en línea sola: "1."
+# Sección numérica con solo un número: "1."
 SECCION_NUM_SIMPLE = re.compile(
     r"^(?P<num>\d+)\.\s*$"
 )
 
-# Sección numérica compuesta en línea sola: "1.1", "1.1.", "1.2.3", ...
+# Sección numérica compuesta: "1.1", "1.1.", "1.2.3", ...
 SECCION_NUM_COMPUESTA = re.compile(
     r"^(?P<num>\d+(?:\.\d+)+)\.?\s*$"
 )
@@ -52,7 +52,7 @@ def posprocesado_markdown(text: str) -> str:
     if not text:
         return ""
 
-    # Eliminar viñetas (pero NO guiones normales)
+    # Eliminar viñetas
     BULLET_CHARS = "•◦·▪▫●"
     for ch in BULLET_CHARS:
         text = text.replace(ch, "")
@@ -135,7 +135,7 @@ def titulos_markdown(text: str) -> str:
 
         # Secciones numéricas en línea independiente
 
-        # Caso 1: "1."  -> solo título si la siguiente línea está en mayúsculas
+        # Título si la siguiente línea está en mayúsculas
         m_simple = SECCION_NUM_SIMPLE.match(stripped)
         if m_simple and i + 1 < len(lines):
             next_line = lines[i + 1]
@@ -147,9 +147,8 @@ def titulos_markdown(text: str) -> str:
                 i += 2
                 continue
             # Si la siguiente línea no es mayúscula, no lo tratamos como título
-            # y dejamos caer a la lógica normal más abajo.
 
-        # Caso 2: "1.1", "1.1.", "1.2.3" -> título SIEMPRE, sin mirar mayúsculas
+        # Caso 2: "1.1", "1.1.", "1.2.3", siempre es título sin mirar mayúsculas
         m_compuesta = SECCION_NUM_COMPUESTA.match(stripped)
         if m_compuesta and i + 1 < len(lines):
             next_line = lines[i + 1]
