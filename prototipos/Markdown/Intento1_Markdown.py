@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import argparse
 import re
 import sys
 from pathlib import Path
@@ -12,14 +11,34 @@ TITULOS = re.compile(
     r"^[A-ZÁÉÍÓÚÜÑ0-9 .,:;/()\-]{8,}$"
 )
 
-# Secciones
+# Secciones con números romanos (I., II., III., ...)
 SECCIONES = re.compile(
     r"^(?P<num>[IVXLCDM]+)\.\s*$"
 )
 
-# Subtítulos
+# Secciones tipo G.2.2. (letra + niveles numéricos)
+SECCIONES_ALFANUM = re.compile(
+    r"^(?P<code>[A-Z](?:\.\d+)+\.)\s*$"
+)
+
+# Sección numérica simple en línea sola: "1."
+SECCION_NUM_SIMPLE = re.compile(
+    r"^(?P<num>\d+)\.\s*$"
+)
+
+# Sección numérica compuesta en línea sola: "1.1", "1.1.", "1.2.3", ...
+SECCION_NUM_COMPUESTA = re.compile(
+    r"^(?P<num>\d+(?:\.\d+)+)\.?\s*$"
+)
+
+# Subtítulos tipo "1. Introducción" o "1.2.3 Algo"
 SUBTITULOS = re.compile(
     r"^(?P<num>\d+(?:\.\d+)*)\.\s+(?P<title>.+)$"
+)
+
+# Detecta líneas del índice
+INDICE = re.compile(
+    r"^(?P<title>.+?)\s?\.{5,}\s?(?P<page>\d+)$"
 )
 
 
@@ -33,21 +52,37 @@ def posprocesado_markdown(text: str) -> str:
     if not text:
         return ""
 
-    # Unir palabras cortadas por guión al final de línea
+    # Eliminar viñetas (pero NO guiones normales)
+    BULLET_CHARS = "•◦·▪▫●"
+    for ch in BULLET_CHARS:
+        text = text.replace(ch, "")
+
+    # Unir palabras cortadas
     text = re.sub(r"(\w+)-\n(\w+)", r"\1\2", text)
+
+    # Sustituir saltos de linea simples por espacios
+    text = re.sub(r"(?<!\n)\n(?!\n)", " ", text)
 
     # Colapsar saltos de línea múltiples
     text = re.sub(r"\n{3,}", "\n\n", text)
 
-    # Quitar espacios en blanco al final de línea
+    # Quitar espacios finales
     text = re.sub(r"[ \t]+\n", "\n", text)
-    
+
+    # Dividir líneas para procesar índice
+    lines = text.splitlines()
+    lines = procesar_indice(lines)
+
+    # Volver a unir para procesar títulos
+    text = "\n".join(lines)
+
     # Detectar títulos y secciones y marcarlos como headings
     text = titulos_markdown(text)
 
     return text
 
 
+# ===================== TÍTULOS ===========================
 def titulos_markdown(text: str) -> str:
     lines = text.splitlines()
     out: list[str] = []
@@ -65,13 +100,13 @@ def titulos_markdown(text: str) -> str:
             i += 1
             continue
 
-        # Si ya es un heading markdown
-        if stripped.startswith("# "):
+        # Si ya es un heading markdown (cualquier nivel)
+        if stripped.startswith("#"):
             out.append(line)
             i += 1
             continue
 
-        # Secciones inluyen números romanos
+        # Secciones con números romanos (I. II. ...)
         m_rom = SECCIONES.match(stripped)
         if m_rom and i + 1 < len(lines):
             next_line = lines[i + 1]
@@ -85,7 +120,47 @@ def titulos_markdown(text: str) -> str:
                 i += 2
                 continue
 
-        # Subtítulos (1., 1.1,...)
+        # Secciones tipo G.2.2. seguidas de un título en mayúsculas
+        m_alpha = SECCIONES_ALFANUM.match(stripped)
+        if m_alpha and i + 1 < len(lines):
+            next_line = lines[i + 1]
+            next_stripped = next_line.strip()
+
+            if TITULOS.match(next_stripped):
+                code = m_alpha.group("code")
+                # También las marcamos como H2
+                out.append(f"\n## {code} {next_stripped}\n")
+                i += 2
+                continue
+
+        # Secciones numéricas en línea independiente
+
+        # Caso 1: "1."  -> solo título si la siguiente línea está en mayúsculas
+        m_simple = SECCION_NUM_SIMPLE.match(stripped)
+        if m_simple and i + 1 < len(lines):
+            next_line = lines[i + 1]
+            next_stripped = next_line.strip()
+
+            if TITULOS.match(next_stripped):
+                num = m_simple.group("num")
+                out.append(f"\n## {num}. {next_stripped}\n")
+                i += 2
+                continue
+            # Si la siguiente línea no es mayúscula, no lo tratamos como título
+            # y dejamos caer a la lógica normal más abajo.
+
+        # Caso 2: "1.1", "1.1.", "1.2.3" -> título SIEMPRE, sin mirar mayúsculas
+        m_compuesta = SECCION_NUM_COMPUESTA.match(stripped)
+        if m_compuesta and i + 1 < len(lines):
+            next_line = lines[i + 1]
+            next_stripped = next_line.strip()
+
+            num = m_compuesta.group("num")
+            out.append(f"\n## {num}. {next_stripped}\n")
+            i += 2
+            continue
+
+        # Subtítulos (1. 1.1, con texto en la misma línea)
         m_num = SUBTITULOS.match(stripped)
         if m_num:
             out.append(f"### {stripped}")
@@ -100,7 +175,7 @@ def titulos_markdown(text: str) -> str:
                 main_title_done = True
             else:
                 # El resto H2
-                level = 2  
+                level = 2
 
             out.append(f"\n{'#' * level} {stripped}\n")
             i += 1
@@ -111,6 +186,32 @@ def titulos_markdown(text: str) -> str:
         i += 1
 
     return "\n".join(out)
+
+
+# ============================= ÍNDICE =============================
+def slugify(title: str) -> str:
+    """Convierte un título en un anchor markdown."""
+    title = title.lower()
+    title = re.sub(r"[^a-z0-9áéíóúñü ]+", "", title)
+    title = title.strip().replace(" ", "-")
+    return title
+
+
+def procesar_indice(lines: list[str]) -> list[str]:
+    """
+    Procesa el índice del PDF convirtiendo cada entrada en:
+    - [TÍTULO](#anchor)
+    """
+    out = []
+    for line in lines:
+        m = INDICE.match(line.strip())
+        if m:
+            titulo = m.group("title")
+            anchor = slugify(titulo)
+            out.append(f"- [{titulo}](#{anchor})")
+        else:
+            out.append(line)
+    return out
 
 
 def convertir_pdf(
@@ -155,24 +256,17 @@ def directorio_pdf(
     extensions: tuple[str, ...] = (".pdf",),
 ) -> None:
     """
-    Convierte un único fichero o todos los PDFs de un directorio.
+    Convierte todos los PDFs de un directorio (recursivo).
     """
-    md = MarkItDown() 
+    md = MarkItDown()
 
     extensions = tuple(ext.lower() for ext in extensions)
 
-    if input_path.is_file():
-        if input_path.suffix.lower() not in extensions:
-            print(
-                f"{input_path} no tiene pdfs {extensions}",
-                file=sys.stderr,
-            )
-            return
-        convertir_pdf(md, input_path, input_path.parent, output_dir)
-        return
-
     if not input_path.is_dir():
-        print(f" La ruta de entrada no existe: {input_path}", file=sys.stderr)
+        print(
+            f"La ruta de entrada no existe o no es un directorio: {input_path}",
+            file=sys.stderr,
+        )
         return
 
     # Directorio: se recorre recursivamente
@@ -181,38 +275,15 @@ def directorio_pdf(
             convertir_pdf(md, file_path, input_path, output_dir)
 
 
-def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description=(
-            "Convierte PDFs a Markdown usando MarkItDown.\n"
-            "Si la entrada es un directorio, se recorre recursivamente."
-        )
-    )
-    parser.add_argument(
-        "input",
-        help="Ruta al PDF o al directorio que contiene los PDFs de entrada",
-    )
-    parser.add_argument(
-        "output",
-        help="Directorio donde se guardarán los .md generados",
-    )
-    parser.add_argument(
-        "--ext",
-        nargs="*",
-        default=[".pdf"],
-        help="Extensiones a convertir (por defecto: .pdf). Ejemplo: --ext .pdf .PDF",
-    )
-    return parser.parse_args(argv)
-
-
-def main(argv: list[str] | None = None) -> None:
-    args = parse_args(argv)
-    input_path = Path(args.input).resolve()
-    output_dir = Path(args.output).resolve()
+def main() -> None:
+    # Carpeta de entrada (relativa al directorio desde el que se ejecuta el script)
+    input_path = Path("pdfs").resolve()
+    # Carpeta de salida
+    output_dir = Path("markdown_intento1").resolve()
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    extensions = tuple(args.ext)
+    extensions = (".pdf",)
     directorio_pdf(input_path, output_dir, extensions=extensions)
 
 
