@@ -3,7 +3,7 @@ from flask_login import LoginManager, login_user, logout_user, login_required, c
 from flask_sqlalchemy import SQLAlchemy
 import os
 
-from extensions import db, login_manager
+from extensions import db, login_manager, migrate
 from forms import LoginForm, SignupForm
 from usuario import User
 
@@ -15,6 +15,7 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 # init extensions
 db.init_app(app)
+migrate.init_app(app, db)
 login_manager.init_app(app)
 login_manager.login_view = "login"
 login_manager.login_message = "Debes iniciar sesión para acceder a esta página."
@@ -22,10 +23,6 @@ login_manager.login_message = "Debes iniciar sesión para acceder a esta página
 @login_manager.user_loader
 def load_user(user_id: str):
     return User.get_by_id(int(user_id))
-
-# Crea tablas
-with app.app_context():
-    db.create_all()
 
 @app.route("/")
 def inicio():
