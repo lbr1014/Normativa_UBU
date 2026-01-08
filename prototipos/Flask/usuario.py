@@ -31,3 +31,12 @@ class User(db.Model, UserMixin):
     @staticmethod
     def get_by_email(email: str):
         return User.query.filter_by(email=email).first()
+    
+    def make_admin(self):
+        self.is_admin = True
+
+    def make_user(self):
+        self.is_admin = False
+
+    def change_admin(self):
+        self.is_admin = not self.is_admin

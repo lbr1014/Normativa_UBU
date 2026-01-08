@@ -1,6 +1,7 @@
-from flask import Flask, render_template, redirect, url_for, session  
+from flask import Flask, render_template, redirect, url_for, abort  
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_sqlalchemy import SQLAlchemy
+from functools import wraps
 import os
 
 from extensions import db, login_manager, migrate
@@ -23,6 +24,16 @@ login_manager.login_message = "Debes iniciar sesión para acceder a esta página
 @login_manager.user_loader
 def load_user(user_id: str):
     return User.get_by_id(int(user_id))
+
+def admin_required(view_func):
+    @wraps(view_func)
+    def wrapper(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return login_manager.unauthorized()
+        if not current_user.is_admin:
+            abort(403)
+        return view_func(*args, **kwargs)
+    return wrapper
 
 @app.route("/")
 def inicio():
@@ -90,6 +101,46 @@ def singup():
 @login_required
 def pag_principal():
     return render_template("pag_principal.html", user=current_user)
+
+@app.route("/admin/users")
+@login_required
+@admin_required
+def users():
+    users = User.query.order_by(User.id.asc()).all()
+    return render_template("users.html", users=users)
+
+@app.route("/admin/users/<int:user_id>", methods=["POST"])
+@login_required
+@admin_required
+def admin_change_type(user_id):
+    user = User.get_by_id(user_id)
+    if not user:
+        abort(404)
+
+    # Evita que el admin se quite a sí mismo el admin
+    if user.id == current_user.id:
+        abort(400)
+
+    user.change_admin()
+    db.session.commit()
+    return redirect(url_for("users"))
+
+@app.route("/admin/users/<int:user_id>/delete", methods=["POST"])
+@login_required
+@admin_required
+def admin_delete_user(user_id):
+    user = User.get_by_id(user_id)
+    if not user:
+        abort(404)
+
+    # Evita borrarse a sí mismo
+    if user.id == current_user.id:
+        abort(400)
+
+    db.session.delete(user)
+    db.session.commit()
+    return redirect(url_for("users"))
+
 
 if __name__ == "__main__":
     app.run(debug=True)
