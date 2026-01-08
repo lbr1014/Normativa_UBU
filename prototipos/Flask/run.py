@@ -1,24 +1,31 @@
 from flask import Flask, render_template, redirect, url_for, session  
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_sqlalchemy import SQLAlchemy
+import os
 
+from extensions import db, login_manager
 from forms import LoginForm, SignupForm
 from usuario import User
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "una_clave_cualquiera_118732hfshdfiuhwy!!$%"
+basedir = os.path.abspath(os.path.dirname(__file__))
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(basedir, "app.db")
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
-# --- Flask-Login setup ---
-login_manager = LoginManager()
+# init extensions
+db.init_app(app)
 login_manager.init_app(app)
-login_manager.login_view = "login"   
+login_manager.login_view = "login"
 login_manager.login_message = "Debes iniciar sesión para acceder a esta página."
-
-USERS_BY_ID = {}
-USERS_BY_EMAIL = {}
 
 @login_manager.user_loader
 def load_user(user_id: str):
-    return USERS_BY_ID.get(user_id)
+    return User.get_by_id(int(user_id))
+
+# Crea tablas
+with app.app_context():
+    db.create_all()
 
 @app.route("/")
 def inicio():
@@ -36,10 +43,12 @@ def login():
         email = form.email.data.lower().strip()
         password = form.password.data
 
-        user = USERS_BY_EMAIL.get(email)
+        user = User.get_by_email(email)
 
         if user and user.check_password(password):
             user.update_last_login()
+            db.session.commit()
+            
             login_user(user) 
             return redirect(url_for("pag_principal"))
 
@@ -60,26 +69,28 @@ def singup():
     
     if form.validate_on_submit():
         nombre = form.nombre.data.strip()
-        email = form.email.data.strip()
+        email = form.email.data.lower().strip()
         password = form.password.data
         
-        if email in USERS_BY_EMAIL:
+        if User.get_by_email(email):
             form.email.errors.append("Ya existe un usuario con ese email.")
             return render_template("singup.html", form=form)
         
-        # Se crea el usuario (id incremental)
-        new_id = str(len(USERS_BY_ID) + 1)
-        user = User.create(user_id=new_id, nombre=nombre, email=email, password_plain=password)
+        # Se crea el usuario
+        user = User(nombre=nombre, email=email)
+        user.set_password(password)
+        user.update_last_login() 
 
-        USERS_BY_ID[user.id] = user
-        USERS_BY_EMAIL[user.email] = user
-        login_user(user)
+        db.session.add(user)
+        db.session.commit()
         
+        login_user(user)
         return redirect(url_for("pag_principal"))
     
     return render_template("singup.html", form=form)
 
-@app.route("/pagina_principal", methods=["GET"])
+@app.route("/pagina_principal")
+@login_required
 def pag_principal():
     return render_template("pag_principal.html", user=current_user)
 
