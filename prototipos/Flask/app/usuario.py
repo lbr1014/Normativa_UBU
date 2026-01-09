@@ -3,7 +3,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from extensions  import db
+from .extensions  import db
 
 class User(db.Model, UserMixin):
     __tablename__ = "users"

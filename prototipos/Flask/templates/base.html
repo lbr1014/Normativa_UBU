@@ -35,27 +35,27 @@
         <div class="header-actions">
       {% if current_user.is_authenticated %}
 
-        {# === SOLO en la página principal === #}
-        {% if request.endpoint == 'pag_principal' and current_user.is_admin %}
-          <a href="{{ url_for('users') }}" class="btn btn-secondary">
+        {# En la página principal #}
+        {% if request.endpoint == 'main.pag_principal' and current_user.is_admin %}
+          <a href="{{ url_for('admin.users') }}" class="btn btn-secondary">
             Administrar usuarios
           </a>
         {% endif %}
 
-        {# === En cualquier otra página autenticada === #}
-        {% if request.endpoint != 'pag_principal' %}
-          <a href="{{ url_for('pag_principal') }}" class="btn btn-secondary">
+        {# En el resto de páginas #}
+        {% if request.endpoint != 'main.pag_principal' %}
+          <a href="{{ url_for('main.pag_principal') }}" class="btn btn-secondary">
             Página principal
           </a>
         {% endif %}
 
-        <a href="{{ url_for('logout') }}" class="btn btn-danger">
+        <a href="{{ url_for('auth.logout') }}" class="btn btn-danger">
           Cerrar sesión
         </a>
 
       {% else %}
-        <a href="{{ url_for('login') }}" class="btn btn-primary">Iniciar sesión</a>
-        <a href="{{ url_for('singup') }}" class="btn btn-secondary">Registrarse</a>
+        <a href="{{ url_for('auth.login') }}" class="btn btn-primary">Iniciar sesión</a>
+        <a href="{{ url_for('auth.singup') }}" class="btn btn-secondary">Registrarse</a>
       {% endif %}
     </div>
   </header>

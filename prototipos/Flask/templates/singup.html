@@ -10,7 +10,7 @@
     <div class="login-container">
         <h1>Registro</h1>
 
-        <form method="POST" action="{{ url_for('singup') }}">
+        <form method="POST" action="{{ url_for('auth.singup') }}">
         {{ form.hidden_tag() }}
 
         <div class="form-group">
@@ -49,8 +49,8 @@
         </form>
 
         <div class="links">
-            <a href="{{ url_for('login') }}">¿Ya tienes cuenta? Inicia sesión</a><br>
-            <a href="{{ url_for('inicio') }}">Volver al inicio</a>
+            <a href="{{ url_for('auth.login') }}">¿Ya tienes cuenta? Inicia sesión</a><br>
+            <a href="{{ url_for('main.inicio') }}">Volver al inicio</a>
         </div>
     </div>
 
