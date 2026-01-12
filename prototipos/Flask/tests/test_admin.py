@@ -46,6 +46,10 @@ class AdminTest(BaseTestCase):
         u_db2 = User.get_by_id(u.id)
         self.assertIsNotNone(u_db2)
         self.assertFalse(u_db2.is_admin)
+        
+        # Si el usuario no existe
+        r = self.client.post("/admin/users/999999", follow_redirects=False)
+        self.assertEqual(r.status_code, 404)
 
     def test_admin_borra_usuario(self):
         # Admin logueado
@@ -63,6 +67,10 @@ class AdminTest(BaseTestCase):
 
         # Ya no existe
         self.assertIsNone(User.get_by_id(u.id))
+        
+        # Si el usuario no existe
+        r = self.client.post("/admin/users/999999/delete", follow_redirects=False)
+        self.assertEqual(r.status_code, 404)
 
     def test_admin_no_puede_cambiarse_a_si_mismo(self):
         admin = self.crear_usuario(email="admin@example.com", password="contraseña", is_admin=True)
@@ -84,3 +92,75 @@ class AdminTest(BaseTestCase):
 
         # Sigue existiendo
         self.assertIsNotNone(User.get_by_id(admin.id))
+        
+    def test_admin_crear_usuario_get(self):
+        self.crear_usuario(email="admin@example.com", password="contraseña", is_admin=True)
+        self.login("admin@example.com", follow_redirects=True)
+
+        r = self.client.get("/admin/users/add")
+        self.assertEqual(r.status_code, 200)
+        
+        self.assertIn(b"name=\"nombre\"", r.data)
+        self.assertIn(b"name=\"email\"", r.data)
+        
+    def test_admin_crear_usuario_correcto(self):
+        self.crear_usuario(email="admin@example.com", password="contraseña", is_admin=True)
+        self.login("admin@example.com", follow_redirects=True)
+
+        r = self.client.post(
+            "/admin/users/add",
+            data={
+                "nombre": "Nuevo",
+                "email": "nuevo@example.com",
+                "password": "123456",
+                "is_admin": "y",
+            },
+            follow_redirects=False
+        )
+        self.assertIn(r.status_code, (302, 303))
+        self.assertIn("/admin/users", r.headers.get("Location", ""))
+
+        # Comprobar que el usuario se creó correctamente
+        u = User.get_by_email("nuevo@example.com")
+        self.assertIsNotNone(u)
+        self.assertEqual(u.nombre, "Nuevo")
+        self.assertTrue(u.is_admin)
+        self.assertTrue(u.check_password("123456"))
+        
+        # ---- BORRAR USUARIO ----
+        user_id = u.id
+        r_delete = self.client.post(
+            f"/admin/users/{user_id}/delete",
+            follow_redirects=False
+        )
+        self.assertIn(r_delete.status_code, (302, 303))
+        self.assertIn("/admin/users", r_delete.headers.get("Location", ""))
+
+        # Verificar que el usuario ya no existe
+        u_deleted = User.get_by_id(user_id)
+        self.assertIsNone(u_deleted)
+        
+    def test_admin_crear_usuario_email_duplicado(self):
+        self.crear_usuario(email="admin@example.com", password="contraseña", is_admin=True)
+        self.login("admin@example.com", follow_redirects=True)
+
+        # ya existe
+        self.crear_usuario(email="dup@example.com", password="contraseña", is_admin=False)
+
+        r = self.client.post(
+            "/admin/users/add",
+            data={
+                "nombre": "Dup",
+                "email": "dup@example.com",
+                "password": "123456",
+            },
+            follow_redirects=True
+        )
+        self.assertEqual(r.status_code, 200)
+
+        # Debe mostrarse el error del form
+        self.assertIn(b"Ya existe un usuario con ese email.", r.data)
+
+        # Y NO debe crearse un segundo usuario con ese email
+        users_dup = User.query.filter_by(email="dup@example.com").all()
+        self.assertEqual(len(users_dup), 1)

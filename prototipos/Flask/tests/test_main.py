@@ -20,8 +20,8 @@ class MainRoutesTest(BaseTestCase):
             "/edit_user",
             data={
                 "nombre": "Nuevo Nombre",
-                "email": "nuevo@example.com",
-                "new_password": ""   
+                "email": "nuevonombre@example.com",
+                "submit": "Guardar cambios",
             },
             follow_redirects=True
         )
@@ -29,7 +29,7 @@ class MainRoutesTest(BaseTestCase):
 
         db.session.refresh(u)
         self.assertEqual(u.nombre, "Nuevo Nombre")
-        self.assertEqual(u.email, "nuevo@example.com")
+        self.assertEqual(u.email, "nuevonombre@example.com")
         
     def test_edit_user_no_borra_campos_vacios(self):
         u = self.crear_usuario(nombre="Nombre Original", email="original@example.com")
