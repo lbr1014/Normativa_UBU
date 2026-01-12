@@ -23,7 +23,7 @@ def change_type(user_id):
     if user.id == current_user.id:
         abort(400)
 
-    user.change_admin()
+    user.change_is_admin()
     db.session.commit()
     return redirect(url_for("admin.users"))
 

@@ -3,13 +3,6 @@ from app.usuario import User
 
 class AdminTest(BaseTestCase):
 
-    def login(self, email, password="contraseña", follow_redirects=True):
-        return self.client.post(
-            "/login",
-            data={"email": email, "password": password},
-            follow_redirects=follow_redirects,
-        )
-
     def test_admin_necesita_admin(self):
         self.crear_usuario(email="user@example.com", password="contraseña", is_admin=False)
 

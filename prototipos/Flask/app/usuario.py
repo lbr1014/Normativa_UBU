@@ -38,5 +38,5 @@ class User(db.Model, UserMixin):
     def make_user(self):
         self.is_admin = False
 
-    def change_admin(self):
+    def change_is_admin(self):
         self.is_admin = not self.is_admin

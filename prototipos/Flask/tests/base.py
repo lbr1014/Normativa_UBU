@@ -49,3 +49,10 @@ class BaseTestCase(unittest.TestCase):
         db.session.commit()
         self._created_user_ids.append(u.id)
         return u
+    
+    def login(self, email="test@example.com", password="contraseña", follow_redirects=True):
+        return self.client.post(
+            "/login",
+            data={"email": email, "password": password},
+            follow_redirects=follow_redirects,
+        )
