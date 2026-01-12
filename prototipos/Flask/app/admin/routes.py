@@ -41,7 +41,7 @@ def delete_user(user_id):
     db.session.commit()
     return redirect(url_for("admin.users"))
 
-@admin_bp.route("/users/new", methods=["GET", "POST"])
+@admin_bp.route("/users/add", methods=["GET", "POST"])
 @login_required
 @admin_required
 def create_user():

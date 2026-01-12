@@ -1,3 +1,4 @@
+import os
 import unittest
 
 from app import create_app
@@ -7,6 +8,12 @@ from app.usuario import User
 class BaseTestCase(unittest.TestCase):
     def setUp(self):
         self.app = create_app()
+        
+        # Base de datos para los test a parte de la de la aplicación
+        basedir = os.path.abspath(os.path.dirname(__file__))
+        self.test_db_path = os.path.join(basedir, "test.db")
+        self.test_db_uri = "sqlite:///" + self.test_db_path
+        
         self.app.config.update(
             TESTING=True,
             WTF_CSRF_ENABLED=False,
@@ -20,10 +27,19 @@ class BaseTestCase(unittest.TestCase):
         self.ctx.push()
 
         db.create_all()
+        
+        # Los ids de los usuarios creados para las pruebas
+        self._created_user_ids = []
 
     def tearDown(self):
+        
+        # Borra los usuarios creados por el test
+        if self._created_user_ids:
+            User.query.filter(User.id.in_(self._created_user_ids)).delete(synchronize_session=False)
+            db.session.commit()
+
         db.session.remove()
-        db.drop_all()
+        #db.drop_all()
         self.ctx.pop()
 
     def crear_usuario(self, nombre="Test", email="test@example.com", password="contraseña", is_admin=False):
@@ -31,4 +47,5 @@ class BaseTestCase(unittest.TestCase):
         u.set_password(password)
         db.session.add(u)
         db.session.commit()
+        self._created_user_ids.append(u.id)
         return u
