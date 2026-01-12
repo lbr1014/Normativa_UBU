@@ -2,7 +2,7 @@ from werkzeug.datastructures import MultiDict
 
 from tests.base import BaseTestCase
 from app.forms import LoginForm, SignupForm, AdminCreateUserForm
-from app.usuario import User
+
 
 
 class FormsTest(BaseTestCase):

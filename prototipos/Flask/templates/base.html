@@ -37,8 +37,24 @@
 
         {# En la página principal #}
         {% if request.endpoint == 'main.pag_principal' and current_user.is_admin %}
-          <a href="{{ url_for('admin.users') }}" class="btn btn-secondary">
-            Administrar usuarios
+          <div class="dropdown">
+            <button class="btn btn-secondary dropdown-toggle" type="button">
+              Opciones ▾
+            </button>
+            <div class="dropdown-menu">
+                <a href="{{ url_for('admin.users') }}" class="dropdown-item">
+                  Administrar usuarios
+                </a>
+                <a href="{{ url_for('main.edit_user') }}" class="dropdown-item">
+                  Editar usuario
+                </a>
+            </div>
+          </div>
+        {% endif %}
+
+        {% if request.endpoint == 'main.pag_principal' and not current_user.is_admin %}
+          <a href="{{ url_for('main.edit_user') }}" class="btn btn-secondary">
+            Editar usuario
           </a>
         {% endif %}
 
@@ -60,10 +76,12 @@
     </div>
   </header>
 
-    <!-- CONTENIDO VARIABLE -->
-    <main class="main-content">
-        {% block content %}{% endblock %}
-    </main>
+  <!-- CONTENIDO VARIABLE -->
+  <main class="main-content">
+      {% block content %}{% endblock %}
+  </main>
+
+  <script src="{{ url_for('static', filename='js/dropdown.js') }}"></script>
 
 </body>
 </html>

@@ -238,3 +238,49 @@ h1, h2, h3 {
   background-color: #ecf0f1;
   font-weight: bold;
 }
+
+
+.dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.dropdown-toggle {
+  cursor: pointer;
+}
+
+.dropdown-menu {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  min-width: 200px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 6px 0;
+  box-shadow: 0 10px 25px rgba(0,0,0,.12);
+  z-index: 1000;
+}
+
+.dropdown-item {
+  display: block;
+  padding: 10px 12px;
+  text-decoration: none;
+  color: #222;
+  white-space: nowrap;
+}
+
+.dropdown-item:hover {
+  background: #f3f3f3;
+}
+
+.dropdown-menu {
+  display: none;
+}
+
+.dropdown.open .dropdown-menu {
+  display: block;
+}
+
+
