@@ -70,6 +70,10 @@
 	\begin{itemize}
 	\tightlist
 		\item RF-11.1 Historial de consultas: los usuarios podrán ver su historial de consultas.
+		\begin{itemize}
+		\tightlist
+			\item RF-11.1.1 Borrar consultas: los usuarios podrán borrar consultas del historial.
+		\end{itemize}
 	\end{itemize}
 \end{itemize}
 
@@ -123,11 +127,12 @@ Los casos de uso definidos para el proyecto son:
 	\item CU-3 Cerrar sesión
 	\item CU-4 Realizar consulta al RAG
 	\item CU-5 Consultar historial de consultas
-	\item CU-6 Cargar documentos de licitaciones
-	\item CU-7 Procesar documentos cargados
-	\item CU-8 Indexar documentos
-	\item CU-9 Actualizar base de datos vectorial
-	\item CU-10 Administrar usuarios
+	\item CU-6 Borrar consultas del historial
+	\item CU-7 Cargar documentos de licitaciones
+	\item CU-8 Procesar documentos cargados
+	\item CU-9 Indexar documentos
+	\item CU-10 Actualizar base de datos vectorial
+	\item CU-11 Administrar usuarios
 \end{itemize}
 
 \begin{table}[p]
@@ -274,4 +279,104 @@ Los casos de uso definidos para el proyecto son:
 		\bottomrule
 	\end{tabularx}
 	\caption{CU-4 Realizar consulta al RAG.}
+\end{table}
+
+\begin{table}[p]
+	\centering
+	\begin{tabularx}{\linewidth}{ p{0.21\columnwidth} p{0.71\columnwidth} }
+		\toprule
+		\textbf{CU-5}    & \textbf{Consultar historial de consultas}\\
+		\toprule
+		\textbf{Versión}              & 1.0    \\
+		\textbf{Autor}                & Lydia Blanco Ruiz \\
+		\textbf{Requisitos asociados} & RF-11.1 \\
+		\textbf{Descripción}          & Permite al usuario ver su lista de preguntas y respuestas anteriores. \\
+		\textbf{Precondición}         & Que el usuario este autentificado y existan consultas guardadas. \\
+		\textbf{Acciones}             &
+		\begin{enumerate}
+			\def\labelenumi{\arabic{enumi}.}
+			\tightlist
+			\item El usuario accede al ``Historial''.
+			\item El sistema lista las consultas del usuario.
+			\item El usuario puede abrir una consulta para ver la respuesta completa y la trzabilidad de dicha respuesta.
+		\end{enumerate}\\
+		\textbf{Postcondición}        & Historial visualizado. \\
+		\textbf{Excepciones}          & 
+		\begin{enumerate}
+			\def\labelenumi{\arabic{enumi}.}
+			\tightlist
+			\item El usuario no ha realizado consultas. Muestra un mensaje de error ``Aún no hay consultas''. 	
+		\end{enumerate}\\
+		\textbf{Importancia}          & Alta  \\
+		\bottomrule
+	\end{tabularx}
+	\caption{CU-5 Consultar historial de consultas.}
+\end{table}
+
+\begin{table}[p]
+	\centering
+	\begin{tabularx}{\linewidth}{ p{0.21\columnwidth} p{0.71\columnwidth} }
+		\toprule
+		\textbf{CU-6}    & \textbf{Borrar consultas del historial}\\
+		\toprule
+		\textbf{Versión}              & 1.0    \\
+		\textbf{Autor}                & Lydia Blanco Ruiz \\
+		\textbf{Requisitos asociados} & RF-11.1.1 \\
+		\textbf{Descripción}          & Permite al usuario borrar consultas del historial. \\
+		\textbf{Precondición}         & Que el usuario este autentificado y existan consultas guardadas. \\
+		\textbf{Acciones}             &
+		\begin{enumerate}
+			\def\labelenumi{\arabic{enumi}.}
+			\tightlist
+			\item El usuario accede al ``Historial''.
+			\item El sistema lista las consultas del usuario.
+			\item El usuario pulsa el botón ``Borrar''.
+			\item El sistema elimina la consulta seleccionada de la base de datos.
+			\item El sistema actualiza la vista del historial.
+		\end{enumerate}\\
+		\textbf{Postcondición}        & La consulta seleccionada se elimina del historial del usuario. \\
+		\textbf{Excepciones}          & 
+		\begin{enumerate}
+			\def\labelenumi{\arabic{enumi}.}
+			\tightlist
+			\item Error en la base de datos al intentar borrar la consulta. Muestra un mensaje de error controlado.
+			\item La consulta seleccionada no existe o ya ha sido borrada. Muestra un aviso al usuario.
+		\end{enumerate}\\
+		\textbf{Importancia}          & Alta  \\
+		\bottomrule
+	\end{tabularx}
+	\caption{CU-6 Borrar consultas del historial.}
+\end{table}
+
+\begin{table}[p]
+	\centering
+	\begin{tabularx}{\linewidth}{ p{0.21\columnwidth} p{0.71\columnwidth} }
+		\toprule
+		\textbf{CU-7}    & \textbf{Cargar documentos de licitaciones}\\
+		\toprule
+		\textbf{Versión}              & 1.0    \\
+		\textbf{Autor}                & Lydia Blanco Ruiz \\
+		\textbf{Requisitos asociados} & RF-1, RF-10.3, RF-10.4 \\
+		\textbf{Descripción}          & El administrador sube documentos para alimentar o ampliar la base de datos vectorial. \\
+		\textbf{Precondición}         & Que el administrador este autentificado. \\
+		\textbf{Acciones}             &
+		\begin{enumerate}
+			\def\labelenumi{\arabic{enumi}.}
+			\tightlist
+			\item El administrador pulsa el botón ``Cargar''.
+			\item El administrador selecciona uno o varios documentos.
+			\item El sistema valida los documentos y los almacena.
+			\item El sistema registra la carga.
+		\end{enumerate}\\
+		\textbf{Postcondición}        & Los documentos están disponibles para procesado. \\
+		\textbf{Excepciones}          & 
+		\begin{enumerate}
+			\def\labelenumi{\arabic{enumi}.}
+			\tightlist
+			\item Documento corrupto o sin texto legible. Se marca como fallido y se continua con el siguiente.
+		\end{enumerate}\\
+		\textbf{Importancia}          & Alta  \\
+		\bottomrule
+	\end{tabularx}
+	\caption{CU-7 Cargar documentos de licitaciones.}
 \end{table}
