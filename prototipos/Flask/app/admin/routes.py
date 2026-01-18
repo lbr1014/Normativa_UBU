@@ -11,6 +11,8 @@ from ..forms import AdminCreateUserForm
 from ..extensions import db
 from ..rag.PrototipoRAG import index_pliegos_dir, qdrant_delete_by_filename, qdrant_count_chunks_by_filename
 
+from ..documentos import DocumentosService
+
 ALLOWED_EXT = {".pdf"}
 
 @admin_bp.route("/users")
@@ -84,50 +86,36 @@ def pliegos_dir() -> Path:
 def upload_documents():
     files = request.files.getlist("files")
     if not files:
-        return jsonify({"ok": False, "error": "No se han enviado archivos"}), 400
+        return redirect(url_for("admin.documents_page"))
 
-    docs = []
-    for f in files:
-        name = secure_filename(f.filename or "")
-        if not name:
-            continue
-        if Path(name).suffix.lower() not in ALLOWED_EXT:
-            continue
-        dest = pliegos_dir() / name
-        f.save(dest)
-        stat = dest.stat()
-        modified_dt = datetime.fromtimestamp(stat.st_mtime)
-        try:
-            chunks = qdrant_count_chunks_by_filename(name)
-        except Exception:
-            chunks = 0
-
-        docs.append({
-            "name": name,
-            "size_bytes": stat.st_size,
-            "modified": modified_dt.isoformat(timespec="seconds"),
-            "chunks": chunks,
-        })
-
-    return jsonify({"ok": True, "docs": docs})
+    documentos_service().save_uploads(files)
+    return redirect(url_for("admin.documents_page"))
 
 @admin_bp.post("/vector-db/update")
 @admin_required
 def update_vector_db():
-    summary = index_pliegos_dir(pliegos_dir())
-    
-    chunk_counts = {}
-    for pdf_path in sorted(pliegos_dir().glob("*.pdf")):
-        name = pdf_path.name
-        chunk_counts[name] = qdrant_count_chunks_by_filename(name)
-    
-    return jsonify({"ok": True, "summary": summary,  "chunk_counts": chunk_counts})
+    try:
+        documentos_service().update_vector_db()
+    except Exception:
+        current_app.logger.exception("Error actualizando base vectorial")
+        abort(500)
+
+    return redirect(url_for("admin.documents_page"))
+
+def documentos_service() -> DocumentosService:
+    return DocumentosService(
+        pliegos_dir(),
+        index_pliegos_dir=index_pliegos_dir,
+        delete_chunks=qdrant_delete_by_filename,
+        count_chunks=qdrant_count_chunks_by_filename,
+    )
 
 @admin_bp.get("/documents")
 @login_required
 @admin_required
 def documents_page():
-    return render_template("admin_upload_pdfs.html")
+    docs = documentos_service().list_documents()
+    return render_template("admin_documents.html", docs=docs)
 
 @admin_bp.get("/documents/list")
 @login_required
@@ -162,29 +150,14 @@ def delete_document(filename: str):
     """
     Borra un PDF de la carpeta pliegos y elimina todos sus chunks en Qdrant.
     """
-    # Solo permitimos borrar archivos dentro de pliegos_dir
-    safe_name = secure_filename(filename)
-    if not safe_name:
-        return jsonify({"ok": False, "error": "Nombre de archivo inválido"}), 400
-
-    # Ruta real del PDF
-    pdf_path = pliegos_dir() / safe_name
-    if not pdf_path.exists():
-        return jsonify({"ok": False, "error": "El archivo no existe"}), 404
-
-    # Borrar primero de Qdrant (chunks/metadata/embeddings)
     try:
-        qdrant_delete_by_filename(safe_name)
-    except Exception as e:
-        # Si falla no borra el PDF para no dejar estado inconsistente
-        current_app.logger.exception("Error borrando en Qdrant: %s", e)
-        return jsonify({"ok": False, "error": "No se pudo borrar de la base vectorial"}), 500
+        documentos_service().delete_document(filename)
+    except FileNotFoundError:
+        abort(404)
+    except ValueError:
+        abort(400)
+    except Exception:
+        current_app.logger.exception("Error borrando documento")
+        abort(500)
 
-    # Borrar del disco
-    try:
-        pdf_path.unlink()
-    except Exception as e:
-        current_app.logger.exception("Error borrando el archivo: %s", e)
-        return jsonify({"ok": False, "error": "Se borró de la base vectorial pero no del disco"}), 500
-
-    return jsonify({"ok": True, "deleted": safe_name})
+    return redirect(url_for("admin.documents_page"))
