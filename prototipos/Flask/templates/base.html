@@ -80,9 +80,11 @@
   </header>
 
   <!-- CONTENIDO VARIABLE -->
-  <main class="main-content">
-      {% block content %}{% endblock %}
-  </main>
+  <div class="page-scroll">
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+  </div>
 
   <script src="{{ url_for('static', filename='js/dropdown.js') }}"></script>
   <script src="{{ url_for('static', filename='js/consultas.js') }}"></script>
