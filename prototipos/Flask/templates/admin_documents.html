@@ -34,7 +34,7 @@
   {% endif %}
 
   <div class="table-responsive">
-    <table class="table table-striped align-middle">
+    <table class="app-table">
       <thead>
         <tr>
           <th>Archivo</th>
@@ -50,7 +50,7 @@
           <td class="col-name">{{ d.name }}</td>
           <td class="col-size">{{ (d.size_bytes / 1024) | round(1) }} KB</td>
           <td class="col-modified">{{ d.modified.strftime("%Y-%m-%d %H:%M:%S") }}</td>
-          <td class="col-chunks">{{ d.chunks if d.chunks is defined else "—" }}</td>
+          <td class="col-chunks">{{ d.chunks }}</td>
           <td class="text-end">
             <button class="btn btn-sm btn-danger"
                     onclick="deleteDoc('{{ d.name }}')">

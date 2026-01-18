@@ -5,7 +5,7 @@
     <title>{% block title %}Mi web{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/estilos.css') }}">
 </head>
-<body>
+<body data-delete-consulta-url="{{ url_for('main.delete_consulta', consulta_id=0) }}">
 
     <!-- CABECERA COMÚN -->
     <header class="main-header">
@@ -85,6 +85,6 @@
   </main>
 
   <script src="{{ url_for('static', filename='js/dropdown.js') }}"></script>
-
+  <script src="{{ url_for('static', filename='js/consultas.js') }}"></script>
 </body>
 </html>

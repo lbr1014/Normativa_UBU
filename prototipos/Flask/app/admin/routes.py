@@ -140,10 +140,16 @@ def documents_list_page():
     docs = []
     for p in sorted(base.glob("*.pdf")):
         stat = p.stat()
+        name = p.name
+        try:
+            chunks = qdrant_count_chunks_by_filename(name)
+        except Exception:
+            chunks = 0
         docs.append({
             "name": p.name,
             "size_bytes": stat.st_size,
             "modified": datetime.fromtimestamp(stat.st_mtime),
+            "chunks": chunks,
         })
 
     return render_template("admin_documents.html", docs=docs)

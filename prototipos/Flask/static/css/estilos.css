@@ -223,22 +223,8 @@ h1, h2, h3 {
 .main-content table {
   margin: 0 auto;
   width: 100%;
-  max-width: 900px;
-  border-collapse: collapse;
+  max-width: 950px;
 }
-
-.main-content th,
-.main-content td {
-  padding: 10px 14px;
-  border: 1px solid #ccc;
-  text-align: center;
-}
-
-.main-content th {
-  background-color: #ecf0f1;
-  font-weight: bold;
-}
-
 
 .dropdown {
   position: relative;
@@ -281,6 +267,72 @@ h1, h2, h3 {
 
 .dropdown.open .dropdown-menu {
   display: block;
+}
+
+
+/* =========================
+   TABLAS (estilo reutilizable para toda la web)
+   ========================= */
+
+.app-table {
+  width: 100%;
+  max-width: 950px;
+  margin: 18px auto 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: #ffffff;
+  border: 1px solid #d6d6d6;        
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.10);
+}
+
+.app-table thead th {
+  background: #e9eef3;               
+  color: #1f2d3d;
+  font-weight: 700;
+  padding: 12px 14px;
+  border-bottom: 1px solid #d6d6d6;
+  text-align: center;
+}
+
+.app-table tbody td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #e6e6e6;
+  vertical-align: middle;
+  text-align: center;               
+}
+
+.app-table tbody tr:nth-child(even) {
+  background: #fafafa;
+}
+
+/* Fila de details */
+.app-table .details-row td {
+  background: #f4f7fb;
+  text-align: left;
+}
+
+/* details */
+.app-table details summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #1f2d3d;
+  margin: 4px 0 8px;
+}
+
+.app-table details pre {
+  margin: 10px 0 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid #e1e1e1;
+}
+
+.cell-question {
+  max-width: 420px;
+  text-align: left;       
+  word-break: break-word;
 }
 
 

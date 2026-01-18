@@ -16,6 +16,14 @@ def rag_page():
 @login_required
 def rag_ask():
     form = RAGQueryForm()
+    if not form.validate_on_submit():
+        return jsonify({
+            "answer": "Escribe una pregunta válida.",
+            "title": "",
+            "filename": "",
+            "segment_index": -1,
+            "chunk": "",
+        }), 400
     question = form.question.data
     data = rag_answer(question)
     return jsonify(data)
