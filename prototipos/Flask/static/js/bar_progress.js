@@ -37,7 +37,7 @@ document.addEventListener("DOMContentLoaded", () => {
       progress.style.display = "none";
       bar.style.width = "";
       bar.style.animation = "";
-    }, 1500);
+    }, 5000);
   }
 
   // CUANDO SE ENVÍA EL FORM WEB SCRAPINGS

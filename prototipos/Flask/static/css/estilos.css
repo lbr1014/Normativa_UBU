@@ -134,6 +134,76 @@ h1, h2, h3 {
   gap: 10px;
 }
 
+/* Botón modelo */
+.btn-modelo{
+  position: relative;
+  overflow: hidden;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+
+  padding: 18px 36px;
+  font-size: 20px;
+  font-weight: 700;
+
+  color: #ffffff;
+  text-decoration: none;
+
+  background: linear-gradient(
+    135deg,
+    #3b5d7a,
+    #2f4f69
+  );
+
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.12);
+
+  box-shadow:
+    0 10px 24px rgba(59, 93, 122, 0.45),
+    0 2px 6px rgba(0, 0, 0, 0.18);
+
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+/* Capa de luz localizada */
+.btn-modelo::before{
+  content: "";
+  position: absolute;
+  inset: 0;
+
+  background: radial-gradient(
+    circle at var(--x, 50%) var(--y, 50%),
+    rgba(255,255,255,0.25),
+    transparent 45%
+  );
+
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.btn-modelo:hover::before{
+  opacity: 1;
+}
+
+.btn-modelo:hover{
+  transform: translateY(-2px);
+  box-shadow:
+    0 14px 30px rgba(59, 93, 122, 0.55),
+    0 4px 10px rgba(0, 0, 0, 0.22);
+}
+
+/* Click */
+.btn-modelo:active{
+  transform: translateY(0);
+  box-shadow:
+    0 8px 18px rgba(59, 93, 122, 0.35);
+}
+
 /* =========================
    LINKS (bloque debajo del form)
    ========================= */
