@@ -89,10 +89,10 @@ def pliegos_dir() -> Path:
 def upload_documents():
     files = request.files.getlist("files")
     if not files:
-        return redirect(url_for("admin.documents_page"))
+        return redirect(url_for("admin.documents_list_page"))
 
     documentos_service().save_uploads(files)
-    return redirect(url_for("admin.documents_page"))
+    return redirect(url_for("admin.documents_list_page"))
 
 @admin_bp.post("/vector-db/update")
 @admin_required
@@ -103,7 +103,7 @@ def update_vector_db():
         current_app.logger.exception("Error actualizando base vectorial")
         abort(500)
 
-    return redirect(url_for("admin.documents_page"))
+    return redirect(url_for("admin.documents_list_page"))
 
 def documentos_service() -> DocumentosService:
     return DocumentosService(
@@ -175,7 +175,7 @@ def delete_document(filename: str):
         current_app.logger.exception("Error borrando documento")
         abort(500)
 
-    return redirect(url_for("admin.documents_page"))
+    return redirect(url_for("admin.documents_list_page"))
 
 @admin_bp.post("/documents/web_scraping")
 @login_required
@@ -204,4 +204,4 @@ def web_scraping_documents():
     except subprocess.CalledProcessError:
         current_app.logger.exception("Error ejecutando scraping")
 
-    return redirect(url_for("admin.documents_page"))
+    return redirect(url_for("admin.documents_list_page"))
