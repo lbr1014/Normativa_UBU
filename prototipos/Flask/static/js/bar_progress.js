@@ -7,28 +7,31 @@ document.addEventListener("DOMContentLoaded", () => {
     'form[action="/admin/documents/web_scraping"]'
   );
 
-  // CUANDO SE ENVÍA EL FORM
-  if (scrapingForm) {
-    scrapingForm.addEventListener("submit", () => {
-      sessionStorage.setItem("scraping_running", "true");
+  const updateForm = document.querySelector(
+    'form[action="/admin/vector-db/update"]'
+  );
 
-      progress.style.display = "block";
-      text.textContent = "Ejecutando web scraping…";
+  function showProgress(message, storageKey) {
+    sessionStorage.setItem(storageKey, "true");
 
-      document.querySelectorAll("button").forEach(btn => {
-        btn.disabled = true;
-      });
+    if (progress) progress.style.display = "block";
+    if (text) text.textContent = message;
+
+    document.querySelectorAll("button").forEach(btn => {
+      btn.disabled = true;
     });
   }
 
-  // CUANDO VUELVE LA PÁGINA (scraping terminado)
-  if (sessionStorage.getItem("scraping_running") === "true") {
-    sessionStorage.removeItem("scraping_running");
+  function showFinished(message, storageKey) {
+    if (sessionStorage.getItem(storageKey) !== "true") return;
+    sessionStorage.removeItem(storageKey);
+
+    if (!progress || !bar || !text) return;
 
     progress.style.display = "block";
     bar.style.animation = "none";
     bar.style.width = "100%";
-    text.textContent = "Web scraping completado ✔";
+    text.textContent = message;
 
     setTimeout(() => {
       progress.style.display = "none";
@@ -36,4 +39,22 @@ document.addEventListener("DOMContentLoaded", () => {
       bar.style.animation = "";
     }, 1500);
   }
+
+  // CUANDO SE ENVÍA EL FORM WEB SCRAPINGS
+  if (scrapingForm) {
+    scrapingForm.addEventListener("submit", () => {
+      showProgress("Ejecutando web scraping…", "scraping_running");
+    });
+  }
+
+  // CUANDO SE ENVÍA EL FORM UPDATE
+  if (updateForm) {
+    updateForm.addEventListener("submit", () => {
+      showProgress("Actualizando base vectorial…", "vector_updating");
+    });
+  }
+
+  // CUANDO VUELVE LA PÁGINA
+  showFinished("Web scraping completado", "scraping_running");
+  showFinished("Base vectorial actualizada", "vector_updating");
 });
