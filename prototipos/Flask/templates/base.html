@@ -36,36 +36,65 @@
     {% if current_user.is_authenticated %}
 
       {# En la página principal #}
-      {% if request.endpoint == 'main.pag_principal' and current_user.is_admin %}
+      {% if current_user.is_admin %}
         <div class="dropdown">
           <button class="btn btn-secondary dropdown-toggle" type="button">
             Opciones ▾
           </button>
           <div class="dropdown-menu">
-              <a href="{{ url_for('admin.users') }}" class="dropdown-item">
-                Administrar usuarios
-              </a>
+            {% if request.endpoint != 'admin.documents_list_page' %}
               <a href="{{ url_for('admin.documents_list_page') }}" class="dropdown-item">
                 Administrar documentos
               </a>
+            {% endif %}
+            {% if request.endpoint != 'main.historial' %}
+              <a href="{{ url_for('main.historial') }}" class="dropdown-item">
+                Historial de consultas
+              </a>
+            {% endif %}
+            {% if request.endpoint != 'admin.users' %}
+              <a href="{{ url_for('admin.users') }}" class="dropdown-item">
+                Administrar usuarios
+              </a>
+            {% endif %}
+            {% if request.endpoint != 'main.edit_user' %}
               <a href="{{ url_for('main.edit_user') }}" class="dropdown-item">
                 Editar usuario
               </a>
+            {% endif %}
+            {% if request.endpoint != 'main.pag_principal' %}
+              <a href="{{ url_for('main.pag_principal') }}" class="dropdown-item">
+                Página principal
+              </a>
+            {% endif %}
           </div>
         </div>
       {% endif %}
 
-      {% if request.endpoint == 'main.pag_principal' and not current_user.is_admin %}
-        <a href="{{ url_for('main.edit_user') }}" class="btn btn-secondary">
-          Editar usuario
-        </a>
-      {% endif %}
+      {% if not current_user.is_admin %}
+        <div class="dropdown">
+          <button class="btn btn-secondary dropdown-toggle" type="button">
+            Opciones ▾
+          </button>
+          <div class="dropdown-menu">
+            {% if request.endpoint != 'main.historial' %}
+              <a href="{{ url_for('main.historial') }}" class="dropdown-item">
+                Historial de consultas
+              </a>
+            {% endif %}
 
-      {# En el resto de páginas #}
-      {% if request.endpoint != 'main.pag_principal' %}
-        <a href="{{ url_for('main.pag_principal') }}" class="btn btn-secondary">
-          Página principal
-        </a>
+            {% if request.endpoint != 'main.edit_user' %}
+              <a href="{{ url_for('main.edit_user') }}" class="dropdown-item">
+                Editar usuario
+              </a>
+            {% endif %}     
+            {% if request.endpoint != 'main.pag_principal' %}
+              <a href="{{ url_for('main.pag_principal') }}" class="dropdown-item">
+                Página principal
+              </a>
+            {% endif %}     
+          </div>
+        </div>
       {% endif %}
 
       <a href="{{ url_for('auth.logout') }}" class="btn btn-danger">
