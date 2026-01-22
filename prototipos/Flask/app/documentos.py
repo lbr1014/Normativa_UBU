@@ -5,16 +5,32 @@ from pathlib import Path
 from datetime import datetime
 from typing import Iterable, List, Dict, Optional
 from werkzeug.utils import secure_filename
+import hashlib
+
+from .extensions  import db
 
 ALLOWED_EXT = {".pdf"}
 
-@dataclass
-class Documento:
-    name: str
-    size_bytes: int
-    modified: datetime
-    chunks: int = 0
-
+class Documento(db.Model):
+    __tablename__ = "documents"
+     
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(255), nullable=False,  index=True)
+    path = db.Column(db.String(500), unique=True, nullable=False)
+    size_bytes = db.Column(db.Integer, nullable=False)
+    modified_at = db.Column(db.DateTime(timezone=True), nullable=False, index=True)
+    chunks = db.Column(db.Integer, nullable=False,  default=0)
+    hash = db.Column(db.String(100),  nullable=False, index=True)
+    status = db.Column(db.String(25), nullable=False,default="cargado", index=True)
+    error_message = db.Column(db.Text, nullable=True)
+    
+    def sha256_file(path: Path) -> str:
+        h = hashlib.sha256()
+        with path.open("rb") as f:
+            for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    
 
 class DocumentosService:
     def __init__(
