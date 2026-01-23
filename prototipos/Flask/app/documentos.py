@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from typing import Iterable, List, Dict, Optional
+from typing import Iterable, Optional
 from werkzeug.utils import secure_filename
 import hashlib
 
@@ -30,13 +30,13 @@ class Documento(db.Model):
         if not self.modified_at:
             self.modified_at = now
     
-    def sha256_file(path: Path) -> str:
-        h = hashlib.sha256()
-        with path.open("rb") as f:
-            for chunk in iter(lambda: f.read(1024 * 1024), b""):
-                h.update(chunk)
-        return h.hexdigest()
-    
+def sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
 
 class DocumentosService:
     def __init__(
@@ -53,38 +53,16 @@ class DocumentosService:
         self.delete_chunks = delete_chunks
         self.count_chunks = count_chunks
 
-    def sanitize_filename(self, filename: str) -> str:
+    def filename(self, filename: str) -> str:
         return secure_filename(filename or "")
-
+    
     def resolve_pdf_path(self, filename: str) -> Path:
-        safe = self.sanitize_filename(filename)
+        safe = self.filename(filename)
         if not safe:
             raise ValueError("Nombre de archivo inválido")
-        if Path(safe).suffix.lower() not in self.allowed_ext:
+        if Path(safe).suffix.lower() not in ALLOWED_EXT:
             raise ValueError("Extensión no permitida")
         return self.docs_dir / safe
-
-    def list_documents(self) -> List[Documento]:
-        docs: List[Documento] = []
-        for p in sorted(self.docs_dir.glob("*.pdf")):
-            stat = p.stat()
-            name = p.name
-            try:
-                chunks = int(self.count_chunks(name))
-            except Exception:
-                chunks = 0
-
-            docs.append(
-                Documento(
-                    name=name,
-                    size_bytes=stat.st_size,
-                    modified=datetime.fromtimestamp(stat.st_mtime),
-                    chunks=chunks,
-                )
-            )
-
-        docs.sort(key=lambda d: d.modified, reverse=True)
-        return docs
     
     def list_documents_paginated(self, page: int, per_page: int):
         return Documento.query.order_by(Documento.modified_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
@@ -95,10 +73,10 @@ class DocumentosService:
         """
 
         for f in files:
-            if not f or not f.nombre:
+            if not f or not f.filename:
                 continue
             
-            nombre=secure_filename(f.nombre)
+            nombre=secure_filename(f.filename)
             
             if not nombre.lower().endswith(".pdf"):
                 continue
@@ -114,13 +92,34 @@ class DocumentosService:
         """
         Escanea el directorio y actualiza los registros de la base de datos.
         """
-        for p in sorted(self._base.glob("*.pdf")):
+        for p in sorted(self.docs_dir.glob("*.pdf")):
             self._upsert_from_path(p, status="cargado")
         db.session.commit()
         
+        self.purge_missing_files()
+        
+    def purge_missing_files(self) -> int:
+        """
+        Borra de SQL y Qdrant los registros cuyo PDF ya no existe en disco.
+        """
+        deleted = 0
+        for doc in Documento.query.all():
+            if not Path(doc.path).exists():
+                try:
+                    self.delete_chunks(doc.nombre) 
+                except Exception:
+                    pass
+                db.session.delete(doc)
+                deleted += 1
+
+        if deleted:
+            db.session.commit()
+        return deleted
+
+        
     def _upsert_from_path(self, p: Path, status: str) -> None:
         stat = p.stat()
-        now = datetime.now(ZoneInfo("Europe/Madrid"))
+        mtime = datetime.fromtimestamp(stat.st_mtime, ZoneInfo("Europe/Madrid"))
 
         rel_path = str(p)
         file_hash = sha256_file(p)
@@ -128,45 +127,49 @@ class DocumentosService:
         doc = Documento.query.filter_by(path=rel_path).first()
         if not doc:
             doc = Documento(
-                filename=p.name,
+                nombre=p.name,
                 path=rel_path,
                 size_bytes=stat.st_size,
-                modified_at=datetime.fromtimestamp(stat.st_mtime, ZoneInfo("Europe/Madrid")),
-                chunks_count=0,
-                sha256=file_hash,
+                modified_at=mtime,
+                chunks=0,
+                hash=file_hash,
                 status=status,
-                created_at=now,
-                updated_at=now,
+                error_message=None,
             )
             db.session.add(doc)
             
         else:
             
-            doc.filename = p.name
+            doc.nombre = p.name
             doc.size_bytes = stat.st_size
-            doc.modified_at = datetime.fromtimestamp(stat.st_mtime, ZoneInfo("Europe/Madrid"))
-            doc.sha256 = file_hash
+            doc.modified_at = mtime
+            doc.hash = file_hash
             doc.status = status
-            doc.updated_at = now
+            doc.error_message = None
 
-    def delete_document(self, nombre: str) -> None:
+    def delete_document(self, doc_id: int) -> None:
         """
         Borra en Qdrant, en el disco y en la base de datos.
         """
-        pdf_path = self.resolve_pdf_path(nombre)
-        safe_name = pdf_path.name
-
-        if not pdf_path.exists():
-            raise FileNotFoundError("El archivo no existe")
-
+        doc = Documento.query.get(doc_id)
+        if not doc:
+            return
+        safe_name = doc.nombre
         # Borra chunks en Qdrant
-        self.delete_chunks(safe_name)
+        try: 
+            self.delete_chunks(safe_name)
+        except Exception:
+            pass
         
         # Borra fichero
-        pdf_path.unlink()
+        try:
+            pdf_path = Path(doc.path)
+            if pdf_path.exists():
+                pdf_path.unlink()
+        except Exception:
+            pass
         
-        # Borrra base de datos
-        doc = Documento.query.filter_by(filename=nombre, path=str(pdf_path)).first()
+        # Borrra base de datos        
         if doc:
             db.session.delete(doc)
             db.session.commit()        
@@ -181,23 +184,20 @@ class DocumentosService:
             try:
                 doc.status = "procesado"
                 doc.error_message = None
-                doc.updated_at = datetime.now(ZoneInfo("Europe/Madrid"))
                 db.session.commit()
                 
-                self._index_pliegos_dir(str(self.docs_dir))
+                self.index_pliegos_dir(self.docs_dir)
 
                 try:
-                    doc.chunk_count = int(self.count_chunks(doc.name) or 0)
+                    doc.chunks = int(self.count_chunks(doc.nombre) or 0)
                 except Exception:
-                    doc.chunk_count = 0
+                    doc.chunks = 0
                     
                 doc.status = "indexado"
-                doc.updated_at = datetime.now(ZoneInfo("Europe/Madrid"))
                 db.session.commit()
                 
             except Exception as ex:
                 doc.status = "fallido"
                 doc.error_message = str(ex)
-                doc.updated_at = datetime.now(ZoneInfo("Europe/Madrid"))
                 db.session.commit()
                 raise

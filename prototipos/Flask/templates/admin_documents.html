@@ -56,23 +56,25 @@
             <th style="width: 160px;">Tamaño</th>
             <th style="width: 220px;">Modificado</th>
             <th style="width: 120px;">Chunks</th>
+            <th style="width: 140px;">Estado</th>
             <th style="width: 140px;"></th>
           </tr>
         </thead>
         <tbody>
         {% for d in docs %}
           <tr>
-            <td>{{ d.name }}</td>
+            <td>{{ d.nombre }}</td>
             <td>{{ (d.size_bytes / 1024) | round(1) }} KB</td>
-            <td>{{ d.modified.strftime("%Y-%m-%d %H:%M:%S") }}</td>
+            <td>{{ d.modified_at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
             <td>{{ d.chunks if d.chunks is not none else 0 }}</td>
+            <td>{{ d.status }}</td>
             <td class="text-end">
               <form method="POST"
-                    action="{{ url_for('admin.delete_document', filename=d.name) }}"
+                    action="{{ url_for('admin.delete_document', doc_id=d.id) }}"
                     style="display:inline;">
                 <button type="submit"
                         class="btn btn-sm btn-danger"
-                        onclick="return confirm('¿Seguro que quieres borrar {{ d.name }}?');">
+                        onclick="return confirm('¿Seguro que quieres borrar {{ d.nombre }}?');">
                   Borrar
                 </button>
               </form>

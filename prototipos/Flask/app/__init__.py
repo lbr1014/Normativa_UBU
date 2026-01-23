@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from .extensions import db, login_manager, migrate
 from .usuario import User
 from .consulta import Consulta
+from .documentos import Documento
 from .auth import auth_bp
 
 def create_app():

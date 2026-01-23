@@ -1,8 +1,6 @@
 from flask import render_template, redirect, url_for, abort, request, jsonify, current_app
 from flask_login import login_required, current_user
 from pathlib import Path
-from werkzeug.utils import secure_filename
-from datetime import datetime
 import os
 import sys
 import subprocess
@@ -124,53 +122,29 @@ def documents_list_page():
     page = request.args.get("page", 1, type=int)
     per_page = 10
 
-    base = pliegos_dir()
-    files = sorted(base.glob("*.pdf"))
-    total = len(files)
-
-    total_pages = max(1, (total + per_page - 1) // per_page)
-    page = max(1, min(page, total_pages))
-
-    start = (page - 1) * per_page
-    end = start + per_page
-    page_files = files[start:end]
-
-    docs = []
-    for p in page_files:
-        stat = p.stat()
-        name = p.name
-        try:
-            chunks = qdrant_count_chunks_by_filename(name)
-        except Exception:
-            chunks = 0
-        docs.append({
-            "name": name,
-            "size_bytes": stat.st_size,
-            "modified": datetime.fromtimestamp(stat.st_mtime),
-            "chunks": chunks,
-        })
+    svc = documentos_service()
+    svc.purge_missing_files()
+    
+    pagination = svc.list_documents_paginated(page, per_page)
+    docs = pagination.items
 
     return render_template(
         "admin_documents.html",
         docs=docs,
-        page=page,
-        total_pages=total_pages,
-        total_docs=total,
+        page=pagination.page,
+        total_pages=pagination.pages or 1,
+        total_docs=pagination.total,
     )
 
-@admin_bp.post("/documents/<path:filename>/delete")
+@admin_bp.post("/documents/<int:doc_id>/delete")
 @login_required
 @admin_required
-def delete_document(filename: str):
+def delete_document(doc_id: int):
     """
     Borra un PDF de la carpeta pliegos y elimina todos sus chunks en Qdrant.
     """
     try:
-        documentos_service().delete_document(filename)
-    except FileNotFoundError:
-        abort(404)
-    except ValueError:
-        abort(400)
+        documentos_service().delete_document(doc_id)
     except Exception:
         current_app.logger.exception("Error borrando documento")
         abort(500)
@@ -203,5 +177,7 @@ def web_scraping_documents():
         subprocess.run([sys.executable, str(script_2)], cwd=str(cwd), env=env, check=True)
     except subprocess.CalledProcessError:
         current_app.logger.exception("Error ejecutando scraping")
+        
+    documentos_service().sync_from_folder()
 
     return redirect(url_for("admin.documents_list_page"))
