@@ -42,11 +42,11 @@
                 <td>{{ (c.fragmentos or {}).get("filename", "—") }}</td>
                 <td>{{ "%.3f"|format(c.tiempo_respuestas) }} s</td>
                 <td >
-                  <button
-                    class="btn btn-danger"
-                    onclick="deleteConsulta({{ c.id }})">
-                    Borrar
-                  </button>
+                  <form method="POST" action="{{ url_for('main.delete_consulta', consulta_id=c.id) }}" style="display:inline;">
+                      <button type="submit" class="btn btn-danger" onclick="return confirm('¿Seguro que quieres borrar esta consulta?');">
+                        Borrar
+                      </button>
+                  </form>
                 </td>
               </tr>
 

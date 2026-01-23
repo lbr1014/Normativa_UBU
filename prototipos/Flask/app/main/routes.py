@@ -1,4 +1,4 @@
-from flask import render_template, request
+from flask import render_template, request, redirect, url_for, abort
 from flask_login import login_required, current_user
 from math import ceil
 from . import main_bp
@@ -118,9 +118,9 @@ def delete_consulta(consulta_id: int):
     consulta = Consulta.query.get_or_404(consulta_id)
 
     if not current_user.is_admin and consulta.user_id != int(current_user.id):
-        return {"ok": False, "error": "No autorizado"}, 403
+        abort(403)
 
     db.session.delete(consulta)
     db.session.commit()
 
-    return {"ok": True, "deleted": consulta_id}
+    return redirect(request.referrer or url_for("main.historial"))
