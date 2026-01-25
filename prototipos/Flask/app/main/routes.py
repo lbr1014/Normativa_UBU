@@ -6,6 +6,7 @@ from ..extensions import db
 from ..forms import EditUserForm
 from ..usuario import User
 from app.consulta import Consulta
+from app.rag.PrototipoRAG import qdrant_get_payloads
 
 def paginate_consultas(base_query, per_page=10):
     """
@@ -53,10 +54,14 @@ def pag_principal():
     consultas, page, total_pages, total_consultas = paginate_consultas(
         q, per_page=10
     )
+    
+    meta_by_consulta = build_meta_by_consulta(consultas)
+
     return render_template(
         "pag_principal.html", 
         user=current_user,  
         consultas=consultas, 
+        meta_by_consulta=meta_by_consulta,
         page=page, 
         total_pages=total_pages, 
         total_consultas=total_consultas
@@ -102,15 +107,46 @@ def historial():
 
     consultas, page, total_pages, total_consultas = paginate_consultas(
         q, per_page=10
-    )    
+    )   
+    
+    meta_by_consulta = build_meta_by_consulta(consultas)
     
     return render_template(
         "history.html", 
         consultas=consultas,
+        meta_by_consulta=meta_by_consulta,
         page=page,
         total_pages=total_pages,
         total_consultas=total_consultas
     )
+    
+def build_meta_by_consulta(consultas):
+    best_point_ids = []
+    best_point_id_by_consulta = {} 
+    
+    for c in consultas:
+        best = None
+        for cc in (c.consultaChunks or []):
+            if best is None or cc.ranking < best.ranking:
+                best = cc
+        pid = ""
+        if best and best.chunk and best.chunk.qdrant_point_id:
+            pid = best.chunk.qdrant_point_id
+        best_point_id_by_consulta[c.id] = pid
+        if pid:
+            best_point_ids.append(pid)
+            
+    payload_by_pid = qdrant_get_payloads(best_point_ids) 
+    
+    meta_by_consulta = {}
+    for cid, pid in best_point_id_by_consulta.items():
+        payload = payload_by_pid.get(pid) or {}
+        meta_by_consulta[cid] = {
+            "qdrant_point_id": pid,
+            "metadata": payload.get("metadata") or {},
+            "content": payload.get("content", "") or "",
+        }
+    return meta_by_consulta    
 
 @main_bp.post("/consulta/<int:consulta_id>/delete")
 @login_required

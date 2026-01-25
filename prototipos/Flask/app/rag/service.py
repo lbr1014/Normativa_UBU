@@ -110,6 +110,13 @@ def rag_answer(question: str) -> Dict[str, Any]:
         db.session.rollback()
 
     data["elapsed_s"] = round(elapsed, 4)
+    # Mejor chunk (ranking 1) para el front
+    best_point_id = ""
+    retrieved = data.get("retrieved") or []
+    if retrieved:
+        best_point_id = (retrieved[0].get("qdrant_point_id") or "").strip()
+
+    data["qdrant_point_id"] = best_point_id
     return data
 
 def qdrant_search_with_scores(qdrant, collection_name: str, query_vector: list[float], limit: int = 10):

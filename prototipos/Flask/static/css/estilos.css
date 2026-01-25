@@ -626,4 +626,90 @@ h1, h2, h3 {
   line-height: 1.45;
 }
 
+/* =========================
+   MODAL CHUNKS (HISTORIAL)
+   ========================= */
+
+.chunks-modal-backdrop{
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.45);
+  z-index:999;
+}
+
+.chunks-modal{
+  display:none;
+  position:fixed;
+  inset:0;
+  z-index:1000;
+  overflow:auto;
+  padding:4vh 16px;
+}
+
+.chunks-modal-panel{
+  max-width: 980px;
+  margin: 0 auto;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0,0,0,.25);
+  padding: 16px 18px;
+}
+
+.chunks-modal-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom: 10px;
+}
+
+.chunks-modal-title{
+  margin:0;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.chunks-modal-sub{
+  margin:.35rem 0 0 0;
+  color:#555;
+  font-size: 13px;
+}
+
+.chunks-modal-close{
+  border:0;
+  background:transparent;
+  font-size: 22px;
+  line-height: 1;
+  cursor:pointer;
+  padding: 4px 8px;
+  color: #1f2d3d;
+}
+
+.chunks-card{
+  border:1px solid rgba(0,0,0,.1);
+  border-radius: 10px;
+  padding: 12px;
+  margin-top: 10px;
+  background: #fafafa;
+}
+
+.chunks-meta-grid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 18px;
+  font-size: 14px;
+}
+
+.chunks-pre{
+  white-space: pre-wrap;
+  margin-top: .6rem;
+}
+
+.btn-chunks{
+  margin-left: 6px;
+  padding: 10px 14px; 
+}
+
+
 
