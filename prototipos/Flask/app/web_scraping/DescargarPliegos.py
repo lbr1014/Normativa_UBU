@@ -221,7 +221,9 @@ def iterar_paginas(items: list[dict]) -> Iterable[Tuple[str, str, str]]:
                 yield expediente, nombre_doc, url
                 
 def es_pliego (nombre_doc: str) -> bool:
-    return nombre_doc and ( ("pliego" or "Pliego") in (nombre_doc or "").lower())
+    if not nombre_doc:
+        return False
+    return "pliego" in nombre_doc.lower()
             
 def primera_url(doc: dict) -> str:
     urls_str = doc.get("Ver documentos (urls)")
