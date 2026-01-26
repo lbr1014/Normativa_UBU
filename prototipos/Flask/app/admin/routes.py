@@ -15,6 +15,8 @@ from ..rag.PrototipoRAG import index_pliegos_dir, qdrant_delete_by_filename, qdr
 from ..documentos import DocumentosService
 
 ALLOWED_EXT = {".pdf"}
+USERS = "admin.users"
+DOCUMENTS = "admin.documents_list_page"
 
 @admin_bp.route("/users")
 @login_required
@@ -35,7 +37,7 @@ def change_type(user_id):
 
     user.change_is_admin()
     db.session.commit()
-    return redirect(url_for("admin.users"))
+    return redirect(url_for(USERS))
 
 @admin_bp.route("/users/<int:user_id>/delete", methods=["POST"])
 @login_required
@@ -49,7 +51,7 @@ def delete_user(user_id):
 
     db.session.delete(user)
     db.session.commit()
-    return redirect(url_for("admin.users"))
+    return redirect(url_for(USERS))
 
 @admin_bp.route("/users/add", methods=["GET", "POST"])
 @login_required
@@ -73,7 +75,7 @@ def create_user():
 
         db.session.add(user)
         db.session.commit()
-        return redirect(url_for("admin.users"))
+        return redirect(url_for(USERS))
 
     return render_template("admin_create_user.html", form=form)
 
@@ -87,10 +89,10 @@ def pliegos_dir() -> Path:
 def upload_documents():
     files = request.files.getlist("files")
     if not files:
-        return redirect(url_for("admin.documents_list_page"))
+        return redirect(url_for(DOCUMENTS))
 
     documentos_service().save_uploads(files)
-    return redirect(url_for("admin.documents_list_page"))
+    return redirect(url_for(DOCUMENTS))
 
 @admin_bp.post("/vector-db/update")
 @admin_required
@@ -101,7 +103,7 @@ def update_vector_db():
         current_app.logger.exception("Error actualizando base vectorial")
         abort(500)
 
-    return redirect(url_for("admin.documents_list_page"))
+    return redirect(url_for(DOCUMENTS))
 
 def documentos_service() -> DocumentosService:
     return DocumentosService(
@@ -150,7 +152,7 @@ def delete_document(doc_id: int):
         current_app.logger.exception("Error borrando documento")
         abort(500)
 
-    return redirect(url_for("admin.documents_list_page"))
+    return redirect(url_for(DOCUMENTS))
 
 @admin_bp.post("/documents/web_scraping")
 @login_required
@@ -181,4 +183,4 @@ def web_scraping_documents():
         
     documentos_service().sync_from_folder()
 
-    return redirect(url_for("admin.documents_list_page"))
+    return redirect(url_for(DOCUMENTS))

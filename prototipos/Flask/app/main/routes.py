@@ -120,26 +120,24 @@ def historial():
         total_consultas=total_consultas
     )
     
-def build_meta_by_consulta(consultas):
-    best_point_ids = []
-    best_point_id_by_consulta = {} 
+def best_pid_for_consulta(consulta) -> str:
+    chunks = consulta.consultaChunks or []
+    best_cc = min(chunks, key=lambda cc: cc.ranking, default=None)
+
+    if not best_cc:
+        return ""
+
+    chunk = getattr(best_cc, "chunk", None)
+    return getattr(chunk, "qdrant_point_id", "") or ""
     
-    for c in consultas:
-        best = None
-        for cc in (c.consultaChunks or []):
-            if best is None or cc.ranking < best.ranking:
-                best = cc
-        pid = ""
-        if best and best.chunk and best.chunk.qdrant_point_id:
-            pid = best.chunk.qdrant_point_id
-        best_point_id_by_consulta[c.id] = pid
-        if pid:
-            best_point_ids.append(pid)
+def build_meta_by_consulta(consultas):
+    
+    best_point_ids = {c.id: best_pid_for_consulta(c) for c in consultas}
             
-    payload_by_pid = qdrant_get_payloads(best_point_ids) 
+    payload_by_pid = qdrant_get_payloads(pid for pid in best_point_ids.values() if pid) 
     
     meta_by_consulta = {}
-    for cid, pid in best_point_id_by_consulta.items():
+    for cid, pid in best_point_ids.items():
         payload = payload_by_pid.get(pid) or {}
         meta_by_consulta[cid] = {
             "qdrant_point_id": pid,
