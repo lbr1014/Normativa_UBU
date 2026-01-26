@@ -2,6 +2,8 @@ import asyncio
 import json
 import shutil
 import os
+from typing import Any, Awaitable, Iterable, List, Tuple
+import aiofiles
 from collections import defaultdict
 from pathlib import Path
 
@@ -68,8 +70,8 @@ async def descargar_pdf_es(context, url: str, expediente: str, nombre_doc: str, 
     destino = DEST / filename
 
     try:
-        with open(destino, "wb") as f:
-            f.write(contenido)
+        async with aiofiles.open(destino, "wb") as f:
+            await f.write(contenido)
         print(f"Guardado: {destino.name}")
         return True
     except Exception as e:
@@ -148,78 +150,89 @@ async def run():
             user_agent="Mozilla/5.0",
         )
 
-        tareas_paginas = []
+        try:
+            tareas_paginas = get_paginas(context, items, pdfs_por_expediente)
 
-        for item in items:
-            datos = item.get("datos", {}) or {}
-            expediente = datos.get("Expediente")
-            if not expediente:
+            # Recogemos los URLs de los PDF en paralelo
+            if tareas_paginas:
+                await asyncio.gather(*tareas_paginas)
+
+            # Descargamos todos los PDFs encontrados
+            tareas_descarga = []
+            for expediente, lista_pdfs in pdfs_por_expediente.items():
+                for idx, (nombre_pdf, url_pdf) in enumerate(lista_pdfs, start=1):
+                    tareas_descarga.append(
+                        descargar_pdf_es(
+                            context=context,
+                            url=url_pdf,
+                            expediente=expediente,
+                            nombre_doc=nombre_pdf,
+                            indice=idx,
+                        )
+                    )
+
+            if tareas_descarga:
+                await asyncio.gather(*tareas_descarga)
+                
+            datos_para_json =  dict(pdfs_por_expediente.items())
+
+            await write_json(JSON_SALIDA, datos_para_json)
+
+            print(f"Diccionario de pliegos guardado en: {JSON_SALIDA}")
+
+            # Crear ZIP con todo lo descargado
+            # zip_path = shutil.make_archive(DEST.name, "zip", root_dir=DEST)
+            # print(f"ZIP creado: {zip_path}")
+            
+        finally:
+            await context.close()
+            await browser.close()
+            
+def get_paginas(context, items: list[dict], dic_urls) -> List[Awaitable[Any]]:
+    return [
+        procesar_pagina_pliego(
+            context=context,
+            url=url,
+            expediente=expediente,
+            nombre_doc=nombre_doc,
+            dic_urls=dic_urls,
+        )
+        for expediente, nombre_doc, url in iterar_paginas(items)
+    ]
+
+def iterar_paginas(items: list[dict]) -> Iterable[Tuple[str, str, str]]:
+    """
+    Devuleve el expediente, nombre del documento y la primera url
+    """
+    for item in items:
+        datos = item.get("datos", {}) or {}
+        expediente = datos.get("Expediente")
+        if not expediente:
+            continue
+
+        documentos = datos.get("Documentos") or []
+        for doc in documentos:
+            nombre_doc = (doc.get("Documento") or "").strip()
+            if not es_pliego:
                 continue
 
-            documentos = datos.get("Documentos") or []
-            for doc in documentos:
-                nombre_doc = (doc.get("Documento") or "").strip()
-                if not nombre_doc:
-                    continue
-
-                # Solo entramos en los pliegos
-                if "pliego" not in nombre_doc.lower():
-                    continue
-
-                urls_str = doc.get("Ver documentos (urls)")
-                if not urls_str:
-                    # Ignoramos los Pliegos sin URL 
-                    continue
-
-                primera_url = urls_str.split("|")[0].strip()
-                if not primera_url:
-                    continue
-
-                tareas_paginas.append(
-                    procesar_pagina_pliego(
-                        context=context,
-                        url=primera_url,
-                        expediente=expediente,
-                        nombre_doc=nombre_doc,
-                        dic_urls=pdfs_por_expediente,
-                    )
-                )
-
-        # 1) Recogemos los URLs de los PDF en paralelo
-        if tareas_paginas:
-            await asyncio.gather(*tareas_paginas)
-
-        # 2) Descargamos todos los PDFs encontrados
-        tareas_descarga = []
-        for expediente, lista_pdfs in pdfs_por_expediente.items():
-            for idx, (nombre_pdf, url_pdf) in enumerate(lista_pdfs, start=1):
-                tareas_descarga.append(
-                    descargar_pdf_es(
-                        context=context,
-                        url=url_pdf,
-                        expediente=expediente,
-                        nombre_doc=nombre_pdf,
-                        indice=idx,
-                    )
-                )
-
-        if tareas_descarga:
-            await asyncio.gather(*tareas_descarga)
+            url = primera_url(doc)
+            if url:
+                yield expediente, nombre_doc, url
+                
+def es_pliego (nombre_doc: str) -> bool:
+    return nombre_doc and ( ("pliego" or "Pliego") in (nombre_doc or "").lower())
             
-        datos_para_json = {k: v for k, v in pdfs_por_expediente.items()}
+def primera_url(doc: dict) -> str:
+    urls_str = doc.get("Ver documentos (urls)")
+    if not urls_str:
+        return ""
+    return (urls_str.split("|")[0] or "").strip()
 
-        with JSON_SALIDA.open("w", encoding="utf-8") as f:
-            json.dump(datos_para_json, f, ensure_ascii=False, indent=2)
-
-        print(f"Diccionario de pliegos guardado en: {JSON_SALIDA}")
-
-        # Crear ZIP con todo lo descargado
-        zip_path = shutil.make_archive(DEST.name, "zip", root_dir=DEST)
-        print(f"ZIP creado: {zip_path}")
-
-        await context.close()
-        await browser.close()
-
+async def write_json(path, data: dict) -> None:
+    payload = json.dumps(data, ensure_ascii=False, indent=2)
+    async with aiofiles.open(path, "w", encoding="utf-8") as f:
+        await f.write(payload)
 
 if __name__ == "__main__":
     asyncio.run(run())
