@@ -5,7 +5,7 @@ import time
 from typing import Any, List, Optional
 from urllib.parse import urljoin
 
-from playwright.async_api import Frame, Page, async_playwright, expect
+from playwright.async_api import Frame, Page, async_playwright, expect, Locator
 from playwright.async_api import TimeoutError as PWTimeoutError
 
 # ======== Constantes ========
@@ -278,6 +278,8 @@ async def extraer_detalles_licitacion(page: Page) -> dict:
     
     if documentos:
         datos["Documentos"] = documentos
+        
+    print (datos)
 
     return datos
 
@@ -333,6 +335,8 @@ async def parse_head_table(page: Page, datos: dict[str, object], head_sel: str) 
 
 async def parse_label_value_table(page: Page, datos: dict[str, object], tabla_sel: str) -> None:
     tabla = page.locator(tabla_sel)
+    if not await tabla.count():
+        return
     await tabla.first.wait_for(state="visible")
 
     filas = tabla.locator("tbody.tabla-detalle-con-hijos > tr")
@@ -361,82 +365,80 @@ async def parse_label_value_table(page: Page, datos: dict[str, object], tabla_se
 async def parse_documentos(page: Page) -> Optional[list[dict[str, str]]]:
     docs_sel = "#myTablaDetalleVISUOE"
     docs_table = page.locator(docs_sel)
-    if await docs_table.count():
-        await docs_table.first.wait_for(state="visible")
+    if not await docs_table.count():
+        return None
+    
+    await docs_table.first.wait_for(state="visible")
 
-        rows = docs_table.locator("tbody.tabla-detalle > tr")
-        m = await rows.count()
-        
-        documentos: list[dict[str, str]] = []
-        
-        for i in range(m):
-            row = rows.nth(i)
-            doc_data: dict[str, str] = {}
+    rows = docs_table.locator("tbody.tabla-detalle > tr")
+    m = await rows.count()
+    
+    documentos: list[dict[str, str]] = []
+    
+    for i in range(m):
+        row = rows.nth(i)
+        doc_data: dict[str, str] = {}
 
-            # Columna 1: Publicación en plataforma
-            pub_td = row.locator("td:nth-of-type(1)")
-            await set_if_text(doc_data, "Publicación en plataforma", pub_td)
+        # Columna 1: Publicación en plataforma
+        pub_td = row.locator("td:nth-of-type(1)")
+        await set_if_text(doc_data, "Publicación en plataforma", pub_td)
 
-            # Columna 2: Documento
-            doc_td = row.locator("td:nth-of-type(2)")
-            await set_if_text(doc_data, "Documento", doc_td)
+        # Columna 2: Documento
+        doc_td = row.locator("td:nth-of-type(2)")
+        await set_if_text(doc_data, "Documento", doc_td)
 
-            # Columna 3: Ver documentos
-            links_td = row.locator("td:nth-of-type(3)")
-            hrefs: list[str] = []
-            if await links_td.count():
-                enlaces = links_td.locator("a[href]")
-                k = await enlaces.count()
-                for j in range(k):
-                    a = enlaces.nth(j)
-                    href = await a.get_attribute("href")
-                    if href and href != "#":
-                        hrefs.append(urljoin(page.url, href))
-            if hrefs:
-                doc_data["Ver documentos (urls)"] = " | ".join(hrefs)
+        # Columna 3: Ver documentos
+        links_td = row.locator("td:nth-of-type(3)")
+        hrefs: list[str] = []
+        if await links_td.count():
+            enlaces = links_td.locator("a[href]")
+            k = await enlaces.count()
+            for j in range(k):
+                a = enlaces.nth(j)
+                href = await a.get_attribute("href")
+                if href and href != "#":
+                    hrefs.append(urljoin(page.url, href))
+        if hrefs:
+            doc_data["Ver documentos (urls)"] = " | ".join(hrefs)
 
-            # Columna 4: DOUE
-            doue_td = row.locator("td:nth-of-type(4)")
-            if await doue_td.count():
-                # Envío
-                envio_span = doue_td.locator(".flex span").first
-                if await envio_span.count():
-                    envio = await envio_span.inner_text()
-                    if envio:
-                        doc_data["DOUE - Envío"] = _norm(envio)
+        # Columna 4: DOUE
+        await parse_documentos_doue(page,row,doc_data)
+                            
+        if doc_data:
+            documentos.append(doc_data)
+    return documentos or None
 
-                # Publicación
-                publi_link = doue_td.locator("a[href]").last
-                if await publi_link.count():
-                    href_pub = await publi_link.get_attribute("href")
-                    if href_pub and href_pub != "#":
-                        doc_data["DOUE - Publicación"] = urljoin(page.url, href_pub)
+async def parse_documentos_doue(page: Page, row: Locator, doc_data: dict[str, str]) -> None:
+    doue_td = row.locator("td:nth-of-type(4)")
+    if await doue_td.count():
+        # Envío
+        envio_span = doue_td.locator(".flex span").first
+        await set_if_text(doc_data, "DOUE - Envío", envio_span)
 
-                    # Fecha de publicación dentro del link
-                    fecha_pub = _norm(await publi_link.inner_text())
-                    if fecha_pub:
-                        doc_data["DOUE - Publicación (fecha)"] = fecha_pub
-                else:
-                    # En filas sin enlace, puede haber solo texto (o 'Vacío')
-                    publi_span = doue_td.locator("span.outputText").first
-                    if await publi_span.count():
-                        fecha_pub = _norm(await publi_span.inner_text())
-                        if fecha_pub:
-                            doc_data["DOUE - Publicación (fecha)"] = fecha_pub
-                        
-            if doc_data:
-                documentos.append(doc_data)
-    return documentos
+        # Publicación
+        publi_link = doue_td.locator("a[href]").last
+        if await publi_link.count():
+            href_pub = await publi_link.get_attribute("href")
+            if href_pub and href_pub != "#":
+                doc_data["DOUE - Publicación"] = urljoin(page.url, href_pub)
 
-async def set_if_text(datos: dict, key: str, value: Optional[str]) -> None:
+            # Fecha de publicación dentro del link
+            fecha_pub = _norm(await publi_link.inner_text())
+            if fecha_pub:
+                doc_data["DOUE - Publicación (fecha)"] = fecha_pub
+        else:
+            # En filas sin enlace, puede haber solo texto (o 'Vacío')
+            publi_span = doue_td.locator("span.outputText").first
+            await set_if_text(doc_data, "DOUE - Publicación (fecha)", publi_span)
+
+
+async def set_if_text(datos: dict[str, str], key: str, value: Locator) -> None:
         
     if await value.count():
         value_text = await value.inner_text()
         datos[key] = _norm(value_text)
     
     
-
-
 async def guardar_licitacion_json(resultados: List[Any]) -> None:
     """
     Guarda las licitaciones en OUTPUT_JSON como una lista de objetos {datos, documentos}
@@ -454,6 +456,7 @@ async def guardar_licitacion_json(resultados: List[Any]) -> None:
 
 # ========== MAIN ============
 async def run() -> None:
+    resultado = []
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(
@@ -533,15 +536,14 @@ async def run() -> None:
             await ir_pestana(page, destino)
 
             # Extrae las licitaciones y las guarda
-            resultado = []
             if destino == "Licitaciones":
                 resultado = await extraer_licitaciones(page)
-            await guardar_licitacion_json(resultado)
+            
 
-        except PWTimeoutError:
-            print("Timeout al cargar o encontrar elementos.")
+        except PWTimeoutError as e:
+            print("Timeout al cargar o encontrar elementos: {e}.")
         finally:
-
+            await guardar_licitacion_json(resultado)
             await context.tracing.stop()
             await context.close()
             await browser.close()
