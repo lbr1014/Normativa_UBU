@@ -177,14 +177,20 @@ class DocumentosService:
             db.session.delete(doc)
             db.session.commit()        
 
-    def update_vector_db(self) -> None:
+    def update_vector_db(self, on_progress=None, on_current_doc=None) -> None:
         """
         Indexa y acctualiza el estado y los chunks en la base de datos.
         """
         self.purge_missing_files()
         docs = Documento.query.filter(Documento.status.in_(["cargado", "fallido"])).all()
 
-        for doc in docs:
+        total = len(docs)
+        if on_progress:
+            on_progress(0, total)
+
+        for i, doc in enumerate(docs, start=1):
+            if on_current_doc:
+                on_current_doc(doc.nombre)
             try:
                 doc.status = "procesado"
                 doc.error_message = None
@@ -216,7 +222,7 @@ class DocumentosService:
                         segment_index=seg,
                         doc_sha256=sha,
                         n_chars=len(content),
-                        n_tokens=None,   # si quieres, luego calculas tokens
+                        n_tokens=None, 
                     )
                     db.session.add(c)
                     db.session.flush()
@@ -234,10 +240,12 @@ class DocumentosService:
                 doc.chunks = Chunk.query.filter_by(document_id=doc.id).count()
                 doc.status = "indexado"
                 db.session.commit()
-                
+                if on_progress:
+                    on_progress(i, total)
+
             except Exception as ex:
                 db.session.rollback()
                 doc.status = "fallido"
                 doc.error_message = str(ex)
                 db.session.commit()
-                raise
+                #raise

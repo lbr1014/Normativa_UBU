@@ -4,6 +4,8 @@ from pathlib import Path
 import os
 import sys
 import subprocess
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from . import admin_bp
 from ..decorators import admin_required
@@ -13,6 +15,11 @@ from ..extensions import db
 from ..rag.PrototipoRAG import index_pliegos_dir, qdrant_delete_by_filename, qdrant_count_chunks_by_filename
 
 from ..documentos import DocumentosService
+
+from app.async_tasks import executor
+from app.vector_update_state import VectorUpdateState
+from app.web_scraping_state import WebScrapingSate
+
 
 ALLOWED_EXT = {".pdf"}
 USERS = "admin.users"
@@ -97,13 +104,19 @@ def upload_documents():
 @admin_bp.post("/vector-db/update")
 @admin_required
 def update_vector_db():
-    try:
-        documentos_service().update_vector_db()
-    except Exception:
-        current_app.logger.exception("Error actualizando base vectorial")
-        abort(500)
-
-    return redirect(url_for(DOCUMENTS))
+    job = VectorUpdateState(
+        status="queued",
+        progress=0,
+        current_doc=None,
+        error=None,
+    )
+    db.session.add(job)
+    db.session.commit()
+    
+    app_obj = current_app._get_current_object()
+    executor.submit(documentos_async, app_obj, job.id)
+    
+    return jsonify({"job_id": job.id}), 202
 
 def documentos_service() -> DocumentosService:
     return DocumentosService(
@@ -113,6 +126,69 @@ def documentos_service() -> DocumentosService:
         count_chunks=qdrant_count_chunks_by_filename,
     )
 
+def documentos_async(app, job_id: int) -> None:
+    """
+    Actualizar la base de datos vectorial de manera asincrona.
+    """
+    ZONE = datetime.now(ZoneInfo("Europe/Madrid"))
+    with app.app_context():
+        job = VectorUpdateState.query.get(job_id)
+        if not job:
+            return
+        
+        try:
+            job.status = "running"
+            job.started_at = ZONE
+            job.progress = job.progress or 0
+            job.error = None
+            db.session.commit()
+            
+            def on_current_doc(nombre: str):
+                job.current_doc = nombre
+                db.session.commit()
+
+            def on_progress(i: int, total: int):
+                if total and total > 0:
+                    job.progress = int((i / total) * 100)
+                else:
+                    job.progress = 100
+                db.session.commit()
+            
+            documentos_service().update_vector_db(
+                on_progress=on_progress,
+                on_current_doc=on_current_doc,
+            )
+            
+            job.status = "done"
+            job.progress = 100
+            job.finished_at = ZONE
+            db.session.commit()
+            
+        except Exception as e:
+            # Marca failed y guarda error
+            try:
+                job.status = "failed"
+                job.error = str(e)
+                job.finished_at = ZONE
+                db.session.commit()
+            finally:
+                app.logger.exception("Error en documentos_async (update_vector_db)")
+        finally:
+            db.session.remove()
+
+@admin_bp.get("/vector-db/status/<int:job_id>")
+@admin_required
+def vector_db_status(job_id: int):
+    job = VectorUpdateState.query.get(job_id)
+    if not job:
+        abort(404)
+
+    return jsonify({
+        "status": job.status,
+        "progress": job.progress,
+        "current_doc": job.current_doc,
+        "error": job.error,
+    })            
 
 @admin_bp.get("/documents/list")
 @login_required
@@ -161,26 +237,86 @@ def web_scraping_documents():
     """
     Lanza el scraping con Playwright y guarda los PDFs en app/rag/pliegos.
     """
-    base_pliegos = pliegos_dir() 
-    root = Path(current_app.root_path)
+    job = WebScrapingSate(status="queued", progress=0, message="En cola", error=None)
+    db.session.add(job)
+    db.session.commit()
 
-    scraper_dir = root / "web_scraping"
-    script_1 = scraper_dir / "PliegosPlaywrightAsincrono.py"
-    script_2 = scraper_dir / "DescargarPliegos.py"
+    app_obj = current_app._get_current_object()
+    executor.submit(scraping_async, app_obj, job.id)
 
-    cwd = scraper_dir
+    return jsonify({"job_id": job.id}), 202
 
-    env = os.environ.copy()
-    env["PLIEGOS_DEST"] = str(base_pliegos)
-    env["PLIEGOS_INPUT_JSON"] = str(cwd / "resultados_playwright_asincrono_servidor.json")
-    env["PLIEGOS_OUTPUT_JSON"] = str(cwd / "pliegos_pdfs.json")
+@admin_bp.get("/documents/web_scraping/status/<int:job_id>")
+@admin_required
+def web_scraping_status(job_id: int):
+    job = WebScrapingSate.query.get(job_id)
+    if not job:
+        abort(404)
 
-    try:
-        subprocess.run([sys.executable, str(script_1)], cwd=str(cwd), env=env, check=True)
-        subprocess.run([sys.executable, str(script_2)], cwd=str(cwd), env=env, check=True)
-    except subprocess.CalledProcessError:
-        current_app.logger.exception("Error ejecutando scraping")
-        
-    documentos_service().sync_from_folder()
+    return jsonify({
+        "status": job.status,
+        "progress": job.progress,
+        "message": job.message,
+        "error": job.error,
+    })
+    
+def scraping_async(app, job_id: int) -> None:
+    ZONE = datetime.now(ZoneInfo("Europe/Madrid"))
 
-    return redirect(url_for(DOCUMENTS))
+    with app.app_context():
+        job = WebScrapingSate.query.get(job_id)
+        if not job:
+            return
+
+        try:
+            job.status = "running"
+            job.started_at = ZONE
+            job.progress = 0
+            job.message = "Iniciando scraping…"
+            job.error = None
+            db.session.commit()
+
+            base_pliegos = pliegos_dir()
+            root = Path(current_app.root_path)
+
+            scraper_dir = root / "web_scraping"
+            script_1 = scraper_dir / "PliegosPlaywrightAsincrono.py"
+            script_2 = scraper_dir / "DescargarPliegos.py"
+            cwd = scraper_dir
+
+            env = os.environ.copy()
+            env["PLIEGOS_DEST"] = str(base_pliegos)
+            env["PLIEGOS_INPUT_JSON"] = str(cwd / "resultados_playwright_asincrono_servidor.json")
+            env["PLIEGOS_OUTPUT_JSON"] = str(cwd / "pliegos_pdfs.json")
+
+            job.message = "Ejecutando script 1/2…"
+            db.session.commit()
+            subprocess.run([sys.executable, str(script_1)], cwd=str(cwd), env=env, check=True)
+
+            job.progress = 50
+            job.message = "Ejecutando script 2/2…"
+            db.session.commit()
+            subprocess.run([sys.executable, str(script_2)], cwd=str(cwd), env=env, check=True)
+
+            job.progress = 90
+            job.message = "Sincronizando PDFs en la base de datos…"
+            db.session.commit()
+            documentos_service().sync_from_folder()
+
+            job.status = "done"
+            job.progress = 100
+            job.message = "Scraping terminado."
+            job.finished_at = ZONE
+            db.session.commit()
+
+        except Exception as e:
+            try:
+                job.status = "failed"
+                job.error = str(e)
+                job.message = "Falló el scraping."
+                job.finished_at = ZONE
+                db.session.commit()
+            finally:
+                app.logger.exception("Error en scraping_async")
+        finally:
+            db.session.remove()

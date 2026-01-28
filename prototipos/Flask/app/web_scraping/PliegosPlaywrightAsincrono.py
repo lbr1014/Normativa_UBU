@@ -476,9 +476,11 @@ async def run() -> None:
 
         await context.tracing.start(screenshots=True, snapshots=True, sources=True)
         page = await context.new_page()
+        page.set_default_timeout(90_000)
+        page.set_default_navigation_timeout(90_000)
 
         try:
-            await page.goto(BASE_URL, wait_until="networkidle")
+            await page.goto(BASE_URL, wait_until="networkidle", timeout=90_000)
             print("Título:", await page.title())
 
             # Abre la pestaña "Perfil Contratante"
@@ -546,6 +548,7 @@ async def run() -> None:
 
         except PWTimeoutError as e:
             print("Timeout al cargar o encontrar elementos: ", e)
+            raise
         finally:
             await guardar_licitacion_json(resultado)
             await context.tracing.stop()

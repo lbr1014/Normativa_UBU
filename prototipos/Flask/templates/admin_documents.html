@@ -17,12 +17,12 @@
           <button type="submit" class="btn btn-secondary" style="width:100%;">Subir</button>
         </form>
 
-        <form method="POST" action="{{ url_for('admin.web_scraping_documents') }}" style="flex:1;">
+        <form id="scrapingForm" method="POST" action="{{ url_for('admin.web_scraping_documents') }}" style="flex:1;">
           <button type="submit" class="btn btn-secondary" style="width:100%;">Web Scraping</button>
         </form>
       </div>
 
-      <form method="POST" action="{{ url_for('admin.update_vector_db') }}" style="margin-top: 12px;">
+      <form id="vectorForm" method="POST" action="{{ url_for('admin.update_vector_db') }}" style="margin-top: 12px;">
         <button type="submit" class="btn btn-primary">Actualizar base vectorial</button>
       </form>
 

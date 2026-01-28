@@ -7,6 +7,8 @@ from .usuario import User
 from .consulta import Consulta
 from .documentos import Documento
 from .auth import auth_bp
+from .vector_update_state import VectorUpdateState
+from .web_scraping_state import WebScrapingSate
 
 def create_app():
     load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))

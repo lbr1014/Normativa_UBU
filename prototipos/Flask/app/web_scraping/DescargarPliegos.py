@@ -9,9 +9,9 @@ from pathlib import Path
 
 from playwright.async_api import async_playwright
 
-RUTA_JSON = Path("resultados_playwright_asincrono_servidor.json")
+RUTA_JSON = Path(os.environ.get("PLIEGOS_INPUT_JSON", "resultados_playwright_asincrono_servidor.json"))
 DEST = Path(os.environ.get("PLIEGOS_DEST", "pliegos"))
-JSON_SALIDA = Path("pliegos_pdfs.json")
+JSON_SALIDA = Path(os.environ.get("PLIEGOS_OUTPUT_JSON", "pliegos_pdfs.json"))
 DEST.mkdir(parents=True, exist_ok=True)
 
 # Playwright usa milisegundos para los timeouts
