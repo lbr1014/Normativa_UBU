@@ -181,6 +181,7 @@ class DocumentosService:
         """
         Indexa y acctualiza el estado y los chunks en la base de datos.
         """
+        self.purge_missing_files()
         docs = Documento.query.filter(Documento.status.in_(["cargado", "fallido"])).all()
 
         for doc in docs:
@@ -196,7 +197,9 @@ class DocumentosService:
                 except Exception:
                     pass
                 
-                Chunk.query.filter_by(document_id=doc.id).delete()
+                chunks = Chunk.query.filter_by(document_id=doc.id).all()
+                for c in chunks:
+                    db.session.delete(c)
                 db.session.commit()
                 
                 vector_docs = index_pdf(pdf_path, document_id=doc.id)
@@ -233,6 +236,7 @@ class DocumentosService:
                 db.session.commit()
                 
             except Exception as ex:
+                db.session.rollback()
                 doc.status = "fallido"
                 doc.error_message = str(ex)
                 db.session.commit()

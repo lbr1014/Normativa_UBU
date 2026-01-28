@@ -31,6 +31,7 @@ class Chunk(db.Model):
     __table_args__ = (
         # Evita duplicar el mismo chunk
         UniqueConstraint("document_id", "doc_sha256", "segment_index", name="uq_chunk_doc_hash_seg"),
+        {"sqlite_autoincrement": True},
     )
 
     def __init__(self, **kwargs):
