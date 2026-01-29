@@ -211,29 +211,7 @@ class DocumentosService:
                 vector_docs = index_pdf(pdf_path, document_id=doc.id)
                 
                 # Inserta metadatos Chunk + Embedding en SQL
-                for vd in vector_docs:
-                    seg = int((vd.metadata or {}).get("segment_index", -1))
-                    sha = (vd.metadata or {}).get("sha256", "")
-                    content = vd.content or ""
-
-                    c = Chunk(
-                        document_id=doc.id,
-                        qdrant_point_id=str(vd.id),
-                        segment_index=seg,
-                        doc_sha256=sha,
-                        n_chars=len(content),
-                        n_tokens=None, 
-                    )
-                    db.session.add(c)
-                    db.session.flush()
-                    
-                    e = Embedding(
-                        chunk_id=c.id,
-                        model_id=embedding_model.model_id,
-                        embedding_size=embedding_model.embedding_size,
-                        distance="cosine",
-                    )
-                    db.session.add(e)
+                update_sql(doc, vector_docs)
 
                 db.session.commit()
                     
@@ -249,3 +227,28 @@ class DocumentosService:
                 doc.error_message = str(ex)
                 db.session.commit()
                 #raise
+                
+def update_sql(doc, vector_docs) -> None:
+    for vd in vector_docs:
+        seg = int((vd.metadata or {}).get("segment_index", -1))
+        sha = (vd.metadata or {}).get("sha256", "")
+        content = vd.content or ""
+
+        c = Chunk(
+            document_id=doc.id,
+            qdrant_point_id=str(vd.id),
+            segment_index=seg,
+            doc_sha256=sha,
+            n_chars=len(content),
+            n_tokens=None, 
+        )
+        db.session.add(c)
+        db.session.flush()
+        
+        e = Embedding(
+            chunk_id=c.id,
+            model_id=embedding_model.model_id,
+            embedding_size=embedding_model.embedding_size,
+            distance="cosine",
+        )
+        db.session.add(e)
