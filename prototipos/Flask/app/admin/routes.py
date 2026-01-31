@@ -87,7 +87,7 @@ def create_user():
     return render_template("admin_create_user.html", form=form)
 
 def pliegos_dir() -> Path:
-    base = Path(current_app.root_path) / "rag" / "pliegos"
+    base = Path(current_app.config.get("DOCS_DIR", "pliegos"))
     base.mkdir(parents=True, exist_ok=True)
     return base
 

@@ -1,30 +1,35 @@
 from flask import Flask
+from pathlib import Path
 import os
 from dotenv import load_dotenv
 
 from .extensions import db, login_manager, migrate
 from .usuario import User
 from .consulta import Consulta
-from .documentos import Documento
+from .documentos import Documento, DocumentosService
 from .auth import auth_bp
 from .vector_update_state import VectorUpdateState
 from .web_scraping_state import WebScrapingSate
 
 def create_app():
-    load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+    load_dotenv("secret.env")
     app = Flask(
         __name__,
         template_folder=os.path.join(os.path.dirname(__file__), "..", "templates"),
         static_folder=os.path.join(os.path.dirname(__file__), "..", "static"),
     )
 
-    secret = os.environ.get("SECRET_KEY")
-    if not secret:
+    SECRET_KEY  = os.environ.get("SECRET_KEY")
+    if not SECRET_KEY :
         raise RuntimeError("SECRET_KEY no está definida. Revisa tu .env o variables de entorno.")
-    app.config["SECRET_KEY"] = secret
+    app.config["SECRET_KEY"] = SECRET_KEY 
     basedir = os.path.abspath(os.path.dirname(__file__))
-    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + os.path.join(basedir, "..", "app.db")
+    app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
+        "DATABASE_URL",
+        "sqlite:///" + os.path.join(basedir, "..", "app.db"),
+    )
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    app.config["DOCS_DIR"] = os.environ.get("DOCS_DIR", "pliegos")
 
     # init extensions
     db.init_app(app)

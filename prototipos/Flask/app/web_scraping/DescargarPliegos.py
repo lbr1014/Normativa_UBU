@@ -10,7 +10,7 @@ from pathlib import Path
 from playwright.async_api import async_playwright
 
 RUTA_JSON = Path(os.environ.get("PLIEGOS_INPUT_JSON", "resultados_playwright_asincrono_servidor.json"))
-DEST = Path(os.environ.get("PLIEGOS_DEST", "pliegos"))
+DEST = Path(os.environ.get("DOCS_DIR") or os.environ.get("PLIEGOS_DEST", "pliegos"))
 JSON_SALIDA = Path(os.environ.get("PLIEGOS_OUTPUT_JSON", "pliegos_pdfs.json"))
 DEST.mkdir(parents=True, exist_ok=True)
 
