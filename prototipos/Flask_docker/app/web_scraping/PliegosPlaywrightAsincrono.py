@@ -606,7 +606,7 @@ async def run() -> None:
 
         except PWTimeoutError as e:
             print("Timeout al cargar o encontrar elementos: ", e)
-            raise
+            #raise
         finally:
             await guardar_licitacion_json(resultado)
             await context.tracing.stop()
