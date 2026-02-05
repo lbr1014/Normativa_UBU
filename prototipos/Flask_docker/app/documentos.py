@@ -10,7 +10,6 @@ import hashlib
 from .extensions  import db
 from .chunk import Chunk
 from .embedding import Embedding
-from .rag.PrototipoRAG import index_pdf, embedding_model
 
 ALLOWED_EXT = {".pdf"}
 
@@ -96,7 +95,7 @@ class DocumentosService:
         Escanea el directorio y actualiza los registros de la base de datos.
         """
         for p in sorted(self.docs_dir.glob("*.pdf")):
-            self._upsert_from_path(p, status="cargado")
+            self._upsert_from_path(p, status=None)
         db.session.commit()
         
         self.purge_missing_files()
@@ -120,7 +119,7 @@ class DocumentosService:
         return deleted
 
         
-    def _upsert_from_path(self, p: Path, status: str) -> None:
+    def _upsert_from_path(self, p: Path, status: Optional[str]) -> None:
         stat = p.stat()
         mtime = datetime.fromtimestamp(stat.st_mtime, ZoneInfo("Europe/Madrid"))
 
@@ -136,7 +135,7 @@ class DocumentosService:
                 modified_at=mtime,
                 chunks=0,
                 hash=file_hash,
-                status=status,
+                status=status or "cargando",
                 error_message=None,
             )
             db.session.add(doc)
@@ -147,8 +146,9 @@ class DocumentosService:
             doc.size_bytes = stat.st_size
             doc.modified_at = mtime
             doc.hash = file_hash
-            doc.status = status
-            doc.error_message = None
+            if status is not None:
+                doc.status = status
+                doc.error_message = None
 
     def delete_document(self, doc_id: int) -> None:
         """
@@ -181,6 +181,8 @@ class DocumentosService:
         """
         Indexa y acctualiza el estado y los chunks en la base de datos.
         """
+        from .rag.PrototipoRAG import index_pdf
+
         self.purge_missing_files()
         docs = Documento.query.filter(Documento.status.in_(["cargado", "fallido"])).all()
 
@@ -196,26 +198,35 @@ class DocumentosService:
                 doc.error_message = None
                 db.session.commit()
                 
-                pdf_path = Path(doc.path)
+                pdf_path = self.resolve_pdf_path(doc.nombre)
+                if not pdf_path.exists():
+                    raise FileNotFoundError(f"PDF no existe en contenedor: {pdf_path}")
 
                 try:
                     self.delete_chunks(doc.nombre) 
                 except Exception:
                     pass
                 
-                chunks = Chunk.query.filter_by(document_id=doc.id).all()
-                for c in chunks:
-                    db.session.delete(c)
-                db.session.commit()
-                
-                vector_docs = index_pdf(pdf_path, document_id=doc.id)
-                
-                # Inserta metadatos Chunk + Embedding en SQL
-                update_sql(doc, vector_docs)
+                # ids de chunks del documento
+                chunk_ids_subq = db.session.query(Chunk.id).filter(Chunk.document_id == doc.id).subquery()
 
+                # borrar embeddings cuyo chunk_id esté en esos chunks
+                Embedding.query.filter(Embedding.chunk_id.in_(chunk_ids_subq)).delete(synchronize_session=False)
                 db.session.commit()
-                    
-                doc.chunks = Chunk.query.filter_by(document_id=doc.id).count()
+
+                # borrar chunks del documento
+                Chunk.query.filter(Chunk.document_id == doc.id).delete(synchronize_session=False)
+                db.session.commit()
+
+                vector_docs = index_pdf(pdf_path, document_id=doc.id)
+                if not vector_docs:
+                    raise RuntimeError("index_pdf devolvió 0 chunks (PDF sin texto o ruta inválida)")
+                
+                update_sql(doc, vector_docs)
+                db.session.commit()
+                doc.chunks = len(vector_docs)
+
+                
                 doc.status = "indexado"
                 db.session.commit()
                 if on_progress:
@@ -229,26 +240,42 @@ class DocumentosService:
                 #raise
                 
 def update_sql(doc, vector_docs) -> None:
-    for vd in vector_docs:
-        seg = int((vd.metadata or {}).get("segment_index", -1))
-        sha = (vd.metadata or {}).get("sha256", "")
-        content = vd.content or ""
+    from .rag.PrototipoRAG import embedding_model
+    from .extensions import db
+    from .chunk import Chunk
+    from .embedding import Embedding
 
-        c = Chunk(
-            document_id=doc.id,
-            qdrant_point_id=str(vd.id),
-            segment_index=seg,
-            doc_sha256=sha,
-            n_chars=len(content),
-            n_tokens=None, 
-        )
-        db.session.add(c)
-        db.session.flush()
-        
-        e = Embedding(
-            chunk_id=c.id,
-            model_id=embedding_model.model_id,
-            embedding_size=embedding_model.embedding_size,
-            distance="cosine",
-        )
-        db.session.add(e)
+    for vd in vector_docs:
+        qid = str(vd.id)
+        meta = vd.metadata or {}
+        seg = int(meta.get("segment_index", -1))
+        sha = (meta.get("sha256") or meta.get("doc_sha256") or "").strip()
+
+        if seg < 0 or not sha:
+            continue
+
+        c = Chunk.query.filter_by(document_id=doc.id, doc_sha256=sha, segment_index=seg).first()
+        if c is None:
+            c = Chunk(
+                document_id=doc.id,
+                qdrant_point_id=qid,
+                segment_index=seg,
+                doc_sha256=sha,
+                n_chars=len(vd.content or ""),
+                n_tokens=None,  
+            )
+            db.session.add(c)
+            db.session.flush() 
+        else:
+            c.qdrant_point_id = qid
+            c.n_chars = len(vd.content or "")
+
+        exists = Embedding.query.filter_by(chunk_id=c.id, model_id=embedding_model.model_id).first()
+        if not exists:
+            e = Embedding(
+                chunk_id=c.id,
+                model_id=embedding_model.model_id,
+                embedding_size=embedding_model.embedding_size,
+                distance="cosine",
+            )
+            db.session.add(e)

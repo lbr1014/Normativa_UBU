@@ -56,3 +56,12 @@ app/web_scraping/*.json
 # ======================
 .DS_Store
 Thumbs.db
+
+# ======================
+# Datos cache
+# ======================
+data/
+**/data/hf/
+**/hf/
+**/.cache/
+**/huggingface/

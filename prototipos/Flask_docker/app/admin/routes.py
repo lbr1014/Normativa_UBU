@@ -87,7 +87,7 @@ def create_user():
     return render_template("admin_create_user.html", form=form)
 
 def pliegos_dir() -> Path:
-    base = Path(current_app.config.get("DOCS_DIR", "pliegos"))
+    base = Path(current_app.config.get("DOCS_DIR", "/data/pliegos")).resolve()
     base.mkdir(parents=True, exist_ok=True)
     return base
 
@@ -201,6 +201,7 @@ def documents_list_page():
     per_page = 10
 
     svc = documentos_service()
+    svc.sync_from_folder()
     svc.purge_missing_files()
     
     pagination = svc.list_documents_paginated(page, per_page)

@@ -28,8 +28,19 @@ else:
     raise SystemExit("Postgres did not become ready in time")
 PY
 
+echo "Waiting for Qdrant..."
+QDRANT_URL_DEFAULT="${QDRANT_URL:-http://qdrant:6333}"
+for i in $(seq 1 60); do
+    if curl -fsS "${QDRANT_URL_DEFAULT%/}/readyz" >/dev/null 2>&1; then
+        echo "Qdrant OK"
+        break
+    fi
+    echo "Qdrant not ready (${i}/60)"
+    sleep 2
+done
+
 echo "Running migrations..."
 flask db upgrade
 
 echo "Starting server..."
-exec gunicorn -b 0.0.0.0:5000 run:app
+exec gunicorn -b 0.0.0.0:5000 -w 2 -k gthread --threads 4 --timeout 120 "run:app"

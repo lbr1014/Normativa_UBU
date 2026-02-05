@@ -35,6 +35,11 @@ logger = logging.getLogger(__name__)
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
 
+# Qdrant (Docker / remoto)
+QDRANT_URL = os.getenv("QDRANT_URL", "").strip()
+QDRANT_HOST = os.getenv("QDRANT_HOST", "qdrant").strip()
+QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
+QDRANT_API_KEY = os.getenv("QDRANT_API_KEY") or None
 
 # =========================
 # Función para medir los tiempos de ejecución
@@ -187,17 +192,29 @@ logger.info("Tiempo carga modelo embeddings: %.3f s", time.perf_counter() - star
 # =========================
 def _make_qdrant_client() -> QdrantClient:
     """
-    Crea un cliente de Qdrant local.
-    Los datos se guardan en la carpeta `qdrant_data` situada junto al archivo
-    actual. Esta opción evita tener que usar Docker o desplegar Qdrant aparte.
-    """
-    data_dir = Path(__file__).parent / "qdrant_data"
-    data_dir.mkdir(exist_ok=True)
+    Crea un cliente de Qdrant apuntando al servicio de Qdrant (Docker / remoto).
+    Si no hay variables de entorno, intenta una conexión por host/port.    """
     try:
-        return QdrantClient(path=str(data_dir))
-    except Exception as e:
-        logger.warning("No se pudo inicializar Qdrant local: %s", e)
+        client = (
+            QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
+            if QDRANT_URL
+            else QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT, api_key=QDRANT_API_KEY)
+        )
+
+        for _ in range(20):
+            try:
+                client.get_collections()
+                return client
+            except Exception:
+                time.sleep(0.5)
+
+        logger.warning("Qdrant no responde tras varios intentos.")
         return None
+    except Exception as e:
+        logger.warning("No se pudo inicializar Qdrant remoto (%s:%s / url=%s): %s",
+                       QDRANT_HOST, QDRANT_PORT, QDRANT_URL or "-", e)
+        raise RuntimeError("No se pudo conectar a Qdrant")
+
 
 
 # Cliente global de Qdrant
@@ -332,6 +349,7 @@ def qdrant_delete_by_filename(filename: str) -> None:
     Argumentos:
         filename: Nombre del archivo PDF a eliminar de la base vectorial.
     """
+    VectorBaseDocument._ensure_collection()
     qdrant.delete(
         collection_name=VectorBaseDocument.get_collection_name(),
         points_selector=qmodels.FilterSelector(
@@ -931,7 +949,8 @@ def index_pliegos_dir(pliegos_dir: Path) -> dict:
             summary["pdfs_nuevos"] += 1
 
         # Si no esta lo añade
-        n_chunks = index_pdf(pdf_path)
+        docs = index_pdf(pdf_path)
+        n_chunks = len(docs)
         if n_chunks > 0:
             summary["chunks_guardados"] += n_chunks
         else:
