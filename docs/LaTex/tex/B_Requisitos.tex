@@ -30,6 +30,7 @@ A continuación se van a definir los requisitos del proyecto, tanto los funciona
 		\item RF-1.1 Inserción de documentos: el sistema debe permitir cargar documentos de licitaciones con el objetivo de construir y actualizar la base de datos vectorial.
 		\item RF-1.2 Listado de documentos cargados: el sistema debe permitir ver los documentos cargados y sus metadatos.
 		\item RF-1.3 Borrado de documentos: el sistema debe permitir borrar los documentos cargados.
+		\item RF-1.4 Descarga de documentos: el sistema debe permitir descargar los documentos cargados.
 	\end{itemize}
 	\item RF-2 Procesado de los documentos: el sistema debe procesar de manera automática los documentos introducidos para prepararlos para que el \textit{RAG} pueda usarlos.
 	\begin{itemize}
@@ -146,21 +147,24 @@ Los casos de uso definidos para el proyecto son:
 	\item CU-4 Realizar consulta al \textit{RAG}
 	\item CU-5 Consultar historial de consultas
 	\item CU-6 Borrar consultas del historial
-	\item CU-7 Cargar documentos de licitaciones
-	\item CU-8 Importar licitaciones automáticamente
-	\item CU-9 Indexar documentos
-	\item CU-10 Listar documentos
-	\item CU-11 Consultar estado de los documentos
-	\item CU-12 Eliminar documento
-	\item CU-13 Gestión de usuario
-	\item CU-14 Crear usuarios
-	\item CU-15 Borrar usuarios
-	\item CU-16 Modificar rol del usuario
-	\item CU-17 Editar usuario
+	\item CU-7 Gestión de documentos
+	\item CU-8 Cargar documentos de licitaciones
+	\item CU-9 Importar licitaciones automáticamente
+	\item CU-10 Convertir los documentos a \textit{Markdown}
+	\item CU-11 Indexar documento
+	\item CU-12 Listar documentos
+	\item CU-13 Consultar estado del documento
+	\item CU-14 Eliminar documento
+	\item CU-15 Descargar documento
+	\item CU-16 Gestión de usuario
+	\item CU-17 Crear usuario
+	\item CU-18 Borrar usuario
+	\item CU-19 Modificar rol del usuario
+	\item CU-20 Editar usuario
 \end{itemize}
 El diagrama de los casos de uso se muestra en la imagen ~\ref{fig:Diagramas/CasosUso}.
 
-\imagendiagram{Diagramas/CasosUso}{Diagrama de casos de uso.}{1.2}
+\imagendiagram{Diagramas/CasosUso}{Diagrama general de casos de uso.}{1.2}
 
 
 \begin{table}[p]
@@ -291,7 +295,6 @@ El diagrama de los casos de uso se muestra en la imagen ~\ref{fig:Diagramas/Caso
 			\item El sistema busca por similitud en la base de datos vectorial.
 			\item El sistema construye un \textit{prompt} con los \textit{chunks} y las reglas de uso del contexto.
 			\item El sistema llama al \textit{LLM} y genera respuestas.
-			\item El sistema llama al \textit{LLM} y genera una respuesta.
 			\item El sistema adjunta la trazabilidad de la respuesta, la cual incluye los documentos, metadatos y \textit{chunks} utilizados.
 			\item El sistema guarda la consulta en el historial del consultas del usuario.
 		\end{enumerate}\\
@@ -380,7 +383,41 @@ El diagrama de los casos de uso se muestra en la imagen ~\ref{fig:Diagramas/Caso
 	\centering
 	\begin{tabularx}{\linewidth}{ p{0.21\columnwidth} p{0.71\columnwidth} }
 		\toprule
-		\textbf{CU-7}    & \textbf{Cargar documentos de licitaciones}\\
+		\textbf{CU-7}    & \textbf{ Gestión de documentos}\\
+		\toprule
+		\textbf{Versión}              & 1.0    \\
+		\textbf{Autor}                & Lydia Blanco Ruiz \\
+		\textbf{Requisitos asociados} & RF-1, RF-1.1, RF-1.2, RF-1.3, RF-2, RF-2.1, RF-2.2, RF-2.2.1, RF-2.3, RF-2.3.1, RF-2.3.2, RF-3, RF-4, RF-5, RF-5.1, RF-5.2, RF-5.3, RF-5.4, RF-5.5, RNF-3.1 \\
+		\textbf{Descripción}          & El administrador debe poder gestionar a los documentos de la aplicación. \\
+		\textbf{Precondición}         & Hay un administrador autentificado. \\
+		\textbf{Acciones}             &
+		\begin{enumerate}
+			\def\labelenumi{\arabic{enumi}.}
+			\tightlist
+			\item El administrador accede a la página de <<Iniciar sesión>>.
+			\item El administrador introduce su \textit{email} y contraseña.
+			\item El sistema le autentifica como administrador.
+			\item El administrador accede a <<Administrar documentos>>.
+		\end{enumerate}\\
+		\textbf{Postcondición}        & Posibilidad de cargar documentos nuevos (de forma manual o por \textit{web scraping}), indexar, borrar o descargar los documentos ya cargados . \\
+		\textbf{Excepciones}          & 
+		\begin{enumerate}
+			\def\labelenumi{\arabic{enumi}.}
+			\tightlist
+			\item Intento de acceso sin ser administrador. Se deniega.
+			\item Si no hay documentos cargados en la aplicación. Muestra un mensaje.
+		\end{enumerate}\\
+		\textbf{Importancia}          & Alta  \\
+		\bottomrule
+	\end{tabularx}
+	\caption{CU-7 Gestión de documentos.}
+\end{table}
+
+\begin{table}[p]
+	\centering
+	\begin{tabularx}{\linewidth}{ p{0.21\columnwidth} p{0.71\columnwidth} }
+		\toprule
+		\textbf{CU-8}    & \textbf{Cargar documentos de licitaciones}\\
 		\toprule
 		\textbf{Versión}              & 1.0    \\
 		\textbf{Autor}                & Lydia Blanco Ruiz \\
@@ -406,14 +443,14 @@ El diagrama de los casos de uso se muestra en la imagen ~\ref{fig:Diagramas/Caso
 		\textbf{Importancia}          & Alta  \\
 		\bottomrule
 	\end{tabularx}
-	\caption{CU-7 Cargar documentos de licitaciones.}
+	\caption{CU-8 Cargar documentos de licitaciones.}
 \end{table}
 
 \begin{table}[p]
 	\centering
 	\begin{tabularx}{\linewidth}{ p{0.21\columnwidth} p{0.71\columnwidth} }
 		\toprule
-		\textbf{CU-8}    & \textbf{Importar licitaciones automáticamente}\\
+		\textbf{CU-9}    & \textbf{Importar licitaciones automáticamente}\\
 		\toprule
 		\textbf{Versión}              & 1.0    \\
 		\textbf{Autor}                & Lydia Blanco Ruiz \\
@@ -442,20 +479,20 @@ El diagrama de los casos de uso se muestra en la imagen ~\ref{fig:Diagramas/Caso
 		\textbf{Importancia}          & Media  \\
 		\bottomrule
 	\end{tabularx}
-	\caption{CU-8 Importar licitaciones automáticamente.}
+	\caption{CU-9 Importar licitaciones automáticamente.}
 \end{table}
 
 \begin{table}[p]
 	\centering
 	\begin{tabularx}{\linewidth}{ p{0.21\columnwidth} p{0.71\columnwidth} }
 		\toprule
-		\textbf{CU-9}    & \textbf{Procesar documentos cargados}\\
+		\textbf{CU-10}    & \textbf{Convertir los documentos a \textit{Markdown}}\\
 		\toprule
 		\textbf{Versión}              & 1.0    \\
 		\textbf{Autor}                & Lydia Blanco Ruiz \\
-		\textbf{Requisitos asociados} & RF-2, RF-2.1, RF-2.2, RF-2.2.1, RF-2.3, RF-2.3.1, RF-2.3.2, RNF-3, RNF-3.1 \\
-		\textbf{Descripción}          & El sistema prepara automáticamente los documentos para que puedan incluirse en el sistema. \\
-		\textbf{Precondición}         & Existen documentos cargados pendientes. \\
+		\textbf{Requisitos asociados} & RF-2, RF-2.1, RF-2.2, RF-2.2.1, RF-2.3, RF-2.3.1, RF-2.3.2 \\
+		\textbf{Descripción}          & El sistema prepara automáticamente los documentos para que puedan ser procesados por el sistema. \\
+		\textbf{Precondición}         & Hay documentos cargados por el administrador. \\
 		\textbf{Acciones}             &
 		\begin{enumerate}
 			\def\labelenumi{\arabic{enumi}.}
@@ -465,7 +502,7 @@ El diagrama de los casos de uso se muestra en la imagen ~\ref{fig:Diagramas/Caso
 			\item Intenta conservar la estructura básica del documento original.
 			\item Limpia caracteres problemáticos y normaliza espacios y saltos de linea.
 		\end{enumerate}\\
-		\textbf{Postcondición}        & Los documentos procesados listos para el \textit{chunking}. \\
+		\textbf{Postcondición}        & Los documentos convertidos a \textit{Markdown} listos para el \textit{chunking}. \\
 		\textbf{Excepciones}          & 
 		\begin{enumerate}
 			\def\labelenumi{\arabic{enumi}.}
@@ -475,24 +512,27 @@ El diagrama de los casos de uso se muestra en la imagen ~\ref{fig:Diagramas/Caso
 		\textbf{Importancia}          & Alta  \\
 		\bottomrule
 	\end{tabularx}
-	\caption{CU-9 Procesar documentos cargados.}
+	\caption{CU-10 Convertir los documentos a \textit{Markdown}.}
 \end{table}
 
 \begin{table}[p]
 	\centering
 	\begin{tabularx}{\linewidth}{ p{0.21\columnwidth} p{0.71\columnwidth} }
 		\toprule
-		\textbf{CU-10}    & \textbf{Indexar documentos}\\
+		\textbf{CU-11}    & \textbf{Indexar documento}\\
 		\toprule
 		\textbf{Versión}              & 1.0    \\
 		\textbf{Autor}                & Lydia Blanco Ruiz \\
 		\textbf{Requisitos asociados} & RF-3, RF-4, RF-5, RF-5.1, RF-5.2, RF-5.3 \\
-		\textbf{Descripción}          & El sistema convierte los documentos procesados en \textit{chunks}, genera los \textit{embeddings} y los guarda en la base de datos vectorial con metadatos. \\
-		\textbf{Precondición}         & Existen documentos procesados y una base de datos vectorial. \\
+		\textbf{Descripción}          & Permite al administrador actualizar la base de datos
+vectorial cuando hay documentos nuevos. El sistema convierte los documentos procesados en \textit{chunks}, genera los \textit{embeddings} y los guarda en la base de datos vectorial con metadatos. \\
+		\textbf{Precondición}         & Existen documentos procesados, una base de datos vectorial y un administrador autentificado. \\
 		\textbf{Acciones}             &
 		\begin{enumerate}
 			\def\labelenumi{\arabic{enumi}.}
 			\tightlist
+			\item El administrador accede a <<Administrar documentos>>.
+			\item El administrador pulsa el botón <<Actualizar Base de Datos Vectorial>>.
 			\item El sistema segmenta los archivos en \textit{chunks}.
 			\item Aplica solapamiento a dichos \textit{chunks}.
 			\item Añade una referencia al documento asi como el segmento que contiene.
@@ -505,44 +545,13 @@ El diagrama de los casos de uso se muestra en la imagen ~\ref{fig:Diagramas/Caso
 			\def\labelenumi{\arabic{enumi}.}
 			\tightlist
 			\item Fallo en conseguir los \textit{embedding} de un \textit{chunk}. Se omite el \textit{chunk} y se continúa.
+			\item Error de conexión con la base de datos vectorial. Se aborta la operación y se avisa al administrador
+a través de un mensaje.
 		\end{enumerate}\\
 		\textbf{Importancia}          & Alta  \\
 		\bottomrule
 	\end{tabularx}
-	\caption{CU-10 Indexar documentos.}
-\end{table}
-
-\begin{table}[p]
-	\centering
-	\begin{tabularx}{\linewidth}{ p{0.21\columnwidth} p{0.71\columnwidth} }
-		\toprule
-		\textbf{CU-11}    & \textbf{Actualizar la base de datos vectorial}\\
-		\toprule
-		\textbf{Versión}              & 1.0    \\
-		\textbf{Autor}                & Lydia Blanco Ruiz \\
-		\textbf{Requisitos asociados} & RF-1, RF-5.4, RF-10.3 \\
-		\textbf{Descripción}          & Permite al administrador actualizar la base de datos vectorial cuando hay documentos nuevos. \\
-		\textbf{Precondición}         & Hay un administrador autentificado y existen documentos nuevos que añadir a la base de datos vectorial. \\
-		\textbf{Acciones}             &
-		\begin{enumerate}
-			\def\labelenumi{\arabic{enumi}.}
-			\tightlist
-			\item El administrador accede a <<Administrar documentos>>.
-			\item El administrador pulsa el botón <<Actualizar Base de Datos Vectorial>>.
-			\item El sistema realiza el \textit{chunking} y el \textit{embedding}.
-			\item El sistema lo almacena en la base de datos vectorial.
-		\end{enumerate}\\
-		\textbf{Postcondición}        & La colección vectorial esta actualizada. \\
-		\textbf{Excepciones}          & 
-		\begin{enumerate}
-			\def\labelenumi{\arabic{enumi}.}
-			\tightlist
-			\item Error de conexión con la base de datos vectorial. Se aborta la operación y se avisa al administrador a través de un mensaje.
-		\end{enumerate}\\
-		\textbf{Importancia}          & Alta  \\
-		\bottomrule
-	\end{tabularx}
-	\caption{CU-11 Actualizar la base de datos vectorial.}
+	\caption{CU-11 Indexar documento.}
 \end{table}
 
 \begin{table}[p]
@@ -581,7 +590,7 @@ El diagrama de los casos de uso se muestra en la imagen ~\ref{fig:Diagramas/Caso
 	\centering
 	\begin{tabularx}{\linewidth}{ p{0.21\columnwidth} p{0.71\columnwidth} }
 		\toprule
-		\textbf{CU-13}    & \textbf{Consultar estado de los documentos}\\
+		\textbf{CU-13}    & \textbf{Consultar estado del documento}\\
 		\toprule
 		\textbf{Versión}              & 1.0    \\
 		\textbf{Autor}                & Lydia Blanco Ruiz \\
@@ -607,7 +616,7 @@ El diagrama de los casos de uso se muestra en la imagen ~\ref{fig:Diagramas/Caso
 		\textbf{Importancia}          & Media  \\
 		\bottomrule
 	\end{tabularx}
-	\caption{CU-13 Consultar estado de los documentos.}
+	\caption{CU-13 Consultar estado del documento.}
 \end{table}
 
 \begin{table}[p]
@@ -648,12 +657,45 @@ El diagrama de los casos de uso se muestra en la imagen ~\ref{fig:Diagramas/Caso
 	\caption{CU-14 Eliminar documento.}
 \end{table}
 
+\begin{table}[p]
+	\centering
+	\begin{tabularx}{\linewidth}{ p{0.21\columnwidth} p{0.71\columnwidth} }
+		\toprule
+		\textbf{CU-15}    & \textbf{Descargar documento}\\
+		\toprule
+		\textbf{Versión}              & 1.0    \\
+		\textbf{Autor}                & Lydia Blanco Ruiz \\
+		\textbf{Requisitos asociados} & RF-1, RF-1.4, RNF-5.2 \\
+		\textbf{Descripción}          & Permite al administrador descargar un documento del sistema. \\
+		\textbf{Precondición}         & Hay un administrador autentificado y existe al menos un documento cargado en el sistema. \\
+		\textbf{Acciones}             &
+		\begin{enumerate}
+			\def\labelenumi{\arabic{enumi}.}
+			\tightlist
+			\item El administrador accede a <<Administrar documentos>>.
+			\item El sistema lista los documentos con sus metadatos (nombre, tamaño, fecha de modificación y \textit{chunks}) y estado.
+			\item El administrador pulsa el botón <<Descargar>>.
+			\item Se descarga el documento.
+		\end{enumerate}\\
+		\textbf{Postcondición}        & Documento descargado en el equipo del administrador. \\
+		\textbf{Excepciones}          & 
+		\begin{enumerate}
+			\def\labelenumi{\arabic{enumi}.}
+			\tightlist
+			\item El documento no existe. Se muestra un aviso 
+			\item Error al descargar. Se informa al administrador.
+		\end{enumerate}\\
+		\textbf{Importancia}          & Media  \\
+		\bottomrule
+	\end{tabularx}
+	\caption{CU-15 Descargar documento.}
+\end{table}
 
 \begin{table}[p]
 	\centering
 	\begin{tabularx}{\linewidth}{ p{0.21\columnwidth} p{0.71\columnwidth} }
 		\toprule
-		\textbf{CU-15}    & \textbf{ Gestión de usuarios}\\
+		\textbf{CU-16}    & \textbf{ Gestión de usuarios}\\
 		\toprule
 		\textbf{Versión}              & 1.0    \\
 		\textbf{Autor}                & Lydia Blanco Ruiz \\
@@ -675,19 +717,19 @@ El diagrama de los casos de uso se muestra en la imagen ~\ref{fig:Diagramas/Caso
 			\def\labelenumi{\arabic{enumi}.}
 			\tightlist
 			\item Intento de acceso sin ser administrador. Se deniega.
-			\item Si no hay usuarios registrados en la aplicación. Muestra un mensaje.
+			\item Si no hay usuarios registrados en la aplicación. Mostrar mensaje de que aún no hay usuarios.
 		\end{enumerate}\\
 		\textbf{Importancia}          & Media  \\
 		\bottomrule
 	\end{tabularx}
-	\caption{CU-15 Gestión de usuarios.}
+	\caption{CU-16 Gestión de usuarios.}
 \end{table}
 
 \begin{table}[p]
 	\centering
 	\begin{tabularx}{\linewidth}{ p{0.21\columnwidth} p{0.71\columnwidth} }
 		\toprule
-		\textbf{CU-16}    & \textbf{ Crear usuarios}\\
+		\textbf{CU-17}    & \textbf{ Crear usuario}\\
 		\toprule
 		\textbf{Versión}              & 1.0    \\
 		\textbf{Autor}                & Lydia Blanco Ruiz \\
@@ -720,14 +762,14 @@ El diagrama de los casos de uso se muestra en la imagen ~\ref{fig:Diagramas/Caso
 		\textbf{Importancia}          & Media  \\
 		\bottomrule
 	\end{tabularx}
-	\caption{CU-16 Crear usuario.}
+	\caption{CU-17 Crear usuario.}
 \end{table}
 
 \begin{table}[p]
 	\centering
 	\begin{tabularx}{\linewidth}{ p{0.21\columnwidth} p{0.71\columnwidth} }
 		\toprule
-		\textbf{CU-17}    & \textbf{ Borrar usuarios}\\
+		\textbf{CU-18}    & \textbf{ Borrar usuario}\\
 		\toprule
 		\textbf{Versión}              & 1.0    \\
 		\textbf{Autor}                & Lydia Blanco Ruiz \\
@@ -754,14 +796,14 @@ El diagrama de los casos de uso se muestra en la imagen ~\ref{fig:Diagramas/Caso
 		\textbf{Importancia}          & Media  \\
 		\bottomrule
 	\end{tabularx}
-	\caption{CU-17 Borrar usuarios.}
+	\caption{CU-18 Borrar usuario.}
 \end{table}
 
 \begin{table}[p]
 	\centering
 	\begin{tabularx}{\linewidth}{ p{0.21\columnwidth} p{0.71\columnwidth} }
 		\toprule
-		\textbf{CU-18}    & \textbf{ Modificar rol del usuarios}\\
+		\textbf{CU-19}    & \textbf{ Modificar rol del usuario}\\
 		\toprule
 		\textbf{Versión}              & 1.0    \\
 		\textbf{Autor}                & Lydia Blanco Ruiz \\
@@ -786,14 +828,14 @@ El diagrama de los casos de uso se muestra en la imagen ~\ref{fig:Diagramas/Caso
 		\textbf{Importancia}          & Baja  \\
 		\bottomrule
 	\end{tabularx}
-	\caption{CU-18 Modificar rol del usuarios.}
+	\caption{CU-19 Modificar rol del usuario.}
 \end{table}
 
 \begin{table}[p]
 	\centering
 	\begin{tabularx}{\linewidth}{ p{0.21\columnwidth} p{0.71\columnwidth} }
 		\toprule
-		\textbf{CU-19}    & \textbf{ Editar usuario}\\
+		\textbf{CU-20}    & \textbf{ Editar usuario}\\
 		\toprule
 		\textbf{Versión}              & 1.0    \\
 		\textbf{Autor}                & Lydia Blanco Ruiz \\
@@ -822,7 +864,7 @@ El diagrama de los casos de uso se muestra en la imagen ~\ref{fig:Diagramas/Caso
 		\textbf{Importancia}          & Baja  \\
 		\bottomrule
 	\end{tabularx}
-	\caption{CU-19 Editar usuario.}
+	\caption{CU-20 Editar usuario.}
 \end{table}
 
 
