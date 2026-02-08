@@ -355,9 +355,30 @@ El objetivo principal del \href{https://github.com/lbr1014/TFG_RAG/milestone/15?
 \section{Estudio de viabilidad}
 
 \subsection{Viabilidad económica}
-Para analizar la viabilidad económica se ha seguido el coste total de propiedad (TCO)~\cite{book:TCO_costs}. El TCO consiste en identificar y estimar todos los costes asociados al ciclo de vida de un producto tecnológico, no solo los costes directos de su adquisición, sino también los derivados de su operación, mantenimiento y uso a lo largo del tiempo. De esta forma, se obtiene una visión global y realista del impacto económico del sistema. Los costes considerados vienen recogidos en la figura ~\ref{fig:ApendiceA/Costes_TCO}.
+Para analizar la viabilidad económica se ha seguido el coste total de propiedad (TCO)~\cite{book:TCO_costs}. El TCO consiste en identificar y estimar todos los costes asociados al ciclo de vida de un producto tecnológico, no solo los costes directos de su adquisición, sino también los derivados de su operación, mantenimiento y uso a lo largo del tiempo. De esta forma, se obtiene una visión global y realista del impacto económico del sistema. Los costes considerados vienen recogidos en la tabla~\ref{tabla:explicacion_TCO}.
 
-\imagenflotante{ApendiceA/Costes_TCO}{Coste total de desarrollo~\cite{book:TCO_costs}.}
+\begin{table}[h]
+	\centering
+	\begin{tabularx}{\linewidth}{
+    		>{\raggedright\arraybackslash}p{0.46\linewidth}
+    		>{\raggedleft\arraybackslash}p{0.46\linewidth}}
+		\toprule
+		\textbf{Componentes}    & \textbf{Componentes del costo}\\
+		\midrule
+		Adquisición \textit{hardware} & Precio de compra del equipo \textit{hardware}. Se debe tener en cuenta los ordenadores, terminales, almacenamiento e impresoras. \\
+		Adquisición \textit{software} & Compra de licencias y \textit{software} para cada usuario.  \\
+		Instalación & Coste para instalar los ordenadores y el \textit{software}. \\
+		Capacitación & Coste de entrenamiento de los especialistas y de los usuarios finales. \\
+		Soporte & Coste para dar soporte técnico continuo. \\
+		Mantenimiento & Coste para mantener y actualizar el \textit{hardware} y \textit{software}. \\
+		Infraestructura & Coste por adquirir, mantener y dar soporte a la infraestructura relacionada. Incluye las redes y el equipo especializado. \\
+		Tiempo inactivo & Coste de pérdidas de productividad debido a fallos de \textit{hardware} o \textit{software}. Estos fallos provocan que el sistema no este disponible. \\
+		Espacio y energía & Coste de bienes y servicios públicos para aojar y proveer energía para la tecnología. \\
+		\bottomrule
+	\end{tabularx}
+	\caption{Coste total de desarrollo (TCO).}
+	\label{tabla:explicacion_TCO}
+\end{table}
 
 Para llevar a cabo el estudio de la viabilidad económica se va a considerar que el trabajo llevado a cabo por la alumna lo ha realizado un desarrollador contratado durante los 9 meses que ha durado el proyecto. Si se supone un escenario empresarial real en España y se toma como referencia el \href{https://www.boe.es/buscar/doc.php?id=BOE-A-2024-2251}{Salario Mínimo Interprofesional (SMI) de 2024}, el salario mínimo anual es de 15\,876\,€, es decir, 1\,134\,€ al mes (se divide en 14 pagas). Además, a este salario hay que añadirle los gastos por la cotización a la \href{https://www.seg-social.es/wps/portal/wss/internet/Trabajadores/CotizacionRecaudacionTrabajadores/36537}{Seguridad Social}. Normalmente la cotización es del 28,30\%, de los cuales 23,60\% se corresponden con gastos de la empresa. Por lo cual el gasto por la contratación del desarrollado sería:
 $$
@@ -420,6 +441,7 @@ $$
 = 720\,\text{\texteuro}
 $$
 
+Los costes totales del proyecto vienen desglosados en la siguiente tabla~\ref{tabla:coste}
 
 \begin{table}[h]
 	\centering
@@ -442,7 +464,7 @@ $$
 		\bottomrule
 	\end{tabularx}
 	\caption{Coste total del proyecto.}
-	\label{tabla:storypoints}
+	\label{tabla:coste}
 \end{table}
 
 \subsection{Viabilidad legal}
