@@ -135,7 +135,7 @@ class DocumentosService:
                 modified_at=mtime,
                 chunks=0,
                 hash=file_hash,
-                status=status or "cargando",
+                status=status or "cargado",
                 error_message=None,
             )
             db.session.add(doc)
@@ -198,7 +198,7 @@ class DocumentosService:
                 doc.error_message = None
                 db.session.commit()
                 
-                pdf_path = self.resolve_pdf_path(doc.nombre)
+                pdf_path = Path(doc.path)
                 if not pdf_path.exists():
                     raise FileNotFoundError(f"PDF no existe en contenedor: {pdf_path}")
 
