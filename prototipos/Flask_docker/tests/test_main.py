@@ -70,7 +70,7 @@ class MainRoutesTest(BaseTestCase):
         
     def test_edit_user_email_duplicado(self):
         u1 = self.crear_usuario(nombre="U1", email="u1@example.com", password="123456")
-        u2 = self.crear_usuario(nombre="U2", email="u2@example.com", password="123456")
+        self.crear_usuario(nombre="U2", email="u2@example.com", password="123456")
 
         # login como u1 e intenta poner el email de u2
         self.login(email="u1@example.com", password="123456", follow_redirects=True)
@@ -93,7 +93,7 @@ class MainRoutesTest(BaseTestCase):
         self.assertIn(b"Ya existe un usuario con ese email.", r.data)
         
     def test_edit_user_precarga_datos(self):
-        u = self.crear_usuario(nombre="Alexia", email="alexia@gmail.com", password="123456")
+        self.crear_usuario(nombre="Alexia", email="alexia@gmail.com", password="123456")
         self.login(email="alexia@gmail.com", password="123456", follow_redirects=True)
 
         r = self.client.get("/edit_user")
