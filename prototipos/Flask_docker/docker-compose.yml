@@ -93,11 +93,12 @@ services:
   test:
     build: .
     working_dir: /app
-    command: python -m unittest discover -s tests -t .
+    command: sh -lc "coverage run --source=app -m unittest discover -s tests -t . && coverage report -m"
     volumes:
-    - ./tests:/app/tests
-    - ./app:/app/app
+      - ./tests:/app/tests
+      - ./app:/app/app
     environment:
+      PYTHONPATH: /app
       DATABASE_URL: "sqlite:///:memory:"
       SECRET_KEY: "test"
 

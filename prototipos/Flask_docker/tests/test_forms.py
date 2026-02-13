@@ -7,12 +7,12 @@ from app.forms import LoginForm, SignupForm, AdminCreateUserForm
 
 class FormsTest(BaseTestCase):
     # Construir el form dentro de un request context POST
-    def hacer_form(self, FormClass, data: dict):
+    def hacer_form(self, form_class, data: dict):
         with self.app.test_request_context(
             method="POST",
             data=data,
         ):
-            form = FormClass(formdata=MultiDict(data))
+            form = form_class(formdata=MultiDict(data))
             ok = form.validate()
             return ok, form
 
