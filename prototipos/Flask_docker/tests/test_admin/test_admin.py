@@ -1,4 +1,5 @@
 import io
+from types import SimpleNamespace
 from tests.__init__ import BaseTestCase
 from app.usuario import User
 from app.extensions import db
@@ -10,7 +11,7 @@ from unittest.mock import patch, MagicMock
 
 from app.vector_update_state import VectorUpdateState
 from app.web_scraping_state import WebScrapingSate
-from app.admin.routes import documentos_async
+from app.admin.routes import documentos_async, scraping_async
 
 class AdminTest(BaseTestCase):
 
@@ -250,6 +251,7 @@ class AdminTest(BaseTestCase):
     
     def test_admin_documento_async_correcto(self):
         job = VectorUpdateState(status="queued", progress=0, current_doc=None, error=None)
+
         db.session.add(job)
         db.session.commit()
 
@@ -258,7 +260,7 @@ class AdminTest(BaseTestCase):
             on_current_doc("doc1.pdf")
             on_progress(1, 2)
             on_progress(2, 2)
-
+            
         fake_svc.update_vector_db.side_effect = fake_update_vector_db
 
         ctx = self.app.app_context()
@@ -277,6 +279,32 @@ class AdminTest(BaseTestCase):
         self.assertEqual(job2.progress, 100)
         self.assertIsNone(job2.error)
         self.assertIsNotNone(job2.finished_at)
+        
+    def test_admin_documento_async_finalizado(self):
+        job = VectorUpdateState(status="queued", progress=0, current_doc=None, error=None)
+        db.session.add(job)
+        db.session.commit()
+
+        fake_svc = MagicMock()
+
+        def fake_update_vector_db_parcial(*, on_progress, on_current_doc):
+            on_progress(0, 0)   
+
+        fake_svc.update_vector_db.side_effect = fake_update_vector_db_parcial
+
+        ctx = self.app.app_context()
+        ctx.push()
+        try:
+            with patch.object(self.app, "app_context", return_value=nullcontext()):
+                with patch("app.admin.routes.documentos_service", return_value=fake_svc):
+                    documentos_async(self.app, job.id)
+        finally:
+            ctx.pop()
+
+        db.session.expire_all()
+        job2 = VectorUpdateState.query.get(job.id)
+        self.assertEqual(job2.status, "done")
+        self.assertEqual(job2.progress, 100)
         
     def test_admin_documento_async_error(self):
         job = VectorUpdateState(status="queued", progress=0, current_doc=None, error=None)
@@ -321,7 +349,8 @@ class AdminTest(BaseTestCase):
         self.login("admin@example.com", follow_redirects=True)
 
         job = WebScrapingSate(status="queued", progress=0, message="En cola", error=None)
-        db.session.add(job); db.session.commit()
+        db.session.add(job)
+        db.session.commit()
 
         r = self.client.get(f"/admin/documents/web_scraping/status/{job.id}")
         self.assertEqual(r.status_code, 200)
@@ -329,3 +358,111 @@ class AdminTest(BaseTestCase):
 
         r2 = self.client.get("/admin/documents/web_scraping/status/999999")
         self.assertEqual(r2.status_code, 404)
+        
+    def test_admin_documents_list(self):
+        # Admin logueado
+        self.crear_usuario(email="admin@example.com", password="contraseña", is_admin=True)
+        self.login("admin@example.com", follow_redirects=True)
+        
+        fake_svc = MagicMock()
+        pagination = SimpleNamespace(items=[{"id": 1}], page=1, pages=2, total=11)
+        fake_svc.list_documents_paginated.return_value = pagination
+
+        with patch("app.admin.routes.documentos_service", return_value=fake_svc), \
+            patch("app.admin.routes.render_template", return_value="OK"):
+            r = self.client.get("/admin/documents/list?page=1")
+            self.assertEqual(r.status_code, 200)
+            self.assertEqual(r.data, b"OK")
+
+        fake_svc.sync_from_folder.assert_called_once()
+        fake_svc.purge_missing_files.assert_called_once()
+        fake_svc.list_documents_paginated.assert_called_once()
+        
+    def test_admin_delete_document_correecto(self):
+        # Admin logueado
+        self.crear_usuario(email="admin@example.com", password="contraseña", is_admin=True)
+        self.login("admin@example.com", follow_redirects=True)
+
+        fake_svc = MagicMock()
+        with patch("app.admin.routes.documentos_service", return_value=fake_svc):
+            r = self.client.post("/admin/documents/1/delete", follow_redirects=False)
+            self.assertIn(r.status_code, (302, 303))
+            fake_svc.delete_document.assert_called_once_with(1)
+        
+    def test_admin_delete_document_incorreecto(self):
+        # Admin logueado
+        self.crear_usuario(email="admin@example.com", password="contraseña", is_admin=True)
+        self.login("admin@example.com", follow_redirects=True)
+
+        fake_svc = MagicMock()
+        fake_svc.delete_document.side_effect = Exception("x")
+        with patch("app.admin.routes.documentos_service", return_value=fake_svc):
+            r = self.client.post("/admin/documents/1/delete", follow_redirects=False)
+            self.assertEqual(r.status_code, 500)
+            
+    def test_admin_scraping_async_inexistente(self):
+        scraping_async(self.app, 999999)
+        
+    def test_admin_scraping_async_correcto(self):
+        job = WebScrapingSate(status="queued", progress=0, message="En cola", error=None)
+        db.session.add(job)
+        db.session.commit()
+
+        fake_svc = MagicMock()
+
+        ctx = self.app.app_context()
+        ctx.push()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                base = Path(tmp) / "pliegos"
+                base.mkdir(parents=True, exist_ok=True)
+
+                with patch.object(self.app, "app_context", return_value=nullcontext()), \
+                    patch("app.admin.routes.pliegos_dir", return_value=base), \
+                    patch("app.admin.routes.documentos_service", return_value=fake_svc), \
+                    patch("app.admin.routes.subprocess.run") as mock_run:
+
+                    scraping_async(self.app, job.id)
+        finally:
+            ctx.pop()
+
+        db.session.expire_all()
+
+        job2 = WebScrapingSate.query.get(job.id)
+        self.assertEqual(job2.status, "done")
+        self.assertEqual(job2.progress, 100)
+        self.assertEqual(job2.message, "Scraping terminado.")
+        self.assertIsNone(job2.error)
+
+        self.assertEqual(mock_run.call_count, 2)
+        fake_svc.sync_from_folder.assert_called_once()
+        
+    def test_admin_scraping_async_fallido(self):
+        job = WebScrapingSate(status="queued", progress=0, message="En cola", error=None)
+        db.session.add(job)
+        db.session.commit()
+
+        fake_svc = MagicMock()
+
+        ctx = self.app.app_context()
+        ctx.push()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                base = Path(tmp) / "pliegos"
+                base.mkdir(parents=True, exist_ok=True)
+
+                with patch.object(self.app, "app_context", return_value=nullcontext()), \
+                    patch("app.admin.routes.pliegos_dir", return_value=base), \
+                    patch("app.admin.routes.documentos_service", return_value=fake_svc), \
+                    patch("app.admin.routes.subprocess.run", side_effect=RuntimeError("nope")):
+
+                    scraping_async(self.app, job.id)
+        finally:
+            ctx.pop()
+
+        db.session.expire_all()
+
+        job2 = WebScrapingSate.query.get(job.id)
+        self.assertEqual(job2.status, "failed")
+        self.assertEqual(job2.message, "Falló el scraping.")
+        self.assertIn("nope", job2.error)
