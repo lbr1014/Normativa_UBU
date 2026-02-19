@@ -77,11 +77,40 @@ En esta carpeta se encuentran los archivos de prueba que se han ido generando du
 - Web Scraping: en esta carpeta hay varias implemenatciones de scripts para recopilar de manera automática licitaciones y descargar sus documentos (pliegos) desde la Plataforma de Contratación del Sector Público. En dichos scripts se prueba tanto Selenium como Playwright síncorno y asíncrono para navegar por la web, seleccionar el órgano de contratación, recorrer las licitaciones, extraer sus metadatos y guardar los resultados (en un fichero JSON). También, se incluyen archivos que recorren estos JSON para entrar en las páginas de los documentos y descargar los pliegos en formato PDF.  
 
 ## Ejecución de los archivos:
-Para ejecutar los archivos de web scraping de la carpeta hay que usar el comando:
-pip install -r requirements.txt
+En este apartado se van a indicar los pasos ejecutar los archivos BaseDatos, Prompt, PruebaBaseDatos y PrototipoRAG.py, es decir, los que se encuentarn en la raiz del directorio prototipos, tanto desde una terminal Ubuntu como desde la terminal de Windows. 
+### Ejecutar desde Ubuntu:
+##### Utilizando Poetry:
+1)  Comprobar que esta descargado en el sistema Python:
+   
+    python3 --version
 
-Posteriormente hay que instalar los navegadores de playwright con el siguiente comando:
-playwright install chromium
+    Sino esta instalado hay que instalarlo, para ello ejecutar:
 
-Para ejecutar el archivo hay que usar:
- python NombreDelArchivo.py
+    sudo apt update
+    sudo apt install python3 python3-pip python3-venv git -y
+
+2) Comprobar que Poetry esta instalado:
+
+    poetry --version
+
+    Sino esta instalado hay que instalarlo, para ello ejecutar:
+
+    curl -sSL https://install.python-poetry.org | python3 -
+   
+4) Entrar al directorio del proyecto: cd TFG_RAG/prototipos
+5) Instalar las dependencias: poetry install
+6) Activar entorno virtual:
+    - Si tu versión de poetry es anterior a la 2.0.0 ejecuta: poetry shell
+    - Si es posterior a a versión 2.0.0 ejecuta: poetry env activate
+      Para activar el entorno se debe copiar lo que te devuelve por consola (source /direccion /.venv/bin/activate)
+      Para salir del entorno virtual se ejecuta: deactivate
+
+8) Ejecutar alguno de los scripts: python nombreArchivo.py
+
+##### Utilizando requirements.txt:
+1) Crear un entorno virtual (.ven): python3 -m venv .venv
+2) Activar el entorno virtual: source .venv/bin/activate
+3) 
+
+  
+
