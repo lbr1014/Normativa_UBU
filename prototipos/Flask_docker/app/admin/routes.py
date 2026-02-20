@@ -19,6 +19,8 @@ from ..documentos import DocumentosService
 from app.async_tasks import executor
 from app.vector_update_state import VectorUpdateState
 from app.web_scraping_state import WebScrapingSate
+from app.web_scraping_state import send_scraping_finished_email
+from app.vector_update_state import send_update_finished_email
 
 
 ALLOWED_EXT = {".pdf"}
@@ -102,6 +104,7 @@ def upload_documents():
     return redirect(url_for(DOCUMENTS))
 
 @admin_bp.post("/vector-db/update")
+@login_required
 @admin_required
 def update_vector_db():
     job = VectorUpdateState(
@@ -114,7 +117,7 @@ def update_vector_db():
     db.session.commit()
     
     app_obj = current_app._get_current_object()
-    executor.submit(documentos_async, app_obj, job.id)
+    executor.submit(documentos_async, app_obj, job.id,  current_user.email)
     
     return jsonify({"job_id": job.id}), 202
 
@@ -126,7 +129,7 @@ def documentos_service() -> DocumentosService:
         count_chunks=qdrant_count_chunks_by_filename,
     )
 
-def documentos_async(app, job_id: int) -> None:
+def documentos_async(app, job_id: int, user_email: str) -> None:
     """
     Actualizar la base de datos vectorial de manera asincrona.
     """
@@ -164,6 +167,14 @@ def documentos_async(app, job_id: int) -> None:
             job.finished_at = ZONE
             db.session.commit()
             
+            send_update_finished_email(
+                to_email=user_email,
+                ok=True,
+                message="La actualización de qdrant ha terminado correctamente.",
+                job_id=job.id,
+            )
+
+            
         except Exception as e:
             # Marca failed y guarda error
             try:
@@ -171,6 +182,13 @@ def documentos_async(app, job_id: int) -> None:
                 job.error = str(e)
                 job.finished_at = ZONE
                 db.session.commit()
+                send_update_finished_email(
+                    to_email=user_email,
+                    ok=False,
+                    message=f"La actualización de qdrant ha fallado: {job.error}",
+                    job_id=job.id,
+                )
+                
             finally:
                 app.logger.exception("Error en documentos_async (update_vector_db)")
         finally:
@@ -243,7 +261,7 @@ def web_scraping_documents():
     db.session.commit()
 
     app_obj = current_app._get_current_object()
-    executor.submit(scraping_async, app_obj, job.id)
+    executor.submit(scraping_async, app_obj, job.id, current_user.email)
 
     return jsonify({"job_id": job.id}), 202
 
@@ -261,7 +279,7 @@ def web_scraping_status(job_id: int):
         "error": job.error,
     })
     
-def scraping_async(app, job_id: int) -> None:
+def scraping_async(app, job_id: int, user_email: str) -> None:
     ZONE = datetime.now(ZoneInfo("Europe/Madrid"))
 
     with app.app_context():
@@ -309,6 +327,13 @@ def scraping_async(app, job_id: int) -> None:
             job.message = "Scraping terminado."
             job.finished_at = ZONE
             db.session.commit()
+            
+            send_scraping_finished_email(
+                to_email=user_email,
+                ok=True,
+                message="El scraping ha terminado correctamente.",
+                job_id=job.id,
+            )
 
         except Exception as e:
             try:
@@ -317,6 +342,13 @@ def scraping_async(app, job_id: int) -> None:
                 job.message = "Falló el scraping."
                 job.finished_at = ZONE
                 db.session.commit()
+                
+                send_scraping_finished_email(
+                    to_email=user_email,
+                    ok=False,
+                    message=f"El scraping ha fallado: {job.error}",
+                    job_id=job.id,
+                )
             finally:
                 app.logger.exception("Error en scraping_async")
         finally:
