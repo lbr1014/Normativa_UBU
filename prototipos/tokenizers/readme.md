@@ -12,6 +12,7 @@ En esta carpeta se encuentran los archivos de prueba que se han generado para pr
   - script_tokenizer3.py
   - resumen2.json
   - resumen3.json
+  - pruebas.pdf
  
  ## Contenido de los archivos y directorios:
 
@@ -21,6 +22,7 @@ En esta carpeta se encuentran los archivos de prueba que se han generado para pr
 - **script_tokenizer3.py**: este script es otra variante del proceso de tokenización. Su función principal es limpiar lso documentos y dividirlos en fragmentos optimizados para generar embeddings y almacenarlos en una base de datos vectorial. En esta versión se incluye guardado de metadatos y solapamiento para mayor contexto de los chunks. 
 - **resumen2.json**: este archivo JSON contienen los dats generados en el pipeline de procesamiento. Contiene resúmenes estructurados de los documentos. Recoge información sintetizada a partir de los textos ya procesados. 
 - **resumen3.json**: este archivo JSON es otro arhcivo de dalida del pipelie. Contiene resumenes generados automáticamente de lso documentos. Almacena información sintetizada y fácil de consultar que complemente los textos originales y los embeddings, permitiendo comparar resultados.
+- pruebas.pdf: este archivo es un pliego en pdf para hacer pruebas del tokenizado con lso distientos scripts.
  
 ## Ejecución de los archivos:
 En este apartado se van a indicar los pasos para ejecutar los archivos de web scraping, tanto desde una terminal Ubuntu como desde la terminal de Windows. 
