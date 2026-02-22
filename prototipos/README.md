@@ -52,7 +52,8 @@ En esta carpeta se encuentran los archivos de prueba que se han ido generando du
   - script_tokenizer3.py
   - script_tokenize_segundoModelo.py
   - resumen2.json
-  - resumen3.json 
+  - resumen3.json
+  - pruebas.pdf
 - Web Scraping/
   - DescargarPdf.py
   - DescargarPliegos.py
