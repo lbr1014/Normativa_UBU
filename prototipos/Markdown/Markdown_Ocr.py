@@ -97,7 +97,7 @@ def ocr_page_with_hf(page: fitz.Page, dpi: int = 300) -> str:
     Hace OCR de una página usando Hugging Face + GPU SOLO si no hay texto embebido.
     """
     # Renderizamos la página a imagen
-    zoom = dpi / 72  # 72 dpi base
+    zoom = dpi / 72 
     mat = fitz.Matrix(zoom, zoom)
     pix = page.get_pixmap(matrix=mat)
 

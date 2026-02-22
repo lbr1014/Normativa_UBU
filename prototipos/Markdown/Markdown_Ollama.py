@@ -85,7 +85,7 @@ def clean_index_dots(markdown: str) -> str:
     for line in markdown.splitlines():
         stripped = line.strip()
         if stripped and all(c == "." for c in stripped):
-            # Línea que son solo puntos -> la omitimos
+            # Línea que son solo puntos, la omitimos
             continue
 
         m = pattern.match(line)

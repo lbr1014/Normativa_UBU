@@ -189,7 +189,7 @@ def titulos_markdown(text: str) -> str:
 
 # ============================= ÍNDICE =============================
 def slugify(title: str) -> str:
-    """Convierte un título en un anchor markdown."""
+    """Convierte un título en un ancla markdown."""
     title = title.lower()
     title = re.sub(r"[^a-z0-9áéíóúñü ]+", "", title)
     title = title.strip().replace(" ", "-")
@@ -199,15 +199,15 @@ def slugify(title: str) -> str:
 def procesar_indice(lines: list[str]) -> list[str]:
     """
     Procesa el índice del PDF convirtiendo cada entrada en:
-    - [TÍTULO](#anchor)
+    - [TÍTULO](#ancla)
     """
     out = []
     for line in lines:
         m = INDICE.match(line.strip())
         if m:
             titulo = m.group("title")
-            anchor = slugify(titulo)
-            out.append(f"- [{titulo}](#{anchor})")
+            ancla = slugify(titulo)
+            out.append(f"- [{titulo}](#{ancla})")
         else:
             out.append(line)
     return out
@@ -227,11 +227,10 @@ def convertir_pdf(
     """
     try:
         result = md_converter.convert(input_file)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:  
         print(f"✗ Error convirtiendo {input_file}: {exc}", file=sys.stderr)
         return
 
-    # MarkItDown recomienda usar .markdown; si es None, usamos str(result)
     markdown = getattr(result, "markdown", None) or str(result)
 
     markdown = posprocesado_markdown(markdown)
