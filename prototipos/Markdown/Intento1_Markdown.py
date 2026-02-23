@@ -45,9 +45,6 @@ INDICE = re.compile(
 def posprocesado_markdown(text: str) -> str:
     """
     Limpieza básica del Markdown generado a partir de PDF.
-
-    Ajusta aquí cualquier regla específica que veas que
-    mejora tus pliegos u otros PDFs.
     """
     if not text:
         return ""

@@ -94,7 +94,7 @@ def extract_page_text_with_styles(page: fitz.Page) -> str:
 
 def ocr_page_with_hf(page: fitz.Page, dpi: int = 300) -> str:
     """
-    Hace OCR de una página usando Hugging Face + GPU SOLO si no hay texto embebido.
+    Hace OCR de una página usando Hugging Face + GPU solo si no hay texto embebido.
     """
     # Renderizamos la página a imagen
     zoom = dpi / 72 
@@ -127,7 +127,7 @@ def detect_numbered_heading(line: str):
     - '1. TEXTO EN MAYÚSCULAS' -> título nivel 1 (si el texto está en mayúsculas)
     - '1.1. Texto' / '1.1.1. Texto' -> título (nivel = nº de partes numéricas)
     - 'G.2.2. Texto' -> título (letra + números)
-    - '1.- Texto' (listas) NO se considera título.
+    - '1.- Texto' (listas) np se considera título.
     """
     line_stripped = line.strip()
     if len(line_stripped) < 3:
