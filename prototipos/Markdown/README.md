@@ -19,13 +19,13 @@ En esta carpeta se encuentran los archivos de prueba que se han ido generando du
 ## Contenido de los archivos y directorios:
 
 - **Intento1_Markdown.py**: este script automatiza la conversión de PDF a Markdown. Además, aplica un posprocesado inteligente para limpiar y estructurar el texto. Primero utiliza la libreria MarkItDown para convertir los PDF del directorio pdfs en Markdown (guarda el resultado en la carpeta markdown_intento1). Después, realiza una limpieza del markdown eliminando las viñetas raras, uniendo las palabras cortadas por saltos de línea, normalizando los saltos de línea y los espacios y transformando el índice del documento en una lista con enlaces internos. También, intenta detectar los titulos de las secciones utilizando expresiones regulares.
-- **Markdown_Ocr.py**:
-- **Markdown_Ollama.py**:
-- **Markdown_Ollama2.py**:
-- **markdown**:
-- **markdown_Ocr**:
-- **markdown_Ollama**:
-- **pdfs**:
+- **Markdown_Ocr.py**: este script convierte archivos PDF a Markdown. Intenta extraer el formato del texto los PDF y usa un OCR como plan B (feedback) cuando el PDF no tiene texto. Abre cada PDF ( de la carpeta que s eindique por comandos) y recorreo las páginas usando PyMuPDF. Intenta extraer el texto conservando negritas y separando los párrafos. Si la página sale vacía la renderiza a imagen y ejecuta el OCR (TrOCR de Hugging Face). Una vez que se obtiene todo el texto se aplican reglas para sacar su estructura, normalizar las viñetas y limpiar las líneas del índice. 
+- **Markdown_Ollama.py**: este script convierte archivos PDF a Markdown usando un OCR basado en modelos de visisón-lenguaje ejecutado con Ollama de manera local. Trasforma cada PDF en imágenes PNG usando pdf2image, cuando el PDF está convertido completamente se envía cada imagen al modelo OCR (blaifa/Nanonets-OCR-s) junto con un prompt que indica como estructurar el contenido en Markdown. El markdown de cada página se junta y se procesa limpiando el índice. 
+- **Markdown_Ollama2.py**: este script es una versión posterior del script Markdown_Ollama. Convierte cada PDF en imágenes, envía cada página al modelo (blaifa/Nanonets-OCR-s) con el prompt para generar el Markdown estructurado y luego junta el markdown de cada página. Como diferencia en este script se fuerza el uso de GPU al invocar Ollama y añade posprocesado adicional para intentar corregir los encabezados si el modelo no los marcó bien. 
+- **markdown**: carpeta donde se han guardado los Markdowns generados por el script Intento1_Markdown.
+- **markdown_Ocr**: carpeta donde se han guardado los Markdowns generados por el script Markdown_Ocr.
+- **markdown_Ollama**: carpeta donde se han guardado los Markdowns generados por el script Markdown_Ollama.
+- **pdfs**: carpeta donde se encuentran los PDF para hacer las pruebas de conversión a Markdown.
 
 ## Ejecución de los archivos:
 En este apartado se van a indicar los pasos para ejecutar los archivos de web scraping, tanto desde una terminal Ubuntu como desde la terminal de Windows. 
