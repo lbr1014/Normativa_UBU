@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-8" name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Mi web{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/estilos.css') }}">
 </head>
@@ -29,6 +29,7 @@
           </p>
       {% else %}
           <p class="welcome"><strong>{{ titulo or "Bienvenido" }}</strong></p>
+          <p class="home-author" style="margin:5px 0 0;">{{ autor }}</p>
       {% endif %}
       </div>
 
@@ -101,10 +102,10 @@
         Cerrar sesión
       </a>
 
-      {% else %}
-        <a href="{{ url_for('auth.login') }}" class="btn btn-primary">Iniciar sesión</a>
-        <a href="{{ url_for('auth.singup') }}" class="btn btn-secondary">Registrarse</a>
-      {% endif %}
+    {% else %}
+      <a href="{{ url_for('auth.login') }}" class="btn btn-primary">Iniciar sesión</a>
+      <a href="{{ url_for('auth.singup') }}" class="btn btn-secondary">Registrarse</a>
+    {% endif %}
     </div>
   </header>
 
