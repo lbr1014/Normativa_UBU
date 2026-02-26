@@ -158,9 +158,23 @@ Para la implementación de la base de datos relacional se ha valorado usar \href
 \end{table}
 
 Inicialmente se comenzó integrando \eng{SQLite}, ya que, se considero suficiente para un prototipo local del sistema \eng{RAG}. Pero, finalmente se cambió a \eng{PostgreSQL} porque en el proyecto se busca conseguir una arquitectura realista y desplegable que permita la concurrencia real de usuarios en el sistema. 
+\section{Desarrollo \eng{web}}
+El desarrollo de la interfaz \eng{web} para el proyecto se ha realizado con \href{https://flask.palletsprojects.com/en/stable/}{\eng{Flask}}~\cite{herramienta:flask}. \eng{Flask} es un \eng{framework} WSGI (\eng{Web Server Gateway Interface}~\cite{herramienta:wsgi} es un estándar \eng{Python} para la comunicación entre los servidores \eng{web} y el \eng{framework web}) que proporciona los componentes esenciales para construir aplicaciones \eng{web} usando \eng{Python}. Fue diseñado para la creación de aplicaciones \eng{web} ligeras y modulares. 
 
-\section{Docker}
-{\href{https://www.docker.com/}{\eng{Docker}}~\cite{herramienta:docker} es una plataforma de \eng{software} de código abierto basada en contenedores. Permite empaquetar una aplicación con todas sus dependencias para distribuirla y ejecutarla dentro de unidades ligeras y portables (los contenedores). Asegura que la aplicación funcione igual en cualquier entorno, ya que aísla la aplicación y sus dependencias del sistema operativo. Los conceptos clave del \eng{Docker} es:
+Se ha optado por utilizar \eng{Flask} para el desarrollo \eng{web} en lugar de otros \eng{frameworks}, como \href{https://www.djangoproject.com/}{\eng{Django}} o \href{https://fastapi.tiangolo.com/}{\eng{FastAPI}} porque incorpora una serie de componentes que permiten gestionar las aplicaciones \eng{web} de forma sencilla:
+\begin{itemize}
+\tightlist
+	\item Enrutamiento: permite asociar rutas URL a funciones \eng{Python} utilizando decoradores. Lo cual permite organizar el código de manera modular. En el caso del proyecto simplifica la conexión entre la interfaz \eng{web} y el \eng{pipeline} de generación \eng{RAG}.
+	\item Gestión de peticiones y respuestas: proporciona objetos que permiten acceder de manera sencilla a los datos enviados por el usuario, utilizando formularios, \file{JSON} o simplemente parámetros.
+	\item Motor de plantillas \file{Jinja2}: permite generar \file{HTML} a partir de datos procesados en el servidor. Lo cual facilita la visualización estructurada de las distintas partes del sistema.
+	\item Soporte WSGI: como se ha comentado anteriormente, \eng{Flask} se basa en este estándar para la comunicación entre aplicaciones \eng{web} y servidores \eng{Python}. La utilización de este estándar garantiza la compatibilidad con múltiples servidores de producción y facilita su despliegue mediante \eng{Docker}.
+	\item Extensiones: a pesar de que es minimalista, permite incorporar extensiones para bases de datos, autenticación o validación de formularios.
+\end{itemize}  
+
+\section{ Desplegar la aplicación}
+Para desplegar la \eng{web} se ha utilizado docker + nginx + gunicorn + DNS + certificado SSL/TLS
+\subsection{Docker}\label{docker}
+{\href{https://www.docker.com/}{\eng{Docker}}~\cite{herramienta:docker} es una plataforma de \eng{software} de código abierto basada en contenedores. Permite empaquetar una aplicación con sus dependencias para distribuirla y ejecutarla, asegurando que funcione igual en cualquier entorno. Esto se debe a que aísla la aplicación y sus dependencias del sistema operativo dentro de unidades ligeras y portables (los contenedores). Los conceptos clave del \eng{Docker} son:
 \begin{itemize}
 \tightlist
 	\item Imagen: es una plantilla que contiene el sistema base y las dependencias necesarias.
@@ -169,10 +183,17 @@ Inicialmente se comenzó integrando \eng{SQLite}, ya que, se considero suficient
 	\item \file{Docker Compose}: es una herramienta que se define en un archivo \file{yml} en el cual se definen todos los servicios que debe contener la imagen. Estos servicios se dividen en volúmenes. 
 \end{itemize} 
 
-Se decidió implementar un contenedor \eng{Docker} ya que mejora la reproductividad y la portabilidad. Evita conflictos entre las dependencias en el sistema aportando mayor aislamiento. Además, permite integrar fácilmente herramientas de orquestación que mejoran la escalabilidad. En sistemas que combinan múltiples componentes, como ocurre en este proyecto con LLM, base de datos vectorial y relacional e interfaz web, el uso de contenedores simplifica considerablemente la gestión de la infraestructura.
+Se decidió implementar un contenedor \eng{Docker} ya que mejora la reproductividad, la portabilidad y evita conflictos entre las dependencias en el sistema aportando mayor aislamiento. Además, permite integrar fácilmente diversas herramientas dentro de los volúmenes lo que mejora la escalabilidad. En sistemas que combinan múltiples componentes, como ocurre en este proyecto con LLM, base de datos vectorial y relacional e interfaz web, el uso de contenedores simplifica considerablemente la gestión de la infraestructura.
 
-\section{ Desplegar la aplicación}
-\subsection{ Nginx}
-\subsection{Gunicorn}
-\subsection{DNS}
-\subsection{HTTPS}
+\subsection{\eng{Nginx}}\label{nginx}
+\href{https://nginx.org/}{\eng{Nginx}} es un servidor \eng{web} que puede actuar como \eng{proxy} inverso~\cite{herramienta:proxyinverso}. Un \eng{proxy} inverso es un servidor que, a diferencia de un \eng{proxy} normal, se sitúa delante de los servidores \eng{web} para interpretar las solicitudes de los clientes. Se encarga de reenviar las solicitudes de los clientes a los servicios \eng{web}. En el caso del proyecto \eng{Nginx} se ha utilizado como intermediario entre el cliente y la aplicación \eng{Flask} para recibir las peticiones externas (HTTP/ HTTPS). También, se encarga de gestionar el certificado SSL y de redirigir el tráfico hacia \eng{Gunicorn}. 
+
+La ventaja de utilizar \eng{Nginx} es que está optimizado para manejar múltiples conexiones concurrentes de forma eficiente. Además, desacopla el servidor \eng{web} del servidor de aplicaciones, aumentando la seguridad y el rendimiento del sistema.
+\subsection{\eng{Gunicorn}}\label{gunicorn}
+\href{https://gunicorn.org/}{\eng{Gunicorn}} es un servidor WSGI para aplicaciones \eng{Python} fácil de instalar (no requiere dependencias adicionales), pero que no es compatible con \eng{Windows}. Su principal función es ejecutar la aplicación \eng{Flask} en un entorno preparado para producción. Ya que, por defecto, el \eng{framework} \eng{Flask} incluye un servidor de desarrollo que no es adecuado para entornos reales. Por lo cual \eng{Gunicorn} se encarga de sustituir este servidor por uno optimizado para producción que si que va a permitir gestionar múltiples procesos de manera simultánea y que va a mejorar la estabilidad. 
+\subsection{DNS}\label{dns}
+El DNS (\eng{Domain Name System}) permite asociar un nombre de dominio a la dirección IP del servidor donde se encuentra desplegada la aplicación. Asignarle un dominio a una aplicación sirve para facilitar el acceso y otorgarle mayor profesionalidad. Además, de mejorar la accesibilidad, permite la migración del servidor sin necesidad de cambiar la dirección que utiliza el usuario.
+\subsection{Certificado SSL/TLS}\label{https}
+Para garantizar la seguridad de las comunicaciones se ha configurado un certificado SSL/TLS que permite el uso del protocolo HTTPS (\eng{HyperText Transfer Protocol Secure})~\cite{herramienta:HTTPvsHTTPS}. HTTPS es la versión segura de HTTP y se basa en el protocolo TLS (\eng{Transport Layer Security}), cuyo objetivo es cifrar la comunicación entre el cliente y el servidor. Este cifrado impide que terceros puedan interceptar, modificar o suplantar la información transmitida, protegiendo así la confidencialidad e integridad de los datos.
+
+En este proyecto, el certificado digital se ha emitido utilizando \href{https://certbot.eff.org/}{\eng{Certbot}}. Es una herramienta oficial promovida por la \href{https://www.eff.org/}{\eng{Electronic Frontier Foundation}} (EFF). \eng{Certbot} automatiza la obtención e instalación de certificados gratuitos proporcionados por \href{https://letsencrypt.org/}{\eng{Let’s Encrypt}}, la cual es una autoridad certificadora reconocida internacionalmente. El proceso de emisión del certificado se basa en un mecanismo de validación del dominio, mediante el cual se demuestra que el servidor tiene control sobre el dominio solicitado. Una vez validado, se genera un certificado digital que incluye la clave pública del servidor, la identidad del dominio y la firma digital de la autoridad certificadora. este certificado se instala en \eng{Ngnx}.
