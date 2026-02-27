@@ -1,11 +1,18 @@
 \capitulo{4}{Técnicas y herramientas}
 En este apartado se va a realizar una breve explicación de la metodología empleada, así como de las herramientas utilizadas para el desarrollo del proyecto. En dicha explicación se va a incluir una comparación con otras herramientas similares en la cual se muestre el motivo de la selección de dicha herramienta. 
 \section{Metodologías}
+Para llevar a cabo el proyecto se han seguido diversas metodologías de desarrollo ágil. Estas metodologías definen la forma en la que se planifica, organiza y gestiona el desarrollo de un proyecto, permitiendo estructurar las tareas, coordinar el progreso y mejorar la calidad del resultado.
 
 \subsection{\eng{Scrum}}
 La metodología \eng{Scrum} es un marco de trabajo ágil orientado a la gestión y desarrollo de proyectos de manera iterativa e incremental. Se organiza en ciclos cortos denominados \eng{sprints}, al final de los cuales se entrega un incremento funcional del producto (ver imagen~\ref{fig:Memoria/Metodologia_SCRUM} para ver el proceso \eng{Scrum} completo). Estos \eng{sprints} favorecen la mejora continua y la adaptación al cambio, además, aseguran una entrega temprana de valor. A diferencia de metodologías tradicionales, \eng{Scrum} aporta mayor flexibilidad y retroalimentación constante~\cite{scrum:guide}. 
 
 \imagenflotante{Memoria/Metodologia_SCRUM}{Metodología \eng{Scrum}.}{1}
+
+\subsection{\eng{Kanban}}
+Para la gestión del flujo de trabajo y organización de tareas se ha adoptado la metodología \eng{Kanban}~\cite{herramienta:kanban}. La cual consiste en un enfoque ágil orientado a la visualización del trabajo, la optimización del flujo y la mejora continua. Se basa en la idea de que el trabajo debe gestionarse como un flujo continuo en lugar de dividirse en iteraciones cerradas. Se centra en representar el estado de las tareas de forma visual (ver imagenes~\ref{fig:Memoria/Kanban_ZenHub} y~\ref{fig:Memoria/Kanban_GitHubProjects}), lo que facilita la planificación, el seguimiento y la detección de cuellos de botella. Este enfoque es útil en proyectos de desarrollo \eng{software} en los que los requisitos puedan evolucionar, haciendo necesario tener una planificación flexible.
+
+\imagenflotante{Memoria/Kanban_ZenHub}{Ejemplo de tablero \eng{Kanban} de la aplicación \eng{ZenHub}.}{1}
+\imagenflotante{Memoria/Kanban_GitHubProjects}{Ejemplo de tablero \eng{Kanban} de la aplicación \eng{GitHub Projects}.}{1}
 
 \section{Repositorio}
 Para alojar el repositorio se han valorado distintas alternativas como \href{https://bitbucket.org/}{Bitbucket}, \href{https://github.com/}{GitHub}, \href{https://gitlab.com/}{GitLab} o \href{https://trello.com/}{Trello}. Finalmente se ha elegido GitHub que es una plataforma basada en la nube que permite alojar repositorios de código. GitHub ofrece funciones muy útiles como ramas (\eng{branches}), \eng{pull requests}, seguimiento de cambios (\eng{commits}), historial del proyecto, gestión de incidencias (\eng{issues}). Además, permite la colaboración entre usuarios, lo que es muy útil para la revisión del proyecto.
@@ -13,13 +20,18 @@ Para alojar el repositorio se han valorado distintas alternativas como \href{htt
 Otra ventaja es que GitHub es compatible con herramientas de integración y despliegue continuo, lo que facilita la automatización de pruebas y la entrega de \eng{software}. Asimismo, permite incluir documentación directamente en el repositorio, ya sea mediante archivos \ext{README} o a través de \eng{wikis}, lo que mejora la claridad y la reproducibilidad del trabajo. Finalmente, al tratarse de la plataforma más utilizada a nivel mundial, cuenta con abundante documentación, lo que la convierte en una alternativa sólida y con amplio soporte~\cite{gitHub}.
 
 \section{Gestión de tareas}
-Para la gestión de las tareas del proyecto se han valorado diversas herramientas, como \href{https://www.zenhub.com/}{ZenHub}, \href{https://github.com/}{GitHub
-  Projects} o \href{https://asana.com/es}{Asana}. Al final se ha optado por usar ZenHub que es una herramienta de gestión de proyectos fácilmente integrable con GitHub. Se ha elegido porque tiene mayor funcionalidad que GitHub Projects. Ambos permiten hacer tableros Kanban para organizar las tareas (\eng{to-do, in progress, doing}). Pero, ZenHub, además, permite asignar \eng{story points} a las tareas y generar los gráficos \eng{burndown} de los \eng{sprints}.
+Para la gestión de las tareas del proyecto se han valorado diversas herramientas, como \href{https://www.zenhub.com/}{\eng{ZenHub}}, \href{https://github.com/}{\eng{GitHub
+  Projects}} o \href{https://asana.com/es}{\eng{Asana}}. Principalmente se ha optado por usar \eng{ZenHub} que es una herramienta de gestión de proyectos fácilmente integrable con \eng{GitHub}. Debido a que tiene mayor funcionalidad que \eng{GitHub Projects}. Ambos permiten hacer tableros \eng{Kanban} para organizar las tareas (\eng{to-do, in progress, doing}). Pero, \eng{ZenHub}, además, permite asignar \eng{story points} a las tareas y generar los gráficos \eng{burndown} de los \eng{sprints} de manera sencilla. Sin embargo, también se ha asociado un \eng{GitHub Project} en el cual se ha definido una tabla que organiza las tareas por \eng{sprints} y se han guardado los \eng{Burndown} de cada \eng{sprint}, así como, otras gráficas de interés.
 
 \section{\LaTeX{}}
 Para la edición de los documentos en \LaTeX{} se ha considerado usar \href{http://www.xm1math.net/texmaker/}{\TeX{Maker}}, \href{https://www.texstudio.org/}{\TeX{Studio}}, \href{https://code.visualstudio.com/}{Visual Studio Code} y \href{https://es.overleaf.com/}{Overleaf}. Finalmente se ha optado por usar \TeX{Maker}, ya que es un editor multiplataforma, gratuito y de código abierto. Tiene un visor PDF integrado, así como herramientas para gestionar la bibliografía mediante Bib\TeX{}. Además, tiene una interfaz simple que facilita el aprendizaje, incorpora funciones como el autocompletado, el plegado de código y la detección de errores de compilación, sin necesidad de instalar complementos adicionales.
 
 Como distribución \LaTeX{} para procesar los documentos \ext{.tex} se ha valorado el uso de \href{https://miktex.org/}{Mik\TeX{}} y \href{https://www.tug.org/texlive/}{\TeX{Live}}, al final se ha elegido usar Mik\TeX{} ya que permite realizar una instalación mínima e ir añadiendo automáticamente los paquetes necesarios durante la compilación. Además, presenta un buen soporte para Windows, lo que se adapta bien a mi entorno de trabajo~\cite{miktex:textlive}.
+
+\section{\eng{Entorno de desarrollo}}
+Para el desarrollo del proyecto se ha utilizado \href{https://code.visualstudio.com/}{\eng{Visual Studio Code}}~\cite{herramienta:vscode} como entorno de desarrollo integrado (IDE)~\cite{herramienta:IDE}. Un IDE es una aplicación que integra en un único entorno herramientas esenciales para el desarrollo de software, como editor de código, compilador, depurador y utilidades de automatización. 
+
+\eng{Visual Studio Code} es un editor de código fuente multiplataforma, gratuito y muy utilizado en el ámbito profesional. Se ha seleccionado frente a otras alternativas como \href{https://www.jetbrains.com/es-es/pycharm/}{\eng{PyCharm}} o entornos más pesados debido a su flexibilidad, su facilidad para incorporar extensiones y su buena integración con herramientas modernas de desarrollo como son \eng{Git}, \eng{Docker} y \eng{Poetry}. Permitiendo mantener un entorno de desarrollo coherente, modular y fácilmente reproducible.
 
 \section{\eng{Web Scraping}}
 Para el \eng{web scraping} se ha valorado usar \href{https://selenium-python.readthedocs.io/}{Selenium} y \href{https://playwright.dev/}{Playwright}.

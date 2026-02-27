@@ -12,8 +12,9 @@ Los objetivos identificados en el presente trabajo fin de grado son los siguient
 	\end{itemize}
 \item Preprocesar la colección documental.
 	\begin{itemize} 
-		\item Segmentar los documentos en fragmentos (\eng{chunks}).
+		\item Convertir la colección documenta (recopilada en \file{PDF}) a \file{Markdown} (\file{md}).
 		\item Normalizar y limpiar el texto.
+		\item Segmentar los documentos en fragmentos (\eng{chunks}).
 		\item Generar \eng{embeddings} para representar semánticamente los fragmentos.
 	\end{itemize}
 	\item Implementar y gestionar un índice vectorial.
@@ -30,7 +31,9 @@ Los objetivos identificados en el presente trabajo fin de grado son los siguient
 \item Desarrollar interfaz que facilite al usuario la interacción con el modelo para que el proceso de aumentado del \eng{prompt} le sea transparente.
 	\begin{itemize}
 		\item Desarrollar una aplicación con \eng{Flask} para que el usuario pueda interactuar con el modelo.
-		\item Levantar la aplicación \eng{Flask} con \eng{Docker} para no depender del \eng{requirements.txt}
+		\item Levantar la aplicación \eng{Flask} con \eng{Docker} para asegurar el correcto funcionamiento de la aplicación en cualquier entorno.
+		\item Desplegar la aplicación \eng{Flask} en un entorno preparado para la producción, aplicando \eng{Gunicorn} y \eng{Nginx}, garantizando la seguridad mediante un certificado SSL/TLS.
+		\item Asignar un dominio DNS a la aplicación para facilitar el acceso. 
 	\end{itemize}
 \end{itemize}
 
