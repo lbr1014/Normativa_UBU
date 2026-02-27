@@ -201,12 +201,7 @@ El DNS (\eng{Domain Name System}) permite asociar un nombre de dominio a la dire
 
 En este proyecto el dominio público se ha adquirido a través del proveedor \href{https://www.hostalia.com/}{\eng{Hostalia}}. Una vez registrado el dominio, fue necesario configurar sus registros DNS para asociarlo con la dirección IP del servidor donde se encuentra desplegada la aplicación. Para vincular el dominio al servidor se configuró un registro tipo A dentro del panel de gestión DNS de \eng{Hostalia}. Este registro permite que las peticiones dirigidas al dominio se redirijan a la dirección IP correspondiente del servidor.
 
-Sin embargo, la aplicación se ejecuta en una IP privada de la Universidad de Burgos. Las direcciones IP privadas no son accesibles directamente desde Internet, ya que están destinadas a redes internas. Existen dos formas principales de asociar un dominio a estas IP:
-\begin{itemize}
-\tightlist
-	\item Configurar el \eng{router}: se configura para que el dominio apunte a la IP pública del \eng{router}. Mediante técnicas NAT (\eng{Network Address Translation}) se redirige el tráfico hacia la IP privada del servidor. Con este método se consigue que la aplicación sea accesible desde Internet. 
-	\item Editar el archivo \eng{hosts}: en este archivo debe añadirse la relación entre el dominio y la IP privada. Esta alternativa solo tiene efecto en el equipo donde se modifica el archivo.
-\end{itemize}
+Sin embargo, la aplicación se ejecuta en una IP privada de la Universidad de Burgos. Las direcciones IP privadas no son accesibles directamente desde Internet~\cite{ herramienta:ip_privadaVSpublica}, ya que están destinadas a redes internas. Para conseguir que la aplicación sea accesible desde Internet hay que configurar el \eng{router} de tal forma que el dominio apunte a la IP pública del dicho \eng{router}. Mediante técnicas NAT (\eng{Network Address Translation}~\cite{herramienta:nat}) se redirige el tráfico hacia la IP privada del servidor. 
 
 \subsection{Certificado SSL/TLS}\label{https}
 Para garantizar la seguridad de las comunicaciones se ha configurado un certificado SSL/TLS que permite el uso del protocolo HTTPS (\eng{HyperText Transfer Protocol Secure})~\cite{herramienta:HTTPvsHTTPS}. HTTPS es la versión segura de HTTP y se basa en el protocolo TLS (\eng{Transport Layer Security}), cuyo objetivo es cifrar la comunicación entre el cliente y el servidor. Este cifrado impide que terceros puedan interceptar, modificar o suplantar la información transmitida, protegiendo así la confidencialidad e integridad de los datos.
