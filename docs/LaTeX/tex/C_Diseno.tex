@@ -36,24 +36,40 @@ El diagrama relacional se muestra en esta imagen ~\ref{fig:Diagramas/Relacional}
 
 
 \section{Diseño arquitectónico}
-El objetivo del diseño arquitectónico es garantizar la modularidad, la escalabilidad, la mantenibilidad y la reproducibilidad del sistema desarrollado. Dicho sistema se basa en una arquitectura cliente–servidor multicapa, combinada con una arquitectura \eng{RAG} (\eng{Retrieval-Augmented Generation}) estructurada en dos \eng{pipelines} diferenciados, el de indexación y el de generación. Además, se busca un despliegue reproducible y desacoplado utilizando un contenedor \eng{Docker} para almacenar el código junto con sus dependencias.
+El objetivo del diseño arquitectónico es garantizar la modularidad, la escalabilidad, la mantenibilidad, la portabilidad y la reproducibilidad del sistema desarrollado. Es decir, se busca tener una separación clara de responsabilidades entre la interfaz, la lógica, la persistencia y los servicios de Inteligencia Artificial con una organización del código en componentes cohesivos (\eng{Blueprints}, servicios y modelos), pudiendo replicarse los servicios de manera sencilla. Además, sustituir los componentes debe tener un impacto mínimo en el resto del código. 
+
+Este sistema se basa en una arquitectura cliente–servidor multicapa, combinada con una arquitectura \eng{RAG} (\eng{Retrieval-Augmented Generation}), en la capa de aplicación, estructurada en dos \eng{pipelines} diferenciados, el de indexación y el de generación. El despliegue se lleva a cabo utilizando contenedores \eng{Docker} para almacenar el código junto con sus dependencias.
 
 \subsection{Arquitectura general del sistema}
-El sistema sigue una arquitectura distribuida basada en servicios, donde cada componente tiene una responsabilidad claramente definida. La aplicación se compone de los siguientes elementos principales:
+El sistema sigue una arquitectura distribuida basada en servicios (\eng{service-oriented}~\cite{diseño:SOA}), donde cada componente tiene una responsabilidad claramente definida. La aplicación se compone de los siguientes elementos principales:
 \begin{itemize}
 \tightlist
-	\item Cliente \eng{web} (navegador del usuario).
-	\item Servidor \eng{web} \eng{Flask}.
-	\item Base de datos relacional (\eng{PostgreSQL}).
-	\item Base de datos vectorial (\eng{Qdrant}).
-	\item Servicio de modelos \eng{LLM} (\eng{Ollama}).
-	\item Servidor \eng{web} \eng{Nginx} como \eng{proxy} inverso.
-	\item \eng{Gunicorn} como servidor WSGI.
+	\item Cliente \eng{web}: se corresponde con el navegador del usuario.
+	\item Servidor de \eng{proxy} inverso \eng{Nginx}: el cual se encarga del protocolo de seguridad a través del certificado SSL/TLS, las redirecciones HTTP a HTTPS y el encaminamiento hacia la aplicación .
+	\item Capa de aplicación: aplicación \eng{Flask} desplegada tras un servidor WSGI \eng{Gunicorn}.
+	\item Persistencia relacional: se incluye \eng{PostgreSQL} como base de datos relacional para asegurar la persistencia de los datos de las transacciones, como son los usuarios, las consultas, los documentos o los estados.
+	\item Persistencia vectorial: se utiliza \eng{Qdrant} como base de datos vectorial para realizar la búsqueda semántica sobre los \eng{embeddings}.
+	\item Servicio de modelos \eng{LLM}:  se utiliza \eng{Ollama} para servir el modelo \eng{LLM} de manera local exponiendo una API HTTP de generación.
+	\item Contenedor de pruebas: se utiliza este contenedor para la ejecución de las pruebas del sistema, así como, de la cobertura de dichas pruebas.
 \end{itemize}
 
-La comunicación entre componentes se realiza mediante el protocolo HTTP dentro de la red interna del \eng{Docekr}. El acceso externo se gestiona usando \eng{Nginx} a través del protocolo HTTPS.
+La comunicación entre componentes (ver imagen ~\ref{fig:Arquitectura/ComunicacionArquitectura}) se realiza principalmente dentro de al red interna de \file{Docker-compose}, donde los servicios se resuelven entre sí mediante el nombre de servicio,e s decir, el DNS interno, y se conectan a través de los puertos expuestos internamente. El acceso desde el exterior se gestiona usando \eng{Nginx}, que es el único componenete que publica puertos hacia internet (el puerto 80 para el protocolo HTTP y el 443 para el HTTPS). \eng{Nginx} actúa como \eng {proxy} inverso y punto de terminación TLS. Recibe las peticiones que hacen los usuarios a la \eng{web} \file{pythia.es} y las reenvía por HTTP interno al servicio \eng{web} en \file{web:5000} que se corresponde con la aplicación \eng{Flask} servida con \eng{Gunicorn}. Desde la aplicación, las comunicaciones con los servicios de datos se realizan dentro del entorno \eng{Docker}. La conexión con la base de datos relacional \eng{PostgreSQL} se gestiona con una conexión TCP a \file{db:5432}. La conexión con la base de datos vectorial \eng{Qdrant}, para la recuperación semántica, se realiza mediante conexión HTTP por el puerto \file{qdrant:6333}. Para generar las respuestas se invoca el servicio \eng{Ollama} por HTTP en \file{ollama:11434}. \eng{Ollama} puede ser accesible desde fuera del \eng{host} gracias al mapeo de puertos \file{11435:11434}. Por último, el contenedor \eng{ollama-init} se comunica con \eng{Ollama} de forma interna durante el arranque para descargar el modelo y dejarlo disponible antes de su uso. En el diagrama~\ref{fig:Arquitectura/Peticiones} se puede observar como atiende el sistema las peticiones de los usuarios.
 
-Desde el punto de vista lógico la arquitectura se divide en la capa de presentación, la capa de aplicación y la capa de persistencia y servicios externos.
+\imagendiagram{Arquitectura/ComunicacionArquitectura}{Diagrama de la comunicación entre los principales componentes del sistema.}{1.1}
+
+\imagendiagram{Arquitectura/Peticiones}{Diagrama de la gestión de peticiones del sistema.}{1.1}
+
+\subsection{Arquitectura lógica}
+Desde el punto de vista lógico el sistema se estructura siguiendo una arquitectura multicapa, organizada en tres niveles claramente diferenciados. Estos niveles se corresponden con la capa de presentación, la capa de aplicación y la capa de persistencia y servicios externos (ver arquitectura en la imagen~\ref{fig:Arquitectura/ArquitecturaLogica}.
+
+\imagendiagram{Arquitectura/ArquitecturaLogica}{Diagrama de la arquitectura lógica del sistema.}{1.1}
+
+\begin{itemize}
+\tightlist
+	\item Capa de presentación: es la interfaz de usuario (IU) del sistema y es accesible a través del navegador web. Se sigue un enfoque SSR (\eng{Server-Side Rendering}), en el que las páginas HTML se generan en el servidor mediante plantillas (usando las plantillas \file{Jinja2} en \eng{Flask}) y se envían al navegador ya renderizadas. Esto reduce la complejidad en el cliente, simplifica el control de acceso y la validación en el servidor. Mejora la trazabilidad y el registro de las interacciones y simplifica la integración del \eng{pipeline RAG}.
+	\item Capa de aplicación: se implementa en el contenedor \eng{web}, que es donde se ejecuta la aplicaicón \eng{Flask} servida pro \eng{Gunicorn}. Esta capa es responsable de coordinar la lógica funcional del sistema y actúa como núcleo del procesamiento. Esta compuesta por los controladores (rutas) organizados en \eng{Blueprints} encargados de gestionar las peticiones HTTP, la lógica de negocio (gestión de usuarios, documentos, consultas, etc) y el \eng{pipeline RAG}.
+	\item Capa de persistencia y servicios externos: en esta capa se agrupan los sistemas encargados del almacenamiento y procesamiento de los datos. Se incluyen las bases de datos, tanto la relacional \eng{PostgreSQL} como la vectorial \eng{Qdrant}. También, se incluye \eng{Ollama} como proveedor del modelo \eng{LLM}. Todos estos servicios se ejecutan como contenedores independientes dentro de la red interna de \eng{Docker}, garantizando aislamiento, modularidad y facilidad de despliegue.
+\end{itemize}
 
 \subsection{Arquitectura de la aplicación \eng{web}}
 La aplicación \eng{web} sigue una arquitectura MVC (\eng{Model-View-Controller}). Esta arquitectura es típica de las aplicaciones \eng{Flask} \eng{server-side-rendered} (SSR)~\cite{diseño:SSR}. La técnica SSR consiste en generar el código de las páginas en el lado del servidor y entregar al cliente el código \file{HTML} completamente montado con toda la información que se debe mostrar. 
@@ -73,10 +89,12 @@ El sistema \eng{RAG} se integra dentro de la capa de aplicación y se estructura
 
 El \eng{pipeline} de indexación se ejecuta cuando se cargan los documentos en la aplicación, ya bien sea de manera manual o mediante \eng{web scraping}. Por cada documento se va a llevar a cabo una conversión a \file{Markdown}. De estos documentos se extrae, limpia y normaliza su texto, posteriormente se segmenta en \eng{chunks} con solapamiento y se generar sus \eng{embeddings}. Los cuales se van a almacenar en \eng{Qdrant}. Este proceso se ejecuta de forma asíncrona para evitar bloquear la interfaz \eng{web} y envía un correo electrónico al usuario cuando finaliza.
 
-El \eng{pipeline} de generación se activa cuando el usuario hace una consulta, generando los \eng{embeddings} de la consulta. Una vez generados recupera los \eng{chunks} más relevantes de \eng{Qdrant} por la similitud de sus \eng{embeddings} y los usa para construir el \eng{prompt} aumentado. Envía el \eng{prompt} generado al modelo \eng{LLM} y muestra su respuesta al usuario. Finalmente registra la consulta en la base de datos relacional. Este pipeline combina recuperación semántica y generación de texto, asegurando trazabilidad al devolver los metadatos de los documentos fuente.
+El \eng{pipeline} de generación se activa cuando el usuario hace una consulta, generando los \eng{embeddings} de la consulta. Una vez generados recupera los \eng{chunks} más relevantes de \eng{Qdrant} por la similitud de sus \eng{embeddings} y los usa para construir el \eng{prompt} aumentado. Envía el \eng{prompt} generado al modelo \eng{LLM} y muestra su respuesta al usuario. Finalmente registra la consulta en la base de datos relacional. Este \eng{pipeline} combina recuperación semántica y generación de texto, asegurando trazabilidad al devolver los metadatos de los documentos fuente.
 
 \subsection{Arquitectura de despliegue e infraestructura}
-El sistema se despliega mediante \file{Docker Compose}
+El sistema se despliega mediante contenedores \eng{Docker}. Los servicios se definen en el archivo \file{Docker Compose}. Se definen seis contenedores independientes que se corresponden con el entorno para la base de datos relacional \eng{PostgresSQL} llamado \file{db}, el de la base de datos vectorial \eng{Qdrant} llamado \file{qdrant}, el de el servicio \eng{LLM} llamado \file{Ollama}, el de la aplicación \eng{Flask} levantada usando \eng{Gunicorn} llamado \file{web}, el del \eng{proxy} inverso \file{nginx} y el contenedor de ejecución de pruebas llamado \file{test}.
+
+Gracias a esta separación se garantiza la seguridad ya que no se expone directamente la aplicación \eng{Flask}. Este despligue también, aumenta la escalabilidad, la reproducibilidad y la portabilidad al tener la posibilidad de replicar los servicios en un entorno aislado que no depende del sistema anfitrión.
 
 \section{Diseño procedimental}
 
