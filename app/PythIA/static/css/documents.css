@@ -1,0 +1,66 @@
+/* =========================
+   CARGAR DOCUMENTOS
+   ========================= */
+
+.upload-card{
+  border-radius: 24px;
+  overflow: hidden;
+}
+
+.upload-card_title{
+  color: #ffffff;
+  font-size: 1.5rem;
+  font-weight: 800;
+}
+
+.upload-card_subtitle{
+  color: rgba(255,255,255,.78);
+  line-height: 1.6;
+}
+
+.upload-dropzone{
+  padding: 1rem;
+  border-radius: 18px;
+  background: rgba(255,255,255,.06);
+  border: 1px dashed rgba(255,255,255,.18);
+}
+
+.upload-dropzone .form-label{
+  color: #ffffff;
+}
+
+.upload-input{
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.16);
+  background: rgba(255,255,255,.92);
+  color: #1f2d3d;
+}
+
+.upload-input:focus{
+  border-color: #ffffff;
+  background: rgba(255,255,255,.88);
+  box-shadow:
+    0 0 0 3px rgba(219,220,221,.18),
+    0 4px 14px rgba(219,220,221,.25);
+}
+
+.upload-dropzone .form-text{
+  color: rgba(255,255,255,.70);
+}
+
+.upload-card .btn{
+  border-radius: 14px;
+  min-height: 48px;
+}
+
+.upload-progress{
+  height: 12px;
+  background: rgba(255,255,255,.16);
+}
+
+/* Responsive */
+@media (max-width: 767.98px){
+  .upload-card__title{
+    font-size: 1.25rem;
+  }
+}

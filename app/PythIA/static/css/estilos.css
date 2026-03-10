@@ -73,6 +73,15 @@ body{
   margin-bottom: 25px;
 }
 
+.app-surface{
+  background: linear-gradient(180deg, rgba(255,255,255,.14) 0%, rgba(255,255,255,.08) 100%);
+  border: 1px solid rgba(255,255,255,.14);
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255,255,255,.06);
+  backdrop-filter: blur(8px);
+}
+
 /* =========================
    FORMULARIOS 
    ========================= */
@@ -173,6 +182,43 @@ body{
               0 4px 14px rgba(43, 42, 42,.25);
 }
 
+.btn-hero-primary,
+.btn-hero-secondary,
+.btn-header{
+  border-radius: 999px;
+  padding: 12px 24px;
+  font-weight: 700;
+  transition: all .25s ease;
+}
+
+.btn-hero-primary{
+  background: #ffffff;
+  color: #2c3e50;
+  border: 1px solid #ffffff;
+  text-decoration: none;
+  box-shadow: 0 10px 30px rgba(0,0,0,.18);
+}
+
+.btn-hero-primary:hover{
+  transform: translateY(-2px);
+  background: #f3f7fa;
+  color: #22313f;
+}
+
+.btn-hero-secondary{
+  background: rgba(255,255,255,.06);
+  color: #ffffff;
+  border: 1px solid rgba(255,255,255,.18);
+  text-decoration: none;
+  backdrop-filter: blur(6px);
+}
+
+.btn-hero-secondary:hover{
+  transform: translateY(-2px);
+  background: rgba(255,255,255,.12);
+  color: #ffffff;
+}
+
 .btn-modelo{
   position: relative;
   overflow: hidden;
@@ -235,7 +281,6 @@ body{
   pointer-events:none;
 }
 
-
 /* =========================
    LINKS
    ========================= */
@@ -292,34 +337,65 @@ body{
 .app-badge.admin{ background:#e67e22; }
 .app-badge.user{ background:#3498db; }
 
+
 /* =========================
-   BARRA DE PROGRESO 
+   MODAL DELETE
    ========================= */
 
-.progress {
-  width: 100%;
-  height: 10px;
-  background-color: #e6e6e6;
-  border-radius: 6px;
-  overflow: hidden;
+.delete-modal-panel{
+  border-radius: 18px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.30), inset 0 1px 0 rgba(255,255,255,.06);
+  color: #fff;
 }
 
-.progress-bar {
-  height: 100%;
-  width: 40%;
-  background-color: #3498db;
-  animation: loading 1.2s infinite linear;
+.delete-modal-header,
+.delete-modal-footer{
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
 }
 
-@keyframes loading {
-  0%   { transform: translateX(-100%); }
-  100% { transform: translateX(250%); }
+.delete-modal-header{
+  padding-top: 1.1rem;
+  padding-bottom: .75rem;
 }
 
-.progress-text {
+.delete-modal-title{
+  margin: 0;
+  font-size: 1.1rem;
+  line-height: 1.2;
+  color: #fff;
+  font-weight: 800;
+}
+
+.delete-modal-sub{
+  margin-top: .35rem;
+  color: rgba(255,255,255,.75);
   font-size: 13px;
-  margin-top: 6px;
-  color: #555;
-  text-align: center;
 }
 
+.delete-modal-body{
+  color: rgba(255,255,255,.92);
+  line-height: 1.6;
+  padding: .75rem 1.25rem 1rem;
+}
+
+.delete-modal-body strong{
+  color: #fff;
+  font-weight: 700;
+}
+
+.delete-modal-footer{
+  gap: .75rem;
+  padding-top: .5rem;
+  padding-bottom: 1.25rem;
+}
+
+.delete-modal-footer .btn{
+  min-width: 120px;
+}
+
+.delete-modal-footer .btn-danger{
+  border-radius: 999px;
+  padding: 12px 24px;
+  font-weight: 700;
+}
