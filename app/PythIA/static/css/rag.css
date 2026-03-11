@@ -43,11 +43,16 @@
   min-height: 1.2em;
   font-size: .95rem;
   color: rgba(255,255,255,.78);
+  text-align: center;
 }
 
 .rag-status.is-error{
   color: #ffb4aa;
   font-weight: 700;
+}
+
+.rag-form .btn-header{
+  min-width: 190px;
 }
 
 .rag-result,

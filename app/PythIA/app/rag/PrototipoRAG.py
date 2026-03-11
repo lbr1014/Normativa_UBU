@@ -13,6 +13,7 @@ import os
 import re
 import time
 import atexit
+import json
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import cached_property
@@ -32,6 +33,10 @@ from hashlib import sha256
 
 # Logger
 logger = logging.getLogger(__name__)   
+
+
+class QueryCancelledError(RuntimeError):
+    pass
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
 
@@ -696,11 +701,17 @@ def recuperacion_chunk_con_scores(user_query: str, k: int = 10) -> list[qmodels.
 # =========================
 # Ollama
 # =========================
-def ask_ollama(prompt: str, model: str = "llama3.1:8b-instruct-q4_K_M") -> str:
+def ask_ollama(
+    prompt: str,
+    model: str = "llama3.1:8b-instruct-q4_K_M",
+    should_cancel=None,
+) -> str:
     """
     Envía un prompt a Ollama usando /api/generate y devuelve el texto de respuesta.
     """
-    
+    if should_cancel and should_cancel():
+        raise QueryCancelledError("Consulta cancelada por el usuario.")
+
     url = f"{OLLAMA_BASE_URL}/api/generate"
 
     full_prompt = (
@@ -713,13 +724,33 @@ def ask_ollama(prompt: str, model: str = "llama3.1:8b-instruct-q4_K_M") -> str:
         json={
             "model": model,
             "prompt": full_prompt,
-            "stream": False,
+            "stream": True,
         },
         timeout=120,
+        stream=True,
     )
     resp.raise_for_status()
-    data = resp.json()
-    return data.get("response", "")
+    chunks: list[str] = []
+
+    try:
+        for line in resp.iter_lines(decode_unicode=True):
+            if should_cancel and should_cancel():
+                raise QueryCancelledError("Consulta cancelada por el usuario.")
+
+            if not line:
+                continue
+
+            payload = json.loads(line)
+            piece = payload.get("response")
+            if piece:
+                chunks.append(piece)
+
+            if payload.get("done"):
+                break
+    finally:
+        resp.close()
+
+    return "".join(chunks)
 
 
 def obtener_chunk_de_query(user_query: str) -> dict | None:
@@ -751,6 +782,8 @@ def obtener_chunk_de_query(user_query: str) -> dict | None:
 def obtener_mejor_chunk(
     user_query: str,
     model: str = "llama3.1:8b-instruct-q4_K_M",
+    should_cancel=None,
+    on_status=None,
     ) -> dict:
     """
     1) Recupera de Qdrant los 10 chunk más parecido a la pregunta.
@@ -765,6 +798,11 @@ def obtener_mejor_chunk(
         - retrieved: top 10 chunks 
     """
     user_query = (user_query or "").strip()
+    if should_cancel and should_cancel():
+        raise QueryCancelledError("Consulta cancelada por el usuario.")
+
+    if on_status:
+        on_status("Recuperando fragmentos relevantes...")
 
     points = recuperacion_chunk_con_scores(user_query, k=10)
     if not points:
@@ -782,6 +820,9 @@ def obtener_mejor_chunk(
     context_blocks: list[str] = []
     
     for idx, p in enumerate(points, start=1):
+        if should_cancel and should_cancel():
+            raise QueryCancelledError("Consulta cancelada por el usuario.")
+
         payload = p.payload or {}
         meta = (payload.get("metadata") or {})
         content = payload.get("content", "") or ""
@@ -820,7 +861,10 @@ def obtener_mejor_chunk(
     Responde de forma breve y precisa en español.
     """
 
-    answer = ask_ollama(prompt, model=model)
+    if on_status:
+        on_status("Generando respuesta del modelo...")
+
+    answer = ask_ollama(prompt, model=model, should_cancel=should_cancel)
 
     return {
         "answer": answer,

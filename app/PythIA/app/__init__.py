@@ -10,6 +10,7 @@ from .documentos import Documento, DocumentosService
 from .auth import auth_bp
 from .vector_update_state import VectorUpdateState
 from .web_scraping_state import WebScrapingSate
+from .rag_query_state import RAGQueryState
 
 def create_app():
     load_dotenv("secret.env")

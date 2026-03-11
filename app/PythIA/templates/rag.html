@@ -27,7 +27,8 @@
           </div>
 
           <div class="d-flex justify-content-center align-items-center gap-3 flex-wrap mt-3">
-            <button class="btn btn-modelo luz" type="submit">Preguntar</button>
+            <button id="ask-button" class="btn btn-modelo luz" type="submit">Preguntar</button>
+            <button id="cancel-button" class="btn btn-outline-light btn-header d-none" type="button">Cancelar consulta</button>
             <span id="status" class="rag-status" aria-live="polite"></span>
           </div>
         </form>
@@ -48,7 +49,7 @@
                     <strong>Archivo:</strong> <span id="filename"></span>
                   </div>
                   <div class="col-12 col-md-4">
-                    <strong>Título:</strong> <span id="title"></span>
+                    <strong>Titulo:</strong> <span id="title"></span>
                   </div>
                   <div class="col-12 col-md-4">
                     <strong>Segmento:</strong> <span id="segment_index"></span>
@@ -67,6 +68,9 @@
 
 <script>
   const form = document.getElementById("rag-form");
+  const questionEl = form.querySelector("textarea");
+  const askButton = document.getElementById("ask-button");
+  const cancelButton = document.getElementById("cancel-button");
   const statusEl = document.getElementById("status");
   const answerEl = document.getElementById("answer");
   const filenameEl = document.getElementById("filename");
@@ -74,40 +78,132 @@
   const segmentEl = document.getElementById("segment_index");
   const chunkEl = document.getElementById("chunk");
 
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
+  let activeJobId = null;
+  let pollingTimer = null;
 
-    statusEl.textContent = "Consultando…";
-    statusEl.classList.remove("is-error");
-
+  function clearResult() {
     answerEl.textContent = "";
     filenameEl.textContent = "";
     titleEl.textContent = "";
     segmentEl.textContent = "";
     chunkEl.textContent = "";
+  }
+
+  function setRunningUI(message) {
+    statusEl.textContent = message;
+    statusEl.classList.remove("is-error");
+    askButton.disabled = true;
+    questionEl.disabled = true;
+    cancelButton.classList.remove("d-none");
+  }
+
+  function setIdleUI() {
+    askButton.disabled = false;
+    questionEl.disabled = false;
+    cancelButton.classList.add("d-none");
+  }
+
+  function applyResult(result) {
+    answerEl.textContent = result?.answer || "Sin respuesta.";
+    filenameEl.textContent = result?.filename || "-";
+    titleEl.textContent = result?.title || "-";
+    segmentEl.textContent = result?.segment_index ?? "-";
+    chunkEl.textContent = result?.chunk || "No se ha recuperado ningun fragmento.";
+  }
+
+  async function fetchJson(url, options = {}) {
+    const response = await fetch(url, {
+      headers: { Accept: "application/json" },
+      ...options,
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "No se pudo completar la operacion.");
+    }
+    return data;
+  }
+
+  function stopPolling() {
+    if (pollingTimer) {
+      clearTimeout(pollingTimer);
+      pollingTimer = null;
+    }
+  }
+
+  async function pollJob(jobId) {
+    try {
+      const data = await fetchJson(`{{ url_for('rag.rag_status', job_id=0) }}`.replace("/0", `/${jobId}`));
+      const status = data.status;
+      const message = data.message || "";
+
+      if (status === "queued" || status === "running") {
+        setRunningUI(message || "Consultando...");
+        pollingTimer = window.setTimeout(() => pollJob(jobId), 900);
+        return;
+      }
+
+      activeJobId = null;
+      stopPolling();
+      setIdleUI();
+
+      if (status === "done") {
+        statusEl.textContent = "";
+        applyResult(data.result || {});
+        return;
+      }
+
+      if (status === "cancelled") {
+        statusEl.textContent = "Consulta cancelada.";
+        clearResult();
+        return;
+      }
+
+      statusEl.textContent = data.error || message || "La consulta ha fallado.";
+      statusEl.classList.add("is-error");
+    } catch (error) {
+      activeJobId = null;
+      stopPolling();
+      setIdleUI();
+      statusEl.textContent = error.message || "No se pudo consultar el estado de la consulta.";
+      statusEl.classList.add("is-error");
+    }
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    stopPolling();
+    clearResult();
 
     try {
       const formData = new FormData(form);
-
-      const res = await fetch("{{ url_for('rag.rag_ask') }}", {
+      setRunningUI("Enviando consulta...");
+      const data = await fetchJson("{{ url_for('rag.rag_ask') }}", {
         method: "POST",
-        body: formData
+        body: formData,
       });
 
-      const data = await res.json();
+      activeJobId = data.job_id;
+      pollJob(activeJobId);
+    } catch (error) {
+      activeJobId = null;
+      stopPolling();
+      setIdleUI();
+      statusEl.textContent = error.message || "Ha ocurrido un error.";
+      statusEl.classList.add("is-error");
+    }
+  });
 
-      if (!res.ok) {
-        throw new Error(data.error || "No se pudo completar la consulta.");
-      }
+  cancelButton.addEventListener("click", async () => {
+    if (!activeJobId) return;
 
-      statusEl.textContent = "";
-      answerEl.textContent = data.answer || "Sin respuesta.";
-      filenameEl.textContent = data.filename || "—";
-      titleEl.textContent = data.title || "—";
-      segmentEl.textContent = (data.segment_index ?? "—");
-      chunkEl.textContent = data.chunk || "No se ha recuperado ningún fragmento.";
-    } catch (err) {
-      statusEl.textContent = err.message || "Ha ocurrido un error.";
+    try {
+      const data = await fetchJson(`{{ url_for('rag.rag_cancel', job_id=0) }}`.replace("/0", `/${activeJobId}`), {
+        method: "POST",
+      });
+      setRunningUI(data.message || "Cancelando consulta...");
+    } catch (error) {
+      statusEl.textContent = error.message || "No se pudo cancelar la consulta.";
       statusEl.classList.add("is-error");
     }
   });

@@ -12,7 +12,7 @@ from app.chunk import Chunk
 from app.consultaChunk import ConsultaChunk
 logger = logging.getLogger(__name__)
 
-from .PrototipoRAG import obtener_mejor_chunk
+from .PrototipoRAG import QueryCancelledError, obtener_mejor_chunk
 from qdrant_client import models as qmodels
 
 EMPTY_ANSWER: Dict[str, Any] = {
@@ -23,7 +23,7 @@ EMPTY_ANSWER: Dict[str, Any] = {
     "chunk": "",
 }
 
-def rag_answer(question: str) -> Dict[str, Any]:
+def rag_answer(question: str, should_cancel=None, on_status=None, user_id: int | None = None) -> Dict[str, Any]:
     """
     Devuelve dict con:
       answer, title, filename, segment_index, chunk
@@ -38,7 +38,15 @@ def rag_answer(question: str) -> Dict[str, Any]:
     data: Dict[str, Any]
 
     try:
-        data = obtener_mejor_chunk(question)
+        if on_status:
+            on_status("Preparando consulta...")
+        data = obtener_mejor_chunk(
+            question,
+            should_cancel=should_cancel,
+            on_status=on_status,
+        )
+    except QueryCancelledError:
+        raise
     except Exception as e:
         logger.exception("Error en rag_answer: %s", e)
         data = message_error("Ha ocurrido un error consultando el sistema. Inténtalo de nuevo.")
@@ -46,7 +54,7 @@ def rag_answer(question: str) -> Dict[str, Any]:
     elapsed = time.perf_counter() - start
 
     # Guardado en BBDD
-    try_persist(question, data, elapsed)
+    try_persist(question, data, elapsed, user_id=user_id)
 
     data["elapsed_s"] = round(elapsed, 4)
     # Mejor chunk (ranking 1) para el front
@@ -70,15 +78,19 @@ def validate_question(question: str) -> Optional[Dict[str, Any]]:
         return message_error("La pregunta es demasiado larga (máx. 2000 caracteres).")
     return None
 
-def try_persist(question: str, data: Dict[str, Any], elapsed: float) -> None:
+def try_persist(question: str, data: Dict[str, Any], elapsed: float, user_id: int | None = None) -> None:
     try:
-        persist_consulta(question, data, elapsed)
+        persist_consulta(question, data, elapsed, user_id=user_id)
     except Exception:
         logger.exception("No se pudo guardar la consulta en BBDD")
         db.session.rollback()
         
-def persist_consulta(question: str, data: Dict[str, Any], elapsed: float) -> None:
-    if current_user and getattr(current_user, "is_authenticated", False):
+def persist_consulta(question: str, data: Dict[str, Any], elapsed: float, user_id: int | None = None) -> None:
+    owner_id = user_id
+    if owner_id is None and current_user and getattr(current_user, "is_authenticated", False):
+        owner_id = int(current_user.id)
+
+    if owner_id is not None:
         retrieved = data.get("retrieved", []) or []
         top_retrieved = retrieved[:10]
         chunk_links: list[tuple[dict[str, Any], Chunk]] = []
@@ -91,7 +103,7 @@ def persist_consulta(question: str, data: Dict[str, Any], elapsed: float) -> Non
             fragmentos.append(build_fragmento(item, chunk_obj))
 
         consulta = Consulta(
-            user_id=int(current_user.id),
+            user_id=int(owner_id),
             pregunta=question,
             respuesta=str(data.get("answer", "")),
             fragmentos=fragmentos,
