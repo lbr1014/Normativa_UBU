@@ -13,6 +13,10 @@ from .embedding import Embedding
 
 ALLOWED_EXT = {".pdf"}
 
+
+class JobCancelledError(RuntimeError):
+    pass
+
 class Documento(db.Model):
     __tablename__ = "documents"
      
@@ -177,7 +181,7 @@ class DocumentosService:
             db.session.delete(doc)
             db.session.commit()        
 
-    def update_vector_db(self, on_progress=None, on_current_doc=None) -> None:
+    def update_vector_db(self, on_progress=None, on_current_doc=None, should_cancel=None) -> None:
         """
         Indexa y acctualiza el estado y los chunks en la base de datos.
         """
@@ -191,6 +195,8 @@ class DocumentosService:
             on_progress(0, total)
 
         for i, doc in enumerate(docs, start=1):
+            if should_cancel and should_cancel():
+                raise JobCancelledError("Actualización cancelada por el usuario.")
             if on_current_doc:
                 on_current_doc(doc.nombre)
             try:
@@ -237,7 +243,6 @@ class DocumentosService:
                 doc.status = "fallido"
                 doc.error_message = str(ex)
                 db.session.commit()
-                #raise
                 
 def update_sql(doc, vector_docs) -> None:
     from .rag.PrototipoRAG import embedding_model

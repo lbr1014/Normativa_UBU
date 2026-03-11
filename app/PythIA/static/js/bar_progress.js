@@ -2,10 +2,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const progressBox = document.getElementById("scraping-progress");
   const bar = progressBox?.querySelector(".progress-bar");
   const text = progressBox?.querySelector(".progress-text");
+  const cancelButton = document.getElementById("cancel-job-button");
 
   const scrapingForm = document.getElementById("scrapingForm");
   const vectorForm = document.getElementById("vectorForm");
   const uploadForm = document.getElementById("uploadForm");
+
+  let activeJob = null;
 
   function toggleButtons(disabled) {
     uploadForm?.querySelectorAll("button").forEach((button) => {
@@ -19,28 +22,43 @@ document.addEventListener("DOMContentLoaded", () => {
     progressBox.style.display = "block";
   }
 
+  function setCancelVisible(visible) {
+    if (!cancelButton) return;
+    cancelButton.classList.toggle("d-none", !visible);
+    cancelButton.disabled = false;
+  }
+
+  function setActiveJob(type, jobId) {
+    activeJob = type && jobId ? { type, jobId: String(jobId) } : null;
+    if (activeJob) {
+      sessionStorage.setItem("admin_active_job_type", activeJob.type);
+      sessionStorage.setItem("admin_active_job_id", activeJob.jobId);
+      setCancelVisible(true);
+      return;
+    }
+
+    sessionStorage.removeItem("admin_active_job_type");
+    sessionStorage.removeItem("admin_active_job_id");
+    setCancelVisible(false);
+  }
+
   function setUIRunning(message) {
     showProgressBox();
-
     if (text) {
       text.textContent = message;
     }
-
     if (bar) {
       bar.style.animation = "none";
       bar.style.width = "0%";
     }
-
     toggleButtons(true);
   }
 
   function setUIProgress(percent, message) {
     if (!progressBox || !bar) return;
-
     showProgressBox();
     bar.style.animation = "none";
     bar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
-
     if (text) {
       text.textContent = message;
     }
@@ -48,21 +66,26 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function setUIDone(message) {
     setUIProgress(100, message);
+    setActiveJob(null, null);
     window.setTimeout(() => window.location.reload(), 600);
+  }
+
+  function setUICancelled(message) {
+    setUIProgress(0, message);
+    setActiveJob(null, null);
+    toggleButtons(false);
   }
 
   function setUIFailed(message) {
     showProgressBox();
-
     if (bar) {
       bar.style.animation = "none";
       bar.style.width = "100%";
     }
-
     if (text) {
       text.textContent = message;
     }
-
+    setActiveJob(null, null);
     toggleButtons(false);
   }
 
@@ -72,11 +95,18 @@ document.addEventListener("DOMContentLoaded", () => {
       ...options,
     });
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+    let data = {};
+    try {
+      data = await response.json();
+    } catch (error) {
+      data = {};
     }
 
-    return response.json();
+    if (!response.ok) {
+      throw new Error(data.error || `HTTP ${response.status}`);
+    }
+
+    return data;
   }
 
   async function pollVectorJob(jobId) {
@@ -98,10 +128,13 @@ document.addEventListener("DOMContentLoaded", () => {
           continue;
         }
 
-        sessionStorage.removeItem("vector_job_id");
-
         if (status === "done") {
           setUIDone("Base vectorial actualizada.");
+          return;
+        }
+
+        if (status === "cancelled") {
+          setUICancelled("Actualizacion vectorial cancelada.");
           return;
         }
 
@@ -133,7 +166,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      sessionStorage.setItem("vector_job_id", String(data.job_id));
+      setActiveJob("vector", data.job_id);
       setUIProgress(0, "Actualizando base vectorial... (0%)");
       pollVectorJob(data.job_id);
     } catch (error) {
@@ -157,10 +190,13 @@ document.addEventListener("DOMContentLoaded", () => {
           continue;
         }
 
-        sessionStorage.removeItem("scraping_job_id");
-
         if (status === "done") {
           setUIDone("Web scraping completado.");
+          return;
+        }
+
+        if (status === "cancelled") {
+          setUICancelled("Web scraping cancelado.");
           return;
         }
 
@@ -192,7 +228,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
-      sessionStorage.setItem("scraping_job_id", String(data.job_id));
+      setActiveJob("scraping", data.job_id);
       setUIProgress(0, "Web scraping... (0%)");
       pollScrapingJob(data.job_id);
     } catch (error) {
@@ -200,18 +236,37 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  vectorForm?.addEventListener("submit", startVectorUpdate);
-  scrapingForm?.addEventListener("submit", startScraping);
+  async function cancelActiveJob() {
+    if (!activeJob || !cancelButton) return;
 
-  const savedVectorJobId = sessionStorage.getItem("vector_job_id");
-  if (savedVectorJobId) {
-    setUIRunning("Reanudando seguimiento de la actualización...");
-    pollVectorJob(savedVectorJobId);
+    cancelButton.disabled = true;
+    try {
+      if (activeJob.type === "vector") {
+        await fetchJson(`/admin/vector-db/cancel/${activeJob.jobId}`, { method: "POST" });
+        setUIProgress(bar ? parseInt(bar.style.width || "0", 10) || 0 : 0, "Cancelando actualizacion vectorial...");
+      } else if (activeJob.type === "scraping") {
+        await fetchJson(`/admin/documents/web_scraping/cancel/${activeJob.jobId}`, { method: "POST" });
+        setUIProgress(bar ? parseInt(bar.style.width || "0", 10) || 0 : 0, "Cancelando web scraping...");
+      }
+    } catch (error) {
+      cancelButton.disabled = false;
+      setUIFailed(error.message || "No se pudo cancelar el proceso.");
+    }
   }
 
-  const savedScrapingJobId = sessionStorage.getItem("scraping_job_id");
-  if (savedScrapingJobId) {
-    setUIRunning("Reanudando seguimiento del web scraping...");
-    pollScrapingJob(savedScrapingJobId);
+  vectorForm?.addEventListener("submit", startVectorUpdate);
+  scrapingForm?.addEventListener("submit", startScraping);
+  cancelButton?.addEventListener("click", cancelActiveJob);
+
+  const savedType = sessionStorage.getItem("admin_active_job_type");
+  const savedId = sessionStorage.getItem("admin_active_job_id");
+  if (savedType && savedId) {
+    setActiveJob(savedType, savedId);
+    setUIRunning("Reanudando seguimiento del proceso...");
+    if (savedType === "vector") {
+      pollVectorJob(savedId);
+    } else if (savedType === "scraping") {
+      pollScrapingJob(savedId);
+    }
   }
 });

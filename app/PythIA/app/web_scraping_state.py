@@ -15,6 +15,7 @@ class WebScrapingSate(db.Model):
 
     progress = db.Column(db.Integer, nullable=False, default=0)
     message = db.Column(db.String(255), nullable=True)
+    cancel_requested = db.Column(db.Boolean, nullable=False, default=False, index=True)
 
     error = db.Column(db.Text, nullable=True)
 

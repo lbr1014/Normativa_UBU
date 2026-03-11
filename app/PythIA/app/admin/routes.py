@@ -1,31 +1,32 @@
-from flask import render_template, redirect, url_for, abort, request, jsonify, current_app
-from flask_login import login_required, current_user
-from pathlib import Path
-import os
-import sys
-import subprocess
 from datetime import datetime
+import os
+from pathlib import Path
+import subprocess
+import sys
 from zoneinfo import ZoneInfo
+
+from flask import abort, current_app, jsonify, redirect, render_template, request, url_for
+from flask_login import current_user, login_required
 
 from . import admin_bp
 from ..decorators import admin_required
-from ..usuario import User
-from ..forms import AdminCreateUserForm
+from ..documentos import DocumentosService, JobCancelledError
 from ..extensions import db
-from ..rag.PrototipoRAG import index_pliegos_dir, qdrant_delete_by_filename, qdrant_count_chunks_by_filename
-
-from ..documentos import DocumentosService
-
+from ..forms import AdminCreateUserForm
+from ..rag.PrototipoRAG import (
+    index_pliegos_dir,
+    qdrant_count_chunks_by_filename,
+    qdrant_delete_by_filename,
+)
+from ..usuario import User
+from ..vector_update_state import VectorUpdateState, send_update_finished_email
+from ..web_scraping_state import WebScrapingSate, send_scraping_finished_email
 from app.async_tasks import executor
-from app.vector_update_state import VectorUpdateState
-from app.web_scraping_state import WebScrapingSate
-from app.web_scraping_state import send_scraping_finished_email
-from app.vector_update_state import send_update_finished_email
 
 
-ALLOWED_EXT = {".pdf"}
 USERS = "admin.users"
 DOCUMENTS = "admin.documents_list_page"
+
 
 @admin_bp.route("/users")
 @login_required
@@ -33,6 +34,7 @@ DOCUMENTS = "admin.documents_list_page"
 def users():
     users = User.query.order_by(User.id.asc()).all()
     return render_template("users.html", users=users)
+
 
 @admin_bp.route("/users/<int:user_id>", methods=["POST"])
 @login_required
@@ -48,6 +50,7 @@ def change_type(user_id):
     db.session.commit()
     return redirect(url_for(USERS))
 
+
 @admin_bp.route("/users/<int:user_id>/delete", methods=["POST"])
 @login_required
 @admin_required
@@ -61,6 +64,7 @@ def delete_user(user_id):
     db.session.delete(user)
     db.session.commit()
     return redirect(url_for(USERS))
+
 
 @admin_bp.route("/users/add", methods=["GET", "POST"])
 @login_required
@@ -88,10 +92,21 @@ def create_user():
 
     return render_template("admin_create_user.html", form=form)
 
+
 def pliegos_dir() -> Path:
     base = Path(current_app.config.get("DOCS_DIR", "/data/pliegos")).resolve()
     base.mkdir(parents=True, exist_ok=True)
     return base
+
+
+def documentos_service() -> DocumentosService:
+    return DocumentosService(
+        pliegos_dir(),
+        index_pliegos_dir=index_pliegos_dir,
+        delete_chunks=qdrant_delete_by_filename,
+        count_chunks=qdrant_count_chunks_by_filename,
+    )
+
 
 @admin_bp.post("/documents/upload")
 @admin_required
@@ -103,6 +118,7 @@ def upload_documents():
     documentos_service().save_uploads(files)
     return redirect(url_for(DOCUMENTS))
 
+
 @admin_bp.post("/vector-db/update")
 @login_required
 @admin_required
@@ -111,88 +127,121 @@ def update_vector_db():
         status="queued",
         progress=0,
         current_doc=None,
+        cancel_requested=False,
         error=None,
     )
     db.session.add(job)
     db.session.commit()
-    
+
     app_obj = current_app._get_current_object()
-    executor.submit(documentos_async, app_obj, job.id,  current_user.email)
-    
+    executor.submit(documentos_async, app_obj, job.id, current_user.email)
+
     return jsonify({"job_id": job.id}), 202
 
-def documentos_service() -> DocumentosService:
-    return DocumentosService(
-        pliegos_dir(),
-        index_pliegos_dir=index_pliegos_dir,
-        delete_chunks=qdrant_delete_by_filename,
-        count_chunks=qdrant_count_chunks_by_filename,
-    )
+
+@admin_bp.post("/vector-db/cancel/<int:job_id>")
+@login_required
+@admin_required
+def cancel_vector_db(job_id: int):
+    job = VectorUpdateState.query.get_or_404(job_id)
+
+    if job.status in {"done", "failed", "cancelled"}:
+        return jsonify({"status": job.status, "message": "El job ya ha terminado."}), 200
+
+    job.cancel_requested = True
+    if job.status == "queued":
+        job.status = "cancelled"
+        job.finished_at = datetime.now(ZoneInfo("Europe/Madrid"))
+    db.session.commit()
+
+    return jsonify({"status": job.status, "message": "Cancelando actualizacion vectorial..."}), 202
+
 
 def documentos_async(app, job_id: int, user_email: str) -> None:
-    """
-    Actualizar la base de datos vectorial de manera asincrona.
-    """
-    ZONE = datetime.now(ZoneInfo("Europe/Madrid"))
+    zone_now = datetime.now(ZoneInfo("Europe/Madrid"))
     with app.app_context():
         job = VectorUpdateState.query.get(job_id)
         if not job:
             return
-        
+
         try:
+            if job.cancel_requested:
+                job.status = "cancelled"
+                job.finished_at = zone_now
+                db.session.commit()
+                return
+
             job.status = "running"
-            job.started_at = ZONE
+            job.started_at = zone_now
             job.progress = job.progress or 0
             job.error = None
             db.session.commit()
-            
+
+            def should_cancel() -> bool:
+                db.session.refresh(job)
+                return bool(job.cancel_requested)
+
             def on_current_doc(nombre: str):
+                if should_cancel():
+                    raise JobCancelledError("Actualizacion cancelada por el usuario.")
                 job.current_doc = nombre
                 db.session.commit()
 
             def on_progress(i: int, total: int):
-                if total and total > 0:
-                    job.progress = int((i / total) * 100)
-                else:
-                    job.progress = 100
+                if should_cancel():
+                    raise JobCancelledError("Actualizacion cancelada por el usuario.")
+                job.progress = int((i / total) * 100) if total and total > 0 else 100
                 db.session.commit()
-            
+
             documentos_service().update_vector_db(
                 on_progress=on_progress,
                 on_current_doc=on_current_doc,
+                should_cancel=should_cancel,
             )
-            
+
+            db.session.refresh(job)
+            if job.cancel_requested:
+                job.status = "cancelled"
+                job.finished_at = datetime.now(ZoneInfo("Europe/Madrid"))
+                db.session.commit()
+                return
+
             job.status = "done"
             job.progress = 100
-            job.finished_at = ZONE
+            job.finished_at = zone_now
             db.session.commit()
-            
+
             send_update_finished_email(
                 to_email=user_email,
                 ok=True,
-                message="La actualización de qdrant ha terminado correctamente.",
+                message="La actualizacion de qdrant ha terminado correctamente.",
                 job_id=job.id,
             )
-
-            
-        except Exception as e:
-            # Marca failed y guarda error
+        except JobCancelledError:
+            db.session.rollback()
+            job = VectorUpdateState.query.get(job_id)
+            if job:
+                job.status = "cancelled"
+                job.error = None
+                job.finished_at = datetime.now(ZoneInfo("Europe/Madrid"))
+                db.session.commit()
+        except Exception as exc:
             try:
                 job.status = "failed"
-                job.error = str(e)
-                job.finished_at = ZONE
+                job.error = str(exc)
+                job.finished_at = zone_now
                 db.session.commit()
                 send_update_finished_email(
                     to_email=user_email,
                     ok=False,
-                    message=f"La actualización de qdrant ha fallado: {job.error}",
+                    message=f"La actualizacion de qdrant ha fallado: {job.error}",
                     job_id=job.id,
                 )
-                
             finally:
                 app.logger.exception("Error en documentos_async (update_vector_db)")
         finally:
             db.session.remove()
+
 
 @admin_bp.get("/vector-db/status/<int:job_id>")
 @admin_required
@@ -201,27 +250,28 @@ def vector_db_status(job_id: int):
     if not job:
         abort(404)
 
-    return jsonify({
-        "status": job.status,
-        "progress": job.progress,
-        "current_doc": job.current_doc,
-        "error": job.error,
-    })            
+    return jsonify(
+        {
+            "status": job.status,
+            "progress": job.progress,
+            "current_doc": job.current_doc,
+            "error": job.error,
+            "cancel_requested": bool(job.cancel_requested),
+        }
+    )
+
 
 @admin_bp.get("/documents/list")
 @login_required
 @admin_required
 def documents_list_page():
-    """
-    Página para ver los documentos PDF cargados y poder borrarlos.
-    """
     page = request.args.get("page", 1, type=int)
     per_page = 10
 
     svc = documentos_service()
     svc.sync_from_folder()
     svc.purge_missing_files()
-    
+
     pagination = svc.list_documents_paginated(page, per_page)
     docs = pagination.items
 
@@ -238,9 +288,6 @@ def documents_list_page():
 @login_required
 @admin_required
 def delete_document(doc_id: int):
-    """
-    Borra un PDF de la carpeta pliegos y elimina todos sus chunks en Qdrant.
-    """
     try:
         documentos_service().delete_document(doc_id)
     except Exception:
@@ -249,14 +296,18 @@ def delete_document(doc_id: int):
 
     return redirect(url_for(DOCUMENTS))
 
+
 @admin_bp.post("/documents/web_scraping")
 @login_required
 @admin_required
 def web_scraping_documents():
-    """
-    Lanza el scraping con Playwright y guarda los PDFs en app/rag/pliegos.
-    """
-    job = WebScrapingSate(status="queued", progress=0, message="En cola", error=None)
+    job = WebScrapingSate(
+        status="queued",
+        progress=0,
+        message="En cola",
+        cancel_requested=False,
+        error=None,
+    )
     db.session.add(job)
     db.session.commit()
 
@@ -265,6 +316,26 @@ def web_scraping_documents():
 
     return jsonify({"job_id": job.id}), 202
 
+
+@admin_bp.post("/documents/web_scraping/cancel/<int:job_id>")
+@login_required
+@admin_required
+def cancel_web_scraping(job_id: int):
+    job = WebScrapingSate.query.get_or_404(job_id)
+
+    if job.status in {"done", "failed", "cancelled"}:
+        return jsonify({"status": job.status, "message": "El job ya ha terminado."}), 200
+
+    job.cancel_requested = True
+    job.message = "Cancelando scraping..."
+    if job.status == "queued":
+        job.status = "cancelled"
+        job.finished_at = datetime.now(ZoneInfo("Europe/Madrid"))
+    db.session.commit()
+
+    return jsonify({"status": job.status, "message": job.message}), 202
+
+
 @admin_bp.get("/documents/web_scraping/status/<int:job_id>")
 @admin_required
 def web_scraping_status(job_id: int):
@@ -272,15 +343,19 @@ def web_scraping_status(job_id: int):
     if not job:
         abort(404)
 
-    return jsonify({
-        "status": job.status,
-        "progress": job.progress,
-        "message": job.message,
-        "error": job.error,
-    })
-    
+    return jsonify(
+        {
+            "status": job.status,
+            "progress": job.progress,
+            "message": job.message,
+            "error": job.error,
+            "cancel_requested": bool(job.cancel_requested),
+        }
+    )
+
+
 def scraping_async(app, job_id: int, user_email: str) -> None:
-    ZONE = datetime.now(ZoneInfo("Europe/Madrid"))
+    zone_now = datetime.now(ZoneInfo("Europe/Madrid"))
 
     with app.app_context():
         job = WebScrapingSate.query.get(job_id)
@@ -288,16 +363,22 @@ def scraping_async(app, job_id: int, user_email: str) -> None:
             return
 
         try:
+            if job.cancel_requested:
+                job.status = "cancelled"
+                job.message = "Scraping cancelado."
+                job.finished_at = zone_now
+                db.session.commit()
+                return
+
             job.status = "running"
-            job.started_at = ZONE
+            job.started_at = zone_now
             job.progress = 0
-            job.message = "Iniciando scraping…"
+            job.message = "Iniciando scraping..."
             job.error = None
             db.session.commit()
 
             base_pliegos = pliegos_dir()
             root = Path(current_app.root_path)
-
             scraper_dir = root / "web_scraping"
             script_1 = scraper_dir / "PliegosPlaywrightAsincrono.py"
             script_2 = scraper_dir / "DescargarPliegos.py"
@@ -308,41 +389,84 @@ def scraping_async(app, job_id: int, user_email: str) -> None:
             env["PLIEGOS_INPUT_JSON"] = str(cwd / "resultados_playwright_asincrono_servidor.json")
             env["PLIEGOS_OUTPUT_JSON"] = str(cwd / "pliegos_pdfs.json")
 
-            job.message = "Ejecutando script 1/2…"
-            db.session.commit()
-            subprocess.run([sys.executable, str(script_1)], cwd=str(cwd), env=env, check=True)
+            def should_cancel() -> bool:
+                db.session.refresh(job)
+                return bool(job.cancel_requested)
 
-            job.progress = 50
-            job.message = "Ejecutando script 2/2…"
-            db.session.commit()
-            subprocess.run([sys.executable, str(script_2)], cwd=str(cwd), env=env, check=True)
+            def run_script_with_cancel(script_path: Path, progress: int | None = None, message: str | None = None) -> None:
+                if should_cancel():
+                    raise JobCancelledError("Scraping cancelado por el usuario.")
+
+                if progress is not None:
+                    job.progress = progress
+                if message is not None:
+                    job.message = message
+                db.session.commit()
+
+                proc = subprocess.Popen([sys.executable, str(script_path)], cwd=str(cwd), env=env)
+                while True:
+                    if should_cancel():
+                        proc.terminate()
+                        try:
+                            proc.wait(timeout=10)
+                        except subprocess.TimeoutExpired:
+                            proc.kill()
+                            proc.wait()
+                        raise JobCancelledError("Scraping cancelado por el usuario.")
+
+                    code = proc.poll()
+                    if code is not None:
+                        if code != 0:
+                            raise subprocess.CalledProcessError(code, [sys.executable, str(script_path)])
+                        return
+
+                    try:
+                        proc.wait(timeout=1)
+                    except subprocess.TimeoutExpired:
+                        continue
+
+            run_script_with_cancel(script_1, message="Ejecutando script 1/2...")
+            run_script_with_cancel(script_2, progress=50, message="Ejecutando script 2/2...")
+
+            if should_cancel():
+                raise JobCancelledError("Scraping cancelado por el usuario.")
 
             job.progress = 90
-            job.message = "Sincronizando PDFs en la base de datos…"
+            job.message = "Sincronizando PDFs en la base de datos..."
             db.session.commit()
             documentos_service().sync_from_folder()
+
+            if should_cancel():
+                raise JobCancelledError("Scraping cancelado por el usuario.")
 
             job.status = "done"
             job.progress = 100
             job.message = "Scraping terminado."
-            job.finished_at = ZONE
+            job.finished_at = zone_now
             db.session.commit()
-            
+
             send_scraping_finished_email(
                 to_email=user_email,
                 ok=True,
                 message="El scraping ha terminado correctamente.",
                 job_id=job.id,
             )
-
-        except Exception as e:
+        except JobCancelledError:
+            db.session.rollback()
+            job = WebScrapingSate.query.get(job_id)
+            if job:
+                job.status = "cancelled"
+                job.message = "Scraping cancelado."
+                job.error = None
+                job.finished_at = datetime.now(ZoneInfo("Europe/Madrid"))
+                db.session.commit()
+        except Exception as exc:
             try:
                 job.status = "failed"
-                job.error = str(e)
-                job.message = "Falló el scraping."
-                job.finished_at = ZONE
+                job.error = str(exc)
+                job.message = "Fallo el scraping."
+                job.finished_at = zone_now
                 db.session.commit()
-                
                 send_scraping_finished_email(
                     to_email=user_email,
                     ok=False,
