@@ -7,202 +7,211 @@ document.addEventListener("DOMContentLoaded", () => {
   const vectorForm = document.getElementById("vectorForm");
   const uploadForm = document.getElementById("uploadForm");
 
+  function toggleButtons(disabled) {
+    uploadForm?.querySelectorAll("button").forEach((button) => {
+      button.disabled = disabled;
+    });
+  }
+
+  function showProgressBox() {
+    if (!progressBox) return;
+    progressBox.classList.remove("d-none");
+    progressBox.style.display = "block";
+  }
+
   function setUIRunning(message) {
-    if (progressBox) progressBox.style.display = "block";
-    if (text) text.textContent = message;
+    showProgressBox();
+
+    if (text) {
+      text.textContent = message;
+    }
+
     if (bar) {
       bar.style.animation = "none";
       bar.style.width = "0%";
     }
-    uploadForm?.querySelectorAll("button").forEach((b) => (b.disabled = true));
-    scrapingForm?.querySelectorAll("button").forEach((b) => (b.disabled = true));
-    vectorForm?.querySelectorAll("button").forEach((b) => (b.disabled = true));  }
+
+    toggleButtons(true);
+  }
 
   function setUIProgress(percent, message) {
-    if (!progressBox || !bar || !text) return;
-    progressBox.style.display = "block";
+    if (!progressBox || !bar) return;
+
+    showProgressBox();
     bar.style.animation = "none";
     bar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
-    text.textContent = message;
+
+    if (text) {
+      text.textContent = message;
+    }
   }
 
   function setUIDone(message) {
     setUIProgress(100, message);
-    setTimeout(() => window.location.reload(), 600);
+    window.setTimeout(() => window.location.reload(), 600);
   }
 
   function setUIFailed(message) {
-    if (!progressBox || !text) return;
-    progressBox.style.display = "block";
+    showProgressBox();
+
     if (bar) {
       bar.style.animation = "none";
       bar.style.width = "100%";
     }
-    text.textContent = message;
-    uploadForm?.querySelectorAll("button").forEach((b) => (b.disabled = false));
-    scrapingForm?.querySelectorAll("button").forEach((b) => (b.disabled = false));
-    vectorForm?.querySelectorAll("button").forEach((b) => (b.disabled = false));
+
+    if (text) {
+      text.textContent = message;
+    }
+
+    toggleButtons(false);
+  }
+
+  async function fetchJson(url, options = {}) {
+    const response = await fetch(url, {
+      headers: { Accept: "application/json" },
+      ...options,
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    return response.json();
   }
 
   async function pollVectorJob(jobId) {
     const statusUrl = `/admin/vector-db/status/${jobId}`;
 
     while (true) {
-      const r = await fetch(statusUrl, { headers: { "Accept": "application/json" } });
-      if (!r.ok) {
+      try {
+        const data = await fetchJson(statusUrl);
+        const status = data.status;
+        const progress = Number(data.progress ?? 0);
+        const currentDoc = data.current_doc;
+
+        if (status === "running" || status === "queued") {
+          const message = currentDoc
+            ? `Actualizando base vectorial... (${progress}%) - ${currentDoc}`
+            : `Actualizando base vectorial... (${progress}%)`;
+          setUIProgress(progress, message);
+          await new Promise((resolve) => window.setTimeout(resolve, 1000));
+          continue;
+        }
+
+        sessionStorage.removeItem("vector_job_id");
+
+        if (status === "done") {
+          setUIDone("Base vectorial actualizada.");
+          return;
+        }
+
+        if (status === "failed") {
+          const error = data.error ? ` Error: ${data.error}` : "";
+          setUIFailed(`Fallo la actualizacion de la base vectorial.${error}`);
+          return;
+        }
+
+        setUIFailed("Estado de actualizacion desconocido.");
+        return;
+      } catch (error) {
         setUIFailed("No se pudo consultar el estado del job.");
         return;
       }
-
-      const data = await r.json();
-      const status = data.status;
-      const progress = Number(data.progress ?? 0);
-      const currentDoc = data.current_doc;
-
-      if (status === "running" || status === "queued") {
-        const msg = currentDoc
-          ? `Actualizando base vectorial… (${progress}%) — ${currentDoc}`
-          : `Actualizando base vectorial… (${progress}%)`;
-        setUIProgress(progress, msg);
-        await new Promise((res) => setTimeout(res, 1000));
-        continue;
-      }
-
-      if (status === "done") {
-        sessionStorage.removeItem("vector_job_id");
-        setUIDone("Base vectorial actualizada.");
-        return;
-      }
-
-      if (status === "failed") {
-        sessionStorage.removeItem("vector_job_id");
-        const err = data.error ? ` Error: ${data.error}` : "";
-        setUIFailed(`Falló la actualización de la base vectorial.${err}`);
-        return;
-      }
-
-      // Estado desconocido
-      setUIFailed("Estado de job desconocido.");
-      return;
     }
   }
 
-  async function startVectorUpdate(e) {
-    e.preventDefault();
+  async function startVectorUpdate(event) {
+    event.preventDefault();
     if (!vectorForm) return;
 
-    setUIRunning("Lanzando actualización de base vectorial…");
+    try {
+      setUIRunning("Lanzando actualizacion de base vectorial...");
+      const data = await fetchJson(vectorForm.action, { method: "POST" });
 
-    const r = await fetch(vectorForm.action, {
-      method: "POST",
-      headers: { "Accept": "application/json" }
-    });
+      if (!data.job_id) {
+        setUIFailed("No se recibio el identificador del job.");
+        return;
+      }
 
-    if (!r.ok) {
-      setUIFailed("No se pudo iniciar la actualización.");
-      return;
+      sessionStorage.setItem("vector_job_id", String(data.job_id));
+      setUIProgress(0, "Actualizando base vectorial... (0%)");
+      pollVectorJob(data.job_id);
+    } catch (error) {
+      setUIFailed("No se pudo iniciar la actualizacion.");
     }
-
-    const data = await r.json();
-    if (!data.job_id) {
-      setUIFailed("No se recibió job_id.");
-      return;
-    }
-
-    // Guarda el job para poder recuperarlo si se recarga
-    sessionStorage.setItem("vector_job_id", String(data.job_id));
-
-    setUIProgress(0, "Actualizando base vectorial… (0%)");
-    pollVectorJob(data.job_id);
   }
 
   async function pollScrapingJob(jobId) {
     const statusUrl = `/admin/documents/web_scraping/status/${jobId}`;
 
     while (true) {
-      const r = await fetch(statusUrl, { headers: { "Accept": "application/json" } });
-      if (!r.ok) {
+      try {
+        const data = await fetchJson(statusUrl);
+        const status = data.status;
+        const progress = Number(data.progress ?? 0);
+        const message = data.message || `Web scraping... (${progress}%)`;
+
+        if (status === "running" || status === "queued") {
+          setUIProgress(progress, message);
+          await new Promise((resolve) => window.setTimeout(resolve, 1000));
+          continue;
+        }
+
+        sessionStorage.removeItem("scraping_job_id");
+
+        if (status === "done") {
+          setUIDone("Web scraping completado.");
+          return;
+        }
+
+        if (status === "failed") {
+          const error = data.error ? ` Error: ${data.error}` : "";
+          setUIFailed(`Fallo el web scraping.${error}`);
+          return;
+        }
+
+        setUIFailed("Estado de scraping desconocido.");
+        return;
+      } catch (error) {
         setUIFailed("No se pudo consultar el estado del scraping.");
         return;
       }
-
-      const data = await r.json();
-      const status = data.status;
-      const progress = Number(data.progress ?? 0);
-      const msg = data.message || `Web scraping… (${progress}%)`;
-
-      if (status === "running" || status === "queued") {
-        setUIProgress(progress, msg);
-        await new Promise((res) => setTimeout(res, 1000));
-        continue;
-      }
-
-      if (status === "done") {
-        sessionStorage.removeItem("scraping_job_id");
-        setUIDone("Web scraping completado.");
-        return;
-      }
-
-      if (status === "failed") {
-        sessionStorage.removeItem("scraping_job_id");
-        const err = data.error ? ` Error: ${data.error}` : "";
-        setUIFailed(`Falló el web scraping.${err}`);
-        return;
-      }
-
-      setUIFailed("Estado de scraping desconocido.");
-      return;
     }
   }
 
-  async function startScraping(e) {
-    e.preventDefault();
+  async function startScraping(event) {
+    event.preventDefault();
     if (!scrapingForm) return;
 
-    setUIRunning("Lanzando web scraping…");
+    try {
+      setUIRunning("Lanzando web scraping...");
+      const data = await fetchJson(scrapingForm.action, { method: "POST" });
 
-    const r = await fetch(scrapingForm.action, {
-      method: "POST",
-      headers: { "Accept": "application/json" }
-    });
+      if (!data.job_id) {
+        setUIFailed("No se recibio el identificador del scraping.");
+        return;
+      }
 
-    if (!r.ok) {
+      sessionStorage.setItem("scraping_job_id", String(data.job_id));
+      setUIProgress(0, "Web scraping... (0%)");
+      pollScrapingJob(data.job_id);
+    } catch (error) {
       setUIFailed("No se pudo iniciar el web scraping.");
-      return;
     }
-
-    const data = await r.json();
-    if (!data.job_id) {
-      setUIFailed("No se recibió job_id del scraping.");
-      return;
-    }
-
-    sessionStorage.setItem("scraping_job_id", String(data.job_id));
-    setUIProgress(0, "Web scraping… (0%)");
-    pollScrapingJob(data.job_id);
   }
 
-  if (vectorForm) {
-    vectorForm.addEventListener("submit", startVectorUpdate);
-  }
+  vectorForm?.addEventListener("submit", startVectorUpdate);
+  scrapingForm?.addEventListener("submit", startScraping);
 
-  // Si había un job activo guardado, reanuda polling
   const savedVectorJobId = sessionStorage.getItem("vector_job_id");
   if (savedVectorJobId) {
-    setUIRunning("Reanudando seguimiento de la actualización…");
+    setUIRunning("Reanudando seguimiento de la actualización...");
     pollVectorJob(savedVectorJobId);
-  }
-
-  // WEB SCRAPING
-  if (scrapingForm) {
-    scrapingForm.addEventListener("submit", startScraping);
   }
 
   const savedScrapingJobId = sessionStorage.getItem("scraping_job_id");
   if (savedScrapingJobId) {
-    setUIRunning("Reanudando seguimiento del web scraping…");
+    setUIRunning("Reanudando seguimiento del web scraping...");
     pollScrapingJob(savedScrapingJobId);
   }
-
-
 });

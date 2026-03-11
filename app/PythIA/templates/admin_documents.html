@@ -83,7 +83,7 @@
           <div class="progress upload-progress" role="progressbar" aria-label="Progreso scraping">
             <div class="progress-bar progress-bar-striped progress-bar-animated w-100"></div>
           </div>
-          <div class="small text-white-50 mt-2 text-center">
+          <div class="progress-text small text-white-50 mt-2 text-center" aria-live="polite">
             Ejecutando web scraping...
           </div>
         </div>
@@ -159,6 +159,20 @@
             </table>
           </div>
         </div>
+
+        {% if total_pages > 1 %}
+          <div class="pagination">
+            {% if page > 1 %}
+              <a class="page-link" href="{{ url_for('admin.documents_list_page', page=page-1) }}">&laquo; Anterior</a>
+            {% endif %}
+
+            <span class="page-info">Pagina {{ page }} de {{ total_pages }} ({{ total_docs }} documentos)</span>
+
+            {% if page < total_pages %}
+              <a class="page-link" href="{{ url_for('admin.documents_list_page', page=page+1) }}">Siguiente &raquo;</a>
+            {% endif %}
+          </div>
+        {% endif %}
       {% endif %}
     </section>
   </div>
