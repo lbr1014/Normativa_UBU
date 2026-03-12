@@ -144,19 +144,33 @@
                     </td>
 
                     <td class="text-end">
-                      <form id="delete-form-{{ d.id }}"
-                            method="POST"
-                            action="{{ url_for('admin.delete_document', doc_id=d.id) }}"
-                            class="d-inline">
-                        <button type="button"
-                                class="btn btn-sm btn-danger"
-                                data-bs-toggle="modal"
-                                data-bs-target="#deleteConfirmModal"
-                                data-doc-name="{{ d.nombre }}"
-                                data-form-id="delete-form-{{ d.id }}">
-                          Borrar
-                        </button>
-                      </form>
+                      <div class="table-actions">
+                        <a href="{{ url_for('admin.view_document', doc_id=d.id) }}"
+                           class="btn btn-sm btn-outline-light"
+                           target="_blank"
+                           rel="noopener noreferrer">
+                          Ver
+                        </a>
+
+                        <a href="{{ url_for('admin.download_document', doc_id=d.id) }}"
+                           class="btn btn-sm btn-outline-light">
+                          Descargar
+                        </a>
+
+                        <form id="delete-form-{{ d.id }}"
+                              method="POST"
+                              action="{{ url_for('admin.delete_document', doc_id=d.id) }}"
+                              class="d-inline">
+                          <button type="button"
+                                  class="btn btn-sm btn-danger"
+                                  data-bs-toggle="modal"
+                                  data-bs-target="#deleteConfirmModal"
+                                  data-doc-name="{{ d.nombre }}"
+                                  data-form-id="delete-form-{{ d.id }}">
+                            Borrar
+                          </button>
+                        </form>
+                      </div>
                     </td>
                   </tr>
                 {% endfor %}

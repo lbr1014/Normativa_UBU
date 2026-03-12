@@ -181,7 +181,7 @@ class DocumentosService:
             db.session.delete(doc)
             db.session.commit()        
 
-    def update_vector_db(self, on_progress=None, on_current_doc=None, should_cancel=None) -> None:
+    def update_vector_db(self, on_progress=None, on_current_doc=None, should_cancel=None) -> dict[str, int]:
         """
         Indexa y acctualiza el estado y los chunks en la base de datos.
         """
@@ -191,6 +191,8 @@ class DocumentosService:
         docs = Documento.query.filter(Documento.status.in_(["cargado", "fallido"])).all()
 
         total = len(docs)
+        indexed = 0
+        failed = 0
         if on_progress:
             on_progress(0, total)
 
@@ -235,6 +237,7 @@ class DocumentosService:
                 
                 doc.status = "indexado"
                 db.session.commit()
+                indexed += 1
                 if on_progress:
                     on_progress(i, total)
 
@@ -243,6 +246,9 @@ class DocumentosService:
                 doc.status = "fallido"
                 doc.error_message = str(ex)
                 db.session.commit()
+                failed += 1
+
+        return {"total": total, "indexed": indexed, "failed": failed}
                 
 def update_sql(doc, vector_docs) -> None:
     from .rag.PrototipoRAG import embedding_model

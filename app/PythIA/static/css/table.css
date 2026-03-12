@@ -86,6 +86,30 @@
   color: #ffffff;
 }
 
+.table-actions{
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+
+.table-actions .btn{
+  min-width: 96px;
+}
+
+.table-actions .btn-outline-light{
+  color: #ffffff;
+  border-color: rgba(255,255,255,.45);
+  background: rgba(255,255,255,.04);
+}
+
+.table-actions .btn-outline-light:hover{
+  color: #ffffff;
+  border-color: rgba(255,255,255,.72);
+  background: rgba(255,255,255,.10);
+}
+
 .chunks-modal-panel{
   border-radius: var(--app-radius-md);
   color: #fff;
