@@ -6,6 +6,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const scrapingForm = document.getElementById("scrapingForm");
   const vectorForm = document.getElementById("vectorForm");
+  const markdownForm = document.getElementById("markdownForm");
   const uploadForm = document.getElementById("uploadForm");
 
   let activeJob = null;
@@ -174,6 +175,68 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  async function pollMarkdownJob(jobId) {
+    const statusUrl = `/admin/documents/markdown/status/${jobId}`;
+
+    while (true) {
+      try {
+        const data = await fetchJson(statusUrl);
+        const status = data.status;
+        const progress = Number(data.progress ?? 0);
+        const message = data.message || `Convirtiendo documentos a Markdown... (${progress}%)`;
+
+        if (status === "running" || status === "queued") {
+          setUIProgress(progress, message);
+          await new Promise((resolve) => window.setTimeout(resolve, 1000));
+          continue;
+        }
+
+        if (status === "done") {
+          setUIDone(data.message || "Conversion a Markdown completada.");
+          return;
+        }
+
+        if (status === "cancelled") {
+          setUICancelled(data.message || "Conversion a Markdown cancelada.");
+          return;
+        }
+
+        if (status === "failed") {
+          const error = data.error ? ` Error: ${data.error}` : "";
+          setUIFailed(`Fallo la conversion a Markdown.${error}`);
+          return;
+        }
+
+        setUIFailed("Estado de conversion desconocido.");
+        return;
+      } catch (error) {
+        setUIFailed("No se pudo consultar el estado de la conversion.");
+        return;
+      }
+    }
+  }
+
+  async function startMarkdownConversion(event) {
+    event.preventDefault();
+    if (!markdownForm) return;
+
+    try {
+      setUIRunning("Lanzando conversion a Markdown...");
+      const data = await fetchJson(markdownForm.action, { method: "POST" });
+
+      if (!data.job_id) {
+        setUIFailed("No se recibio el identificador del job.");
+        return;
+      }
+
+      setActiveJob("markdown", data.job_id);
+      setUIProgress(0, "Convirtiendo documentos a Markdown... (0%)");
+      pollMarkdownJob(data.job_id);
+    } catch (error) {
+      setUIFailed("No se pudo iniciar la conversion a Markdown.");
+    }
+  }
+
   async function pollScrapingJob(jobId) {
     const statusUrl = `/admin/documents/web_scraping/status/${jobId}`;
 
@@ -244,6 +307,9 @@ document.addEventListener("DOMContentLoaded", () => {
       if (activeJob.type === "vector") {
         await fetchJson(`/admin/vector-db/cancel/${activeJob.jobId}`, { method: "POST" });
         setUIProgress(bar ? parseInt(bar.style.width || "0", 10) || 0 : 0, "Cancelando actualizacion vectorial...");
+      } else if (activeJob.type === "markdown") {
+        await fetchJson(`/admin/documents/markdown/cancel/${activeJob.jobId}`, { method: "POST" });
+        setUIProgress(bar ? parseInt(bar.style.width || "0", 10) || 0 : 0, "Cancelando conversion a Markdown...");
       } else if (activeJob.type === "scraping") {
         await fetchJson(`/admin/documents/web_scraping/cancel/${activeJob.jobId}`, { method: "POST" });
         setUIProgress(bar ? parseInt(bar.style.width || "0", 10) || 0 : 0, "Cancelando web scraping...");
@@ -255,6 +321,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   vectorForm?.addEventListener("submit", startVectorUpdate);
+  markdownForm?.addEventListener("submit", startMarkdownConversion);
   scrapingForm?.addEventListener("submit", startScraping);
   cancelButton?.addEventListener("click", cancelActiveJob);
 
@@ -265,6 +332,8 @@ document.addEventListener("DOMContentLoaded", () => {
     setUIRunning("Reanudando seguimiento del proceso...");
     if (savedType === "vector") {
       pollVectorJob(savedId);
+    } else if (savedType === "markdown") {
+      pollMarkdownJob(savedId);
     } else if (savedType === "scraping") {
       pollScrapingJob(savedId);
     }

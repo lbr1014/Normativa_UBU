@@ -10,6 +10,7 @@ import hashlib
 from .extensions  import db
 from .chunk import Chunk
 from .embedding import Embedding
+from .consultaChunk import ConsultaChunk
 
 ALLOWED_EXT = {".pdf"}
 
@@ -50,14 +51,19 @@ class DocumentosService:
         docs_dir: Path,
         index_pliegos_dir,              
         delete_chunks,              
-        count_chunks,               
+        count_chunks,
+        markdown_dir: Path | None = None,
+        markdown_converter=None,
     ):
         self.docs_dir = docs_dir
         self.docs_dir.mkdir(parents=True, exist_ok=True)
+        self.markdown_dir = (markdown_dir or (self.docs_dir / "markdown"))
+        self.markdown_dir.mkdir(parents=True, exist_ok=True)
 
         self.index_pliegos_dir = index_pliegos_dir
         self.delete_chunks = delete_chunks
         self.count_chunks = count_chunks
+        self.markdown_converter = markdown_converter
 
     def filename(self, filename: str) -> str:
         return secure_filename(filename or "")
@@ -72,6 +78,26 @@ class DocumentosService:
     
     def list_documents_paginated(self, page: int, per_page: int):
         return Documento.query.order_by(Documento.modified_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
+
+    def markdown_path_for_filename(self, filename: str) -> Path:
+        safe = self.filename(filename)
+        if not safe:
+            raise ValueError("Nombre de archivo inválido")
+        return self.markdown_dir / f"{Path(safe).stem}.md"
+
+    def markdown_path_for_doc(self, doc: Documento) -> Path:
+        return self.markdown_path_for_filename(doc.nombre)
+
+    def has_markdown(self, doc: Documento) -> bool:
+        return self.markdown_path_for_doc(doc).exists()
+
+    def get_markdown_status_map(self, docs: Iterable[Documento]) -> dict[int, bool]:
+        return {doc.id: self.has_markdown(doc) for doc in docs}
+
+    def count_pending_markdown(self, docs: Iterable[Documento] | None = None) -> int:
+        if docs is None:
+            docs = Documento.query.all()
+        return sum(1 for doc in docs if not self.has_markdown(doc))
 
     def save_uploads(self, files: Iterable) -> None:
         """
@@ -111,10 +137,12 @@ class DocumentosService:
         deleted = 0
         for doc in Documento.query.all():
             if not Path(doc.path).exists():
+                self.delete_markdown_file(doc)
                 try:
                     self.delete_chunks(doc.nombre) 
                 except Exception:
                     pass
+                self.delete_document_relations(doc)
                 db.session.delete(doc)
                 deleted += 1
 
@@ -167,6 +195,8 @@ class DocumentosService:
             self.delete_chunks(safe_name)
         except Exception:
             pass
+
+        self.delete_document_relations(doc)
         
         # Borra fichero
         try:
@@ -175,11 +205,77 @@ class DocumentosService:
                 pdf_path.unlink()
         except Exception:
             pass
+
+        self.delete_markdown_file(doc)
         
         # Borrra base de datos        
         if doc:
             db.session.delete(doc)
-            db.session.commit()        
+            db.session.commit()
+
+    def delete_markdown_file(self, doc: Documento) -> None:
+        try:
+            md_path = self.markdown_path_for_doc(doc)
+            if md_path.exists():
+                md_path.unlink()
+        except Exception:
+            pass
+
+    def delete_document_relations(self, doc: Documento) -> None:
+        chunk_ids_subq = db.session.query(Chunk.id).filter(Chunk.document_id == doc.id).subquery()
+
+        ConsultaChunk.query.filter(
+            ConsultaChunk.chunk_id.in_(chunk_ids_subq)
+        ).delete(synchronize_session=False)
+        db.session.commit()
+
+        Embedding.query.filter(
+            Embedding.chunk_id.in_(chunk_ids_subq)
+        ).delete(synchronize_session=False)
+        db.session.commit()
+
+        Chunk.query.filter(Chunk.document_id == doc.id).delete(synchronize_session=False)
+        db.session.commit()
+
+    def convert_document_to_markdown(self, doc: Documento, on_page_start=None) -> bool:
+        if self.has_markdown(doc):
+            return False
+        if self.markdown_converter is None:
+            raise RuntimeError("No hay conversor de Markdown configurado.")
+
+        pdf_path = Path(doc.path)
+        if not pdf_path.exists():
+            raise FileNotFoundError(f"PDF no existe en contenedor: {pdf_path}")
+
+        self.markdown_converter(pdf_path, self.markdown_dir, on_page_start=on_page_start)
+        return True
+
+    def convert_pending_to_markdown(self, on_progress=None, on_current_doc=None, should_cancel=None, on_page_start=None) -> dict[str, int]:
+        converted = 0
+        skipped = 0
+
+        docs = Documento.query.order_by(Documento.modified_at.desc()).all()
+        total = len(docs)
+        if on_progress:
+            on_progress(0, total)
+
+        for i, doc in enumerate(docs, start=1):
+            if should_cancel and should_cancel():
+                raise JobCancelledError("Conversión a Markdown cancelada por el usuario.")
+            if on_current_doc:
+                on_current_doc(doc.nombre)
+            if self.convert_document_to_markdown(doc, on_page_start=on_page_start):
+                converted += 1
+            else:
+                skipped += 1
+            if on_progress:
+                on_progress(i, total)
+
+        return {
+            "converted": converted,
+            "skipped": skipped,
+            "total": total,
+        }
 
     def update_vector_db(self, on_progress=None, on_current_doc=None, should_cancel=None) -> dict[str, int]:
         """
@@ -219,6 +315,11 @@ class DocumentosService:
                 chunk_ids_subq = db.session.query(Chunk.id).filter(Chunk.document_id == doc.id).subquery()
 
                 # borrar embeddings cuyo chunk_id esté en esos chunks
+                ConsultaChunk.query.filter(
+                    ConsultaChunk.chunk_id.in_(chunk_ids_subq)
+                ).delete(synchronize_session=False)
+                db.session.commit()
+
                 Embedding.query.filter(Embedding.chunk_id.in_(chunk_ids_subq)).delete(synchronize_session=False)
                 db.session.commit()
 

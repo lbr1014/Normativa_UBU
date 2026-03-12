@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential gcc \
     libpq-dev \
     python3-dev \
+    poppler-utils \
     curl \
  && rm -rf /var/lib/apt/lists/*
 

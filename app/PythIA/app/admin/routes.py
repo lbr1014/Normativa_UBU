@@ -13,6 +13,7 @@ from ..decorators import admin_required
 from ..documentos import DocumentosService, Documento, JobCancelledError
 from ..extensions import db
 from ..forms import AdminCreateUserForm
+from ..markdown_conversion_state import MarkdownConversionState
 from ..rag.PrototipoRAG import (
     index_pliegos_dir,
     qdrant_count_chunks_by_filename,
@@ -105,11 +106,26 @@ def documentos_service() -> DocumentosService:
         index_pliegos_dir=index_pliegos_dir,
         delete_chunks=qdrant_delete_by_filename,
         count_chunks=qdrant_count_chunks_by_filename,
+        markdown_dir=markdown_dir(),
+        markdown_converter=convert_pdf_to_markdown,
     )
 
 
 def documents_page_url() -> str:
     return f"{request.host_url.rstrip('/')}{url_for('admin.documents_list_page')}"
+
+
+def markdown_dir() -> Path:
+    configured = current_app.config.get("DOCS_MD_DIR")
+    base = Path(configured).resolve() if configured else (pliegos_dir() / "markdown").resolve()
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
+def convert_pdf_to_markdown(pdf_path: Path, output_dir: Path, on_page_start=None) -> None:
+    from ..markdown.Conversion_markdown import process_pdf
+
+    process_pdf(pdf_path, output_dir, on_page_start=on_page_start)
 
 
 @admin_bp.post("/documents/upload")
@@ -121,6 +137,155 @@ def upload_documents():
 
     documentos_service().save_uploads(files)
     return redirect(url_for(DOCUMENTS))
+
+
+@admin_bp.post("/documents/markdown/convert")
+@login_required
+@admin_required
+def convert_documents_to_markdown():
+    job = MarkdownConversionState(
+        status="queued",
+        progress=0,
+        message="En cola",
+        cancel_requested=False,
+        error=None,
+    )
+    db.session.add(job)
+    db.session.commit()
+
+    app_obj = current_app._get_current_object()
+    executor.submit(markdown_async, app_obj, job.id)
+
+    return jsonify({"job_id": job.id}), 202
+
+
+@admin_bp.post("/documents/markdown/cancel/<int:job_id>")
+@login_required
+@admin_required
+def cancel_markdown_conversion(job_id: int):
+    job = MarkdownConversionState.query.get_or_404(job_id)
+
+    if job.status in {"done", "failed", "cancelled"}:
+        return jsonify({"status": job.status, "message": "El job ya ha terminado."}), 200
+
+    job.cancel_requested = True
+    job.message = "Cancelando Conversión a Markdown..."
+    if job.status == "queued":
+        job.status = "cancelled"
+        job.finished_at = datetime.now(ZoneInfo("Europe/Madrid"))
+    db.session.commit()
+
+    return jsonify({"status": job.status, "message": job.message}), 202
+
+
+@admin_bp.get("/documents/markdown/status/<int:job_id>")
+@login_required
+@admin_required
+def markdown_conversion_status(job_id: int):
+    job = MarkdownConversionState.query.get(job_id)
+    if not job:
+        abort(404)
+
+    return jsonify(
+        {
+            "status": job.status,
+            "progress": job.progress,
+            "message": job.message,
+            "error": job.error,
+            "cancel_requested": bool(job.cancel_requested),
+        }
+    )
+
+
+def markdown_async(app, job_id: int) -> None:
+    zone_now = datetime.now(ZoneInfo("Europe/Madrid"))
+
+    with app.app_context():
+        job = MarkdownConversionState.query.get(job_id)
+        if not job:
+            return
+
+        try:
+            if job.cancel_requested:
+                job.status = "cancelled"
+                job.message = "Conversión a Markdown cancelada."
+                job.finished_at = zone_now
+                db.session.commit()
+                return
+
+            job.status = "running"
+            job.started_at = zone_now
+            job.progress = 0
+            job.message = "Iniciando Conversión a Markdown..."
+            job.error = None
+            db.session.commit()
+
+            def should_cancel() -> bool:
+                db.session.refresh(job)
+                return bool(job.cancel_requested)
+
+            def on_progress(i: int, total: int):
+                if should_cancel():
+                    raise JobCancelledError("Conversión a Markdown cancelada por el usuario.")
+                job.progress = int((i / total) * 100) if total and total > 0 else 100
+                db.session.commit()
+
+            def on_current_doc(nombre: str):
+                if should_cancel():
+                    raise JobCancelledError("Conversión a Markdown cancelada por el usuario.")
+                job.message = f"Convirtiendo {nombre}..."
+                db.session.commit()
+
+            def on_page_start(page: int, total_pages: int):
+                if should_cancel():
+                    raise JobCancelledError("Conversión a Markdown cancelada por el usuario.")
+                current_message = (job.message or "Convirtiendo documento...").split(" Página ", 1)[0]
+                job.message = f"{current_message} Página {page}/{total_pages}"
+                db.session.commit()
+
+            stats = documentos_service().convert_pending_to_markdown(
+                on_progress=on_progress,
+                on_current_doc=on_current_doc,
+                should_cancel=should_cancel,
+                on_page_start=on_page_start,
+            )
+
+            db.session.refresh(job)
+            if job.cancel_requested:
+                job.status = "cancelled"
+                job.message = "Conversión a Markdown cancelada."
+                job.finished_at = datetime.now(ZoneInfo("Europe/Madrid"))
+                db.session.commit()
+                return
+
+            job.status = "done"
+            job.progress = 100
+            if stats["converted"] == 0:
+                job.message = "No habia documentos pendientes de convertir."
+            else:
+                job.message = f"Conversión completada. {stats['converted']} documentos convertidos."
+            job.finished_at = zone_now
+            db.session.commit()
+        except JobCancelledError:
+            db.session.rollback()
+            job = MarkdownConversionState.query.get(job_id)
+            if job:
+                job.status = "cancelled"
+                job.message = "Conversión a Markdown cancelada."
+                job.error = None
+                job.finished_at = datetime.now(ZoneInfo("Europe/Madrid"))
+                db.session.commit()
+        except Exception as exc:
+            try:
+                job.status = "failed"
+                job.error = str(exc)
+                job.message = "Fallo la Conversión a Markdown."
+                job.finished_at = zone_now
+                db.session.commit()
+            finally:
+                app.logger.exception("Error en markdown_async")
+        finally:
+            db.session.remove()
 
 
 @admin_bp.post("/vector-db/update")
@@ -158,7 +323,7 @@ def cancel_vector_db(job_id: int):
         job.finished_at = datetime.now(ZoneInfo("Europe/Madrid"))
     db.session.commit()
 
-    return jsonify({"status": job.status, "message": "Cancelando actualizacion vectorial..."}), 202
+    return jsonify({"status": job.status, "message": "Cancelando Actualización vectorial..."}), 202
 
 
 def documentos_async(app, job_id: int, user_email: str, docs_url: str) -> None:
@@ -187,13 +352,13 @@ def documentos_async(app, job_id: int, user_email: str, docs_url: str) -> None:
 
             def on_current_doc(nombre: str):
                 if should_cancel():
-                    raise JobCancelledError("Actualizacion cancelada por el usuario.")
+                    raise JobCancelledError("Actualización cancelada por el usuario.")
                 job.current_doc = nombre
                 db.session.commit()
 
             def on_progress(i: int, total: int):
                 if should_cancel():
-                    raise JobCancelledError("Actualizacion cancelada por el usuario.")
+                    raise JobCancelledError("Actualización cancelada por el usuario.")
                 job.progress = int((i / total) * 100) if total and total > 0 else 100
                 db.session.commit()
 
@@ -241,7 +406,7 @@ def documentos_async(app, job_id: int, user_email: str, docs_url: str) -> None:
                 send_update_finished_email(
                     to_email=user_email,
                     ok=False,
-                    message=f"La actualizacion de qdrant ha fallado: {job.error}",
+                    message=f"La Actualización de qdrant ha fallado: {job.error}",
                     job_id=job.id,
                     docs_url=docs_url,
                     indexed_docs=None,
@@ -284,10 +449,14 @@ def documents_list_page():
 
     pagination = svc.list_documents_paginated(page, per_page)
     docs = pagination.items
+    markdown_status = svc.get_markdown_status_map(docs)
+    pending_markdown = svc.count_pending_markdown()
 
     return render_template(
         "admin_documents.html",
         docs=docs,
+        markdown_status=markdown_status,
+        pending_markdown=pending_markdown,
         page=pagination.page,
         total_pages=pagination.pages or 1,
         total_docs=pagination.total,

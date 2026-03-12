@@ -19,6 +19,18 @@
           </p>
         </div>
 
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="mx-auto mt-4 text-start" style="max-width: 860px;">
+              {% for category, message in messages %}
+                <div class="alert alert-{{ category }} mb-2" role="alert">
+                  {{ message }}
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
         <form id="uploadForm"
               method="POST"
               action="{{ url_for('admin.upload_documents') }}"
@@ -59,7 +71,15 @@
           </div>
 
           <div class="row g-1">
-            <div class="col-12 d-grid">
+            <div class="col-12 col-md-6 d-grid">
+              <button form="markdownForm"
+                      type="submit"
+                      class="btn btn-outline-light btn-header"
+                      {% if pending_markdown == 0 %}disabled{% endif %}>
+                Convertir pendientes a Markdown{% if pending_markdown %} ({{ pending_markdown }}){% endif %}
+              </button>
+            </div>
+            <div class="col-12 col-md-6 d-grid">
               <button form="vectorForm" type="submit" class="btn btn-primary btn-header">
                 Actualizar base vectorial
               </button>
@@ -76,6 +96,12 @@
         <form id="vectorForm"
               method="POST"
               action="{{ url_for('admin.update_vector_db') }}"
+              class="d-none">
+        </form>
+
+        <form id="markdownForm"
+              method="POST"
+              action="{{ url_for('admin.convert_documents_to_markdown') }}"
               class="d-none">
         </form>
 
@@ -140,7 +166,14 @@
                     <td class="d-none d-lg-table-cell">{{ d.modified_at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
                     <td>{{ d.chunks if d.chunks is not none else 0 }}</td>
                     <td>
-                      <span class="doc-status">{{ d.status }}</span>
+                      <div class="d-flex flex-column gap-1">
+                        <span class="doc-status">{{ d.status }}</span>
+                        {% if markdown_status.get(d.id) %}
+                          <span class="badge text-bg-success">Markdown</span>
+                        {% else %}
+                          <span class="badge text-bg-secondary">Sin Markdown</span>
+                        {% endif %}
+                      </div>
                     </td>
 
                     <td class="text-end">

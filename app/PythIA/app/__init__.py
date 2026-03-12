@@ -11,6 +11,7 @@ from .auth import auth_bp
 from .vector_update_state import VectorUpdateState
 from .web_scraping_state import WebScrapingSate
 from .rag_query_state import RAGQueryState
+from .markdown_conversion_state import MarkdownConversionState
 
 def create_app():
     load_dotenv("secret.env")
@@ -35,6 +36,7 @@ def create_app():
 
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     app.config["DOCS_DIR"] = os.environ.get("DOCS_DIR", "pliegos")
+    app.config["DOCS_MD_DIR"] = os.environ.get("DOCS_MD_DIR")
     
     # Flask Mail
     app.config["MAIL_SERVER"] = os.environ.get("MAIL_SERVER", "")

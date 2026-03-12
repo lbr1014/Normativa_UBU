@@ -56,7 +56,7 @@ services:
     volumes:
       - ollama:/root/.ollama
     entrypoint: ["sh", "-lc"]
-    command: ["ollama pull llama3.1:8b-instruct-q4_K_M"]
+    command: ["ollama pull llama3.1:8b-instruct-q4_K_M && ollama pull blaifa/Nanonets-OCR-s"]
     restart: "no"
 
   web:
