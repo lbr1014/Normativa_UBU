@@ -37,46 +37,23 @@ Selenium controla navegadores reales y es un estándar veterano, pero Playwright
 
 \begin{table}[p]
 	\centering
-	\begin{tabularx}{\linewidth}{p{0.20\columnwidth} p{0.36\columnwidth} p{0.36\columnwidth}}
+	\begin{tabularx}{\linewidth}{ p{0.22\columnwidth}*{2}{>{}X}}
 		\toprule
-			Herramienta & \textbf{Ventajas} & \textbf{Desventajas} \\
+			\textbf{Herramienta} & \textbf{Ventajas} & \textbf{Desventajas} \\
 		\midrule
-		\textbf{\eng{Selenium}}~\cite{selenium:docs} & 
+		\multirow{3}{*}[-6ex]{\textbf{\eng{Selenium}}~\cite{selenium:docs}} & Utiliza el estándar W3C \eng{WebDriver}~\cite{w3c:webdriver2}, lo que aporta interoperabilidad y soporte a largo plazo. & Es propenso a fallos (\eng{flakiness}) si no se dominan las esperas. \\
+		& Multilenguaje y ecosistema maduro. Permite una integración fácil. & La intercepción de red en menos homogénea entre navegadores. \\
+		& Es robusto para escalado distribuido. & \\
+			
+		\midrule
+		\multirow{5}{*}[-12ex]{\textbf{\eng{Playwright}}~\cite{playwright:actionability}} & Es muy estable y rápido en \eng{webs} con \eng{JavaScript} pesado. 
 		
-			\begin{itemize}
-			\tightlist
-				\item Utiliza el estándar W3C \eng{WebDriver}~\cite{w3c:webdriver2}, lo que aporta interoperabilidad y soporte a largo plazo.
-				\item Multilenguaje y ecosistema maduro. Permite una integración fácil.
-				\item Es robusto para escalado distribuido. 
-			\end{itemize}  
-			& 			
-			 \begin{itemize}
-			\tightlist
-				\item Es propenso a fallos (\eng{flakiness}) si no se dominan las esperas.
-				\item La intercepción de red en menos homogénea entre navegadores.
-			\end{itemize}
-			
-			\\
-			
-		\midrule
-		\textbf{\eng{Playwright}}~\cite{playwright:actionability} & 
+		& No utiliza el estándar \eng{WebDriver}.  \\
+		& Presenta multitud de herramientas integradas como \eng{Trace Viewer}, capturas de pantalla y videos. & \\
+		& Contiene selectores potentes y permite manejar los \eng{inframes} de forma sencilla.  & \\
+		& Tiene un control de contexto aislado muy cómodo. & \\
+		& Su modelos asíncrono permite realizar acciones concurrentes sin bloquear el hilo empleando la \eng{API async/await}. & \\
 		 
-		 \begin{itemize}
-			\tightlist
-				\item Es muy estable y rápido en \eng{webs} con \eng{JavaScript} pesado.
-				\item Presenta multitud de herramientas integradas como \eng{Trace Viewer}, capturas de pantalla y videos.
-				\item Contiene selectores potentes y permite manejar los \eng{inframes} de forma sencilla. 
-				\item Tiene un control de contexto aislado muy cómodo.
-				\item Su modelos asíncrono permite realizar acciones concurrentes sin bloquear el hilo empleando la \eng{API async/await}.
-			\end{itemize}   
-			& 			
-			\begin{itemize}
-			\tightlist
-				\item No utiliza el estándar \eng{WebDriver}. 
-			\end{itemize}   
-			
-			\\
-		
 		\bottomrule
 	\end{tabularx}
 	\caption{Ventajas y desventajas de \eng{Selenium} y \eng{Playwright}.}
@@ -91,59 +68,32 @@ El proyecto requiere entornos aislados y reproducibles que faciliten el trabajo 
 \section{Bases de datos}
 Para el desarrollo del sistema \eng{RAG} es necesario contar con dos tipos de bases de datos, una base de datos vectorial (ver sección~\hyperref[basedatos_vectorial]{4.7.1}) y una relacional (ver sección~\hyperref[basedatos_relacional]{4.7.2}). La base de datos vectorial permite almacenar, indexar y buscar semánticamente en los documentos para dar respuestas precisas y rápidas. La base de datos relacional que permite gestionar la información de la aplicación (los datos de los usuarios, los documentos, las consultas, los \eng{chunks} y los \eng{embeddings}).
 \subsection{Base de datos vectorial}\label{basedatos_vectorial}
-Una parte fundamental del desarrollo del \eng{RAG} es la implementación de la base de datos vectorial. Se han valorado emplear diversas bases de datos, pero las dos que más se han estudiado son \href{https://qdrant.tech/}{\eng{Qdrant}} y \href{https://www.datacamp.com/es/tutorial/pgvector-tutorial}{\eng{pgvector}}~. \eng{Qdrant} es una base de datos vectorial especializada, diseñada desde cero para búsquedas de similitud de alta concurrencia y baja latencia. Presenta equilibrio entre el rendimiento, la latencia y el tiempo de indexado~\cite{llmeng:handbook}. Por su parte, \eng{pgvector} es una extensión de \href{https://www.postgresql.org/}{\eng{PostgreSQL}} que permite almacenar embeddings en columnas vectoriales y realizar búsquedas de similitud sobre una base de datos relacional ya existente. Es útil cuando la aplicación ya se apoya en este gestor, ya que simplifica la infraestructura~\cite{Qdrant:pgvector}. En la tabla~\ref{tab:bases-vectoriales} se muestran las principales ventajas y desventajas de cada opción.
+Una parte fundamental del desarrollo del \eng{RAG} es la implementación de la base de datos vectorial. Se han valorado emplear diversas bases de datos, pero las dos que más se han estudiado son \href{https://qdrant.tech/}{\eng{Qdrant}} y \href{https://www.datacamp.com/es/tutorial/pgvector-tutorial}{\eng{pgvector}}~. \eng{Qdrant} es una base de datos vectorial especializada, diseñada desde cero para búsquedas de similitud de alta concurrencia y baja latencia. Presenta equilibrio entre el rendimiento, la latencia y el tiempo de indexado~\cite{llmeng:handbook}. Por su parte, \eng{pgvector} es una extensión de \href{https://www.postgresql.org/}{\eng{PostgreSQL}} que permite almacenar embeddings en columnas vectoriales y realizar búsquedas de similitud sobre una base de datos relacional ya existente. Es útil cuando la aplicación ya se apoya en este gestor, ya que simplifica la infraestructura~\cite{Qdrant:pgvector}. En la tabla~\ref{tabla:bases-vectoriales} se muestran las principales ventajas y desventajas de cada opción.
 
-\begin{longtable}{
-		p{0.20\linewidth}
-		p{0.40\linewidth}
-		p{0.40\linewidth}
-	}
-	
-    \toprule
-    & \textbf{Ventajas} & \textbf{Desventajas} \\
-    \midrule
-    \endfirsthead
 
-	\toprule
-	& \textbf{Ventajas} & \textbf{Desventajas} \\
-	\midrule
-	\endhead
-    \textbf{\eng{Qdrant}} &
-      \begin{itemize}
-        \tightlist
-        \item Diseñada específicamente como base de datos vectorial, con índices optimizados para búsquedas de similitud y buen compromiso entre RPS, latencia y tiempo de indexado~\cite{llmeng:handbook}.
-        \item Soporta filtrado avanzado por metadatos y búsquedas híbridas (vectoriales más filtros), lo que facilita consultas complejas en \eng{RAG}.
-        \item Ofrece despliegue sencillo mediante contenedores y opciones gestionadas, con APIs HTTP y RPC bien documentadas.
-        \item Integración directa con bibliotecas y orquestadores de \eng{RAG}, lo que reduce el código necesario para conectarla con el resto del sistema.
-      \end{itemize}
-      &
-      \begin{itemize}
-        \tightlist
-        \item Introduce un nuevo servicio en la arquitectura: es necesario administrar una base de datos adicional a la relacional.
-        \item Requiere aprender herramientas y mecanismos de operación específicos (copias de seguridad, monitorización, actualización de índices, etc.).
-        \item Para casos de uso pequeños puede resultar más compleja que reutilizar la base de datos transaccional existente.
-      \end{itemize}
-      \\
-    \midrule
-    \textbf{\eng{pgvector}} &
-      \begin{itemize}
-        \tightlist
-        \item Permite reutilizar una instancia de PostgreSQL ya desplegada, unificando datos transaccionales y embeddings en el mismo sistema.
-        \item Aprovecha todo el ecosistema SQL: transacciones, \eng{joins}, vistas, roles de usuario y mecanismos estándar de replicación y copia de seguridad.
-        \item Simplifica la operación en entornos reducidos o con restricciones de infraestructura, al requerir un único motor de base de datos.
-      \end{itemize}
-      &
-      \begin{itemize}
-        \tightlist
-        \item El rendimiento en búsquedas vectoriales a gran escala (millones de vectores y alta concurrencia) suele ser inferior al de motores especializados.
-        \item Dispone de menos funcionalidades específicas de bases de datos vectoriales (gestión de colecciones, métricas especializadas o afinado fino de índices).
-        \item La configuración óptima de índices y parámetros depende de la versión de PostgreSQL y de la extensión, y puede requerir un ajuste cuidadoso.
-      \end{itemize}
-      \\
-   \bottomrule
-   \caption{Ventajas y desventajas de \eng{Qdrant} y \eng{pgvector}.}
-	\label{tab:bases-vectoriales}\\
-\end{longtable}
+\begin{table}[p]
+	\centering
+	\small
+	\begin{tabularx}{\linewidth}{ p{0.20\columnwidth}*{2}{>{}X}}
+		\toprule
+			\textbf{Herramienta} & \textbf{Ventajas} & \textbf{Desventajas} \\
+		\midrule
+		\multirow{4}{*}[-20ex]{\textbf{\eng{Qdrant}}~\cite{selenium:docs}} & Diseñada específicamente como base de datos vectorial, con índices optimizados para búsquedas de similitud y buen compromiso entre RPS, latencia y tiempo de indexado~\cite{llmeng:handbook}. & Introduce un nuevo servicio en la arquitectura: es necesario administrar una base de datos adicional a la relacional. \\
+		& Soporta filtrado avanzado por metadatos y búsquedas híbridas (vectoriales más filtros), lo que facilita consultas complejas en \eng{RAG}. & Requiere aprender herramientas y mecanismos de operación específicos (copias de seguridad, monitorización, actualización de índices, etc.). \\
+		& Ofrece despliegue sencillo mediante contenedores y opciones gestionadas, con APIs HTTP y RPC bien documentadas. & Para casos de uso pequeños puede resultar más compleja que reutilizar la base de datos transaccional existente. \\
+		& Integración directa con bibliotecas y orquestadores de \eng{RAG}, lo que reduce el código necesario para conectarla con el resto del sistema. & \\
+			
+		\midrule
+		\multirow{3}{*}[-16ex]{\textbf{\eng{pgvector}}~\cite{playwright:actionability}} & Permite reutilizar una instancia de \eng{PostgreSQL} ya desplegada, unificando datos transaccionales y \eng{embeddings} en el mismo sistema. & El rendimiento en búsquedas vectoriales a gran escala (millones de vectores y alta concurrencia) suele ser inferior al de motores especializados. \\
+		& Aprovecha todo el ecosistema SQL: transacciones, \eng{joins}, vistas, roles de usuario y mecanismos estándar de replicación y copia de seguridad. & Dispone de menos funcionalidades específicas de bases de datos vectoriales (gestión de colecciones, métricas especializadas o afinado fino de índices). \\
+		& Simplifica la operación en entornos reducidos o con restricciones de infraestructura, al requerir un único motor de base de datos. & La configuración óptima de índices y parámetros depende de la versión de PostgreSQL y de la extensión, y puede requerir un ajuste cuidadoso. \\
+		 
+		\bottomrule
+	\end{tabularx}
+	\caption{Ventajas y desventajas de \eng{Qdrant} y \eng{pgvector}.}
+	\label{tabla:bases-vectoriales}
+\end{table}
+
 
 Para realizar el proyecto se ha optado por utilizar \eng{Qdrant}. Aunque \eng{pgvector} presenta características interesantes cuando se desea mantener toda la información en una única base de datos relacional, \eng{Qdrant} presenta un diseño especializado. Así como un mejor equilibrio entre rendimiento y latencia. Además, \eng{Qdrant} se utiliza en proyectos reales lo que lo convierte en una muy buena opción para implementar el sistema \eng{RAG}.
 
@@ -152,12 +102,12 @@ Para la implementación de la base de datos relacional se ha valorado usar \href
 
 \begin{table}[p]
 	\centering
-	\begin{tabularx}{\linewidth}{p{0.20\columnwidth} p{0.36\columnwidth} p{0.36\columnwidth}}
+	\begin{tabularx}{\linewidth}{ p{0.27\columnwidth}*{2}{>{}X}}
 		\toprule
 			 \textbf{Características} & \textbf{\eng{PostgreSQL}} & \textbf{\eng{SQLite}} \\
 		\midrule
 		\textbf{Modelo} &  Cliente-servidor & Embebido \\
-		\textbf{Concurrencia} & Alta & Limitada (solo hay un escrito) \\
+		\textbf{Concurrencia} & Alta & Limitada (solo hay un escritor) \\
 		\textbf{Escalabilidad} & Alta & Baja \\
 		\textbf{Uso recomendado} & Sistemas multiusuario & Aplicaciones locales o prototipos \\
 		\textbf{Integración con Docker} & Muy buena & No necesaria (es un archivo local) \\		
