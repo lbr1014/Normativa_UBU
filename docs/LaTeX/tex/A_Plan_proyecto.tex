@@ -294,7 +294,7 @@ Para realizar estas tareas se estimaron 28 horas de trabajo. Al final se emplear
 El \eng{burndown} de este \eng{sprint} se ilustra en la figura~\ref{fig:Burndown/Sprint12}.
 \imagenflotante{Burndown/Sprint12}{\eng{Burndown chart} del \eng{sprint} 12.}
 
-\subsection{\eng{Sprint} 13 (15/01/2025 -- 22/01/2026)}
+\subsection{\eng{Sprint} 13 (15/01/2026 -- 22/01/2026)}
 El objetivo principal del \myhref{https://github.com/lbr1014/TFG_RAG/milestone/13?closed=1}{Sprint 13} fue completar las funcionalidades de la \eng{web} permitiendo que los administradores puedan cargar documentos, de forma manual o automática (mediante \eng{web scraping}). El sistema gestionará estos documentos para extraer de ellos los \eng{embeddings} necesarios para el \eng{RAG}. Además, se marcó como objetivo incluir la interfaz para realizar las consultas al \eng{LLM}. Para llevar a cabo estos objetivos se plantearon las siguientes tareas:
 \begin{itemize}
 \tightlist
@@ -313,7 +313,7 @@ Para realizar estas tareas se estimaron 28,5 horas de trabajo. Al final del \eng
 El \eng{burndown} de este \eng{sprint} se ilustra en la figura~\ref{fig:Burndown/Sprint13}.
 \imagenflotante{Burndown/Sprint13}{\eng{Burndown chart} del \eng{sprint} 13.}
 
-\subsection{\eng{Sprint} 14 (22/01/2025 -- 29/01/2026)}
+\subsection{\eng{Sprint} 14 (22/01/2026 -- 29/01/2026)}
 
 El objetivo principal del \myhref{https://github.com/lbr1014/TFG_RAG/milestone/14?closed=1}{Sprint 14} fue convertir los procesos de \eng{web scraping} y de actualización de la base de datos vectorial a modo asíncrono. En la reunión se decidió priorizar este cambio, ya que la implementación anterior, en modo síncrono, tardaba mucho tiempo y bloqueaba la web para el usuario. Por otro lado, se decidió continuar desarrollando la documentación, concretamente los anexos. Para llevar a cabo estos objetivos se plantearon las siguientes tareas:
 \begin{itemize}
@@ -349,7 +349,7 @@ Para realizar estas tareas se estimaron 50 horas de trabajo. Al final del \eng{s
 El \eng{burndown} de este \eng{sprint} se ilustra en la figura~\ref{fig:Burndown/Sprint14}.
 \imagenflotante{Burndown/Sprint14}{\eng{Burndown chart} del \eng{sprint} 14.}
 
-\subsection{\eng{Sprint} 15 (29/01/2025 -- 05/02/2026)}
+\subsection{\eng{Sprint} 15 (29/01/2026 -- 05/02/2026)}
 El objetivo principal del \myhref{https://github.com/lbr1014/TFG_RAG/milestone/15?closed=1}{Sprint 15} fue levantar mi aplicación \eng{Flask} usando un contenedor \eng{docker}. En la reunión se decidió implementar un \eng{docker} ya que mejora la potabilidad, la ligereza y el aislamiento de la aplicación. Para llevar a cabo estos objetivos se plantearon las siguientes tareas:
 \begin{itemize}
 \tightlist
@@ -370,7 +370,7 @@ Para realizar el \eng{sprint} se estimaron 34 horas de trabajo. Al final de este
 El \eng{burndown} de este \eng{sprint} se ilustra en la figura~\ref{fig:Burndown/Sprint15}.
 \imagenflotante{Burndown/Sprint15}{\eng{Burndown chart} del \eng{sprint} 15.}
 
-\subsection{\eng{Sprint} 16 (05/02/2025 -- 12/02/2026)}
+\subsection{\eng{Sprint} 16 (05/02/2026 -- 12/02/2026)}
 El objetivo principal del \myhref{https://github.com/lbr1014/TFG_RAG/milestone/16?closed=1}{Sprint 16} fue incluir el uso de \eng{Nginx} para levantar la aplicación \eng{web} en el servidor integrándolo con la implementación de \eng{Gunicode} del \eng{sprint} anterior. Además, se fijo como objetivo explicar en la memoria algunos trabajos relacionados. Para llevar a cabo estos objetivos se plantearon las siguientes tareas:
 \begin{itemize}
 \tightlist
@@ -388,7 +388,7 @@ Para realizar el \eng{sprint} se estimaron 34 horas de trabajo. Al finalizar el 
 El \eng{burndown} de este \eng{sprint} se ilustra en la figura~\ref{fig:Burndown/Sprint16}.
 \imagenflotante{Burndown/Sprint16}{\eng{Burndown chart} del \eng{sprint} 16.}
 
-\subsection{\eng{Sprint} 17 (12/02/2025 -- 19/02/2026)}
+\subsection{\eng{Sprint} 17 (12/02/2026 -- 19/02/2026)}
 El objetivo principal del \myhref{https://github.com/lbr1014/TFG_RAG/milestone/17?closed=1}{Sprint 17} fue incluir que la aplicación pueda mandar correos a los usuarios, concretamente para avisar cuando acaban de ejecutarse los procesos largos (como el \eng{web scraping} o la actualización de la base de datos vectorial) y para la recuperación de la contraseña cuando se le ha olvidado. También, se siguieron implementando los \eng{tests} unitarios de la aplicación para cubrir el \eng{coverage}. Para llevar a cabo estos objetivos se plantearon las siguientes tareas:
 \begin{itemize}
 \tightlist
@@ -411,10 +411,75 @@ Para realizar el \eng{sprint} se estimaron 24 horas de trabajo. Al finalizar el 
 El \eng{burndown} de este \eng{sprint} se ilustra en la figura~\ref{fig:Burndown/Sprint17}.
 \imagenflotante{Burndown/Sprint17}{\eng{Burndown chart} del \eng{sprint} 17.}
 
-\subsection{\eng{Sprint} 18 (19/02/2025 -- 26/02/2026)}
+\subsection{\eng{Sprint} 18 (19/02/2026 -- 26/02/2026)}
+El objetivo principal del \myhref{https://github.com/lbr1014/TFG_RAG/milestone/18?closed=1}{Sprint 18} fue documentar el repositorio de GitHub, para ello se crearon archivos \file{README} en los que se indica el contenido de cada directorio, así como la forma en la que se ejecutan. Para llevar a cabo estos objetivos se plantearon las siguientes tareas:
+\begin{itemize}
+\tightlist
+	\item Documentar la carpeta prototipos.
+		\begin{itemize}
+		\tightlist
+			\item Documentar en GitHub la aplicación {Flask} con \eng{Docker}.
+			\item Documentar los archivos de \eng{Web Scraping}.
+			\item Documentar la carpeta \eng{tokenizer}.
+			\item Documentar la carpeta \eng{Markdown}.
+			\item Documentar el directorio \eng{Flask}
+		\end{itemize}
+		\item Explicar las herramientas para el \eng{Docker} en la memoria.
+\end{itemize} 
 
+Para realizar el \eng{sprint} se estimaron 21 horas de trabajo. Al finalizar el \eng{sprint} se realizaron todas las tareas invirtiendo unas 26 horas. Debido a que las explicaciones de los prototipos llevaron más tiempo del estimado, sobre todo, la explicación de los archivos del directorio prototipos.
 
-\subsection{\eng{Sprint} 19 (26/02/2025 -- 5/03/2026)}
+El \eng{burndown} de este \eng{sprint} se ilustra en la figura~\ref{fig:Burndown/Sprint18}.
+\imagenflotante{Burndown/Sprint18}{\eng{Burndown chart} del \eng{sprint} 18.}
+
+\subsection{\eng{Sprint} 19 (26/02/2026 -- 5/03/2026)}
+Los objetivos que se fijaron para el \myhref{https://github.com/lbr1014/TFG_RAG/milestone/19?closed=1}{Sprint 19} se dividieron en dos. Por un lado, se propuso configurar la \eng{web} para que al acceder desde \eng{Internet} tuviera nombre de dominio y siguiera el protocolo \file{HTTPS}. Además, se decidió comenzar a montar la aplicación definitiva (para instalar en local) en el repositorio en una nueva carpeta llamada file{app} y utilizando una rama de git para su edición con el mismo nombre. Para llevar a cabo estos objetivos se plantearon las siguientes tareas:
+
+\begin{itemize}
+\tightlist
+	\item Configurar \file{DNS} para mi aplicación. 
+	\begin{itemize}
+	\tightlist
+		\item Expedir un certificado \file{SSL/TLS} para mi \eng{web}.
+		\begin{itemize}
+		\tightlist
+			\item Conectar el certificado \file{SSL/TLS} con \eng{Nginx}.
+		\end{itemize}
+	\end{itemize}
+	\item Explicar la arquitectura de mi aplicación en los anexos.
+	\item Reorganizar el prototipo de la aplicación \eng{Flask}.
+	\item Realizar diagramas explicativo de como se despliega la aplicación.
+	\item Escribir introducción en la memoria.
+\end{itemize}
+
+Para realizar el \eng{sprint} se estimaron 26 horas de trabajo. Al finalizar el \eng{sprint} se realizaron todas las tareas cumpliendo más o menso el plazo indicado. Aunque, individualmente no todas las tareas se completaron en el tiempo estimado. Por ejemplo, la tarea <<Configurar \file{DNS} para mi aplicación>> llevó más tiempo del esperado. Esto se debió a que la aplicación está levantada en un servidor con dirección privada y las direcciones privadas no son accesibles desde \eng{Internet}. Peor el omputo general si que dio las 26 horas debido a que otras tareas como la <<Reorganizar el prototipo de la aplicación \eng{Flask}>> llevaron menos tiempo del previsto. 
+
+El \eng{burndown} de este \eng{sprint} se ilustra en la figura~\ref{fig:Burndown/Sprint19}.
+\imagenflotante{Burndown/Sprint19}{\eng{Burndown chart} del \eng{sprint} 19.}
+
+\subsection{\eng{Sprint} 20 (05/03/2026 -- 12/03/2026)}
+Como objetivos principales del \myhref{https://github.com/lbr1014/TFG_RAG/milestone/20?closed=1}{Sprint 20} se fijaron realizar cambios en la interfaz gráfica de la \eng{web} y en el \eng{pipeline} de indexación del \eng{RAG}. En la reunión se fijo que todos los elementos de la interfaz debían ser o utilizar elementos de \eng{Boostrap}, para hacer que la interfaz sea completamente \eng{responsive}. Respecto al \eng{pipeline} de indexación del \eng{RAG} se decidió introducir la conversión a \file{Markdown}. Para en un futuro \eng{sprint} hacer que los \eng{chunks} y \eng{embeddings} se obtengan desde los documentos \file{Markdown} y no los \file{PDF}. Para llevar a cabo estos objetivos se plantearon las siguientes tareas:
+
+\begin{itemize}
+\tightlist
+	\item Hacer la página de inicio de la aplicación.
+	\item Adaptar la plantilla base para la \eng{web}.
+	\item Hacer que los componentes de la \eng{web} sean \eng{responsive}.
+	\item Incluir acciones en la tabla documentos.
+	\item Incluir la posibilidad de cancelar las tareas largas.
+	\item Incluir la conversión a \eng{Markdown}.
+\end{itemize}
+
+Para realizar el \eng{sprint} se estimaron 20 horas de trabajo. Al finalizar el \eng{sprint} se realizaron todas pero se invirtió más tiempo del planificado, unas 24 horas. este aumento se debió, principalmente, a que a la vez que se hacían \eng{responsive} todos los elementos, se decidió cambiar el estilo de la interfaz \eng{web} para que fuese similar al que se diseñó para la página de inicio.  
+
+El \eng{burndown} de este \eng{sprint} se ilustra en la figura~\ref{fig:Burndown/Sprint20}.
+\imagenflotante{Burndown/Sprint20}{\eng{Burndown chart} del \eng{sprint} 20.}
+
+\subsection{\eng{Sprint} 21 (12/03/2026 -- 19/03/2026)}
+
+\subsection{\eng{Sprint} 22 (19/03/2026 -- 26/03/2026)}
+
+\subsection{\eng{Sprint} 23 (26/03/2026 -- 09/04/2026)}
 
 \section{Estudio de viabilidad}
 El estudio de viabilidad es un análisis detallado que se realiza antes de iniciar un proyecto. Sirve para determinar la rentabilidad de ese proyecto, es decir, si se pude hacer realidad. Para ello se analiza si es económicamente rentable (sección~\hyperref[viabilidad_economica]{A.3.1}) y legalmente viable (sección~\hyperref[viabilidad_legal]{A.3.2}). 
