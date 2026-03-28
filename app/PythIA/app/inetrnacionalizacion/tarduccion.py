@@ -132,9 +132,15 @@ TRANSLATIONS = {
         "docs.uploaded": "Cargado",
         "docs.chunks": "Chunks",
         "docs.status": "Estado",
-        "docs.status_with_markdown": "con Markdown",
+        "docs.markdown_status": "Markdown",
+        "docs.indexed": "Indexado",
+        "docs.not_indexed": "Sin indexar",
+        "docs.processing": "Procesando",
+        "docs.failed": "Fallido",
         "docs.with_markdown": "Markdown",
         "docs.without_markdown": "Sin Markdown",
+        "docs.markdown_ready": "Convertido",
+        "docs.markdown_pending": "Pendiente",
         "docs.view_pdf": "Ver PDF",
         "docs.download_pdf": "Descargar PDF",
         "docs.view_markdown": "Ver Markdown",
@@ -211,6 +217,7 @@ TRANSLATIONS = {
         "markdown.unknown_state": "Estado de conversión desconocido.",
         "markdown.none_pending": "No había documentos pendientes de convertir.",
         "markdown.done_stats": "Conversión completada. {count} documentos convertidos.",
+        "markdown.done_stats_with_failures": "Conversión completada. {count} documentos convertidos y {failed} con error.",
         "markdown.done_email": "La conversión a Markdown ha terminado correctamente.",
         "markdown.failed": "Falló la conversión a Markdown.",
         "markdown.failed_email": "La conversión a Markdown ha fallado: {error}",
@@ -369,9 +376,15 @@ TRANSLATIONS = {
         "docs.uploaded": "Uploaded",
         "docs.chunks": "Chunks",
         "docs.status": "Status",
-        "docs.status_with_markdown": "With Markdown",
+        "docs.markdown_status": "Markdown",
+        "docs.indexed": "Indexed",
+        "docs.not_indexed": "Not indexed",
+        "docs.processing": "Processing",
+        "docs.failed": "Failed",
         "docs.with_markdown": "Markdown",
         "docs.without_markdown": "No Markdown",
+        "docs.markdown_ready": "Converted",
+        "docs.markdown_pending": "Pending",
         "docs.view_pdf": "View PDF",
         "docs.download_pdf": "Download PDF",
         "docs.view_markdown": "View Markdown",
@@ -448,6 +461,7 @@ TRANSLATIONS = {
         "markdown.unknown_state": "Unknown conversion state.",
         "markdown.none_pending": "There were no pending documents to convert.",
         "markdown.done_stats": "Conversion completed. {count} documents converted.",
+        "markdown.done_stats_with_failures": "Conversion completed. {count} documents converted and {failed} failed.",
         "markdown.done_email": "Markdown conversion finished successfully.",
         "markdown.failed": "Markdown conversion failed.",
         "markdown.failed_email": "Markdown conversion failed: {error}",
@@ -559,6 +573,18 @@ def localize_runtime_message(message, lang=None):
     if markdown_done:
         return translate_for(language, "markdown.done_stats", count=markdown_done.group(1))
 
+    markdown_done_with_failures = re.fullmatch(
+        r"Conversi[oó]n completada\. (\d+) documentos convertidos y (\d+) con error\.",
+        message,
+    )
+    if markdown_done_with_failures:
+        return translate_for(
+            language,
+            "markdown.done_stats_with_failures",
+            count=markdown_done_with_failures.group(1),
+            failed=markdown_done_with_failures.group(2),
+        )
+
     converting_page = re.fullmatch(r"Convirtiendo (.+)\.\.\. P[aá]gina (\d+)/(\d+)", message)
     if converting_page:
         return translate_for(
@@ -636,6 +662,7 @@ def get_client_translations():
         "markdown.status_error",
         "markdown.unknown_state",
         "markdown.done_stats",
+        "markdown.done_stats_with_failures",
         "markdown.cancelled",
         "markdown.failed",
         "scraping.done_ui",

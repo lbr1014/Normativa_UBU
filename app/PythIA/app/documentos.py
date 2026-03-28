@@ -26,10 +26,13 @@ class Documento(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nombre = db.Column(db.String(255), nullable=False,  index=True)
     path = db.Column(db.String(500), unique=True, nullable=False)
+    markdown_path = db.Column(db.String(500), nullable=True)
     size_bytes = db.Column(db.Integer, nullable=False)
     modified_at = db.Column(db.DateTime(timezone=True), nullable=False, index=True)
+    markdown_updated_at = db.Column(db.DateTime(timezone=True), nullable=True)
     chunks = db.Column(db.Integer, nullable=False,  default=0)
     hash = db.Column(db.String(100),  nullable=False, index=True)
+    markdown_source_hash = db.Column(db.String(100), nullable=True)
     status = db.Column(db.String(25), nullable=False,default="cargado", index=True)
     error_message = db.Column(db.Text, nullable=True)
     numero_expediente = db.Column(db.String(255), nullable=True, index=True)
@@ -117,10 +120,31 @@ class DocumentosService:
         return self.markdown_dir / f"{Path(safe).stem}.md"
 
     def markdown_path_for_doc(self, doc: Documento) -> Path:
+        if doc.markdown_path:
+            return Path(doc.markdown_path)
         return self.markdown_path_for_filename(doc.nombre)
 
     def has_markdown(self, doc: Documento) -> bool:
-        return self.markdown_path_for_doc(doc).exists()
+        if not doc.markdown_path or not doc.markdown_source_hash:
+            return False
+        md_path = Path(doc.markdown_path)
+        return md_path.exists() and doc.markdown_source_hash == doc.hash
+
+    def clear_markdown_metadata(self, doc: Documento) -> None:
+        doc.markdown_path = None
+        doc.markdown_source_hash = None
+        doc.markdown_updated_at = None
+
+    def sync_markdown_metadata_from_disk(self, doc: Documento) -> None:
+        md_path = self.markdown_path_for_filename(doc.nombre)
+        if not md_path.exists():
+            self.clear_markdown_metadata(doc)
+            return
+
+        md_mtime = datetime.fromtimestamp(md_path.stat().st_mtime, ZoneInfo("Europe/Madrid"))
+        doc.markdown_path = str(md_path)
+        doc.markdown_source_hash = doc.hash
+        doc.markdown_updated_at = md_mtime
 
     def get_markdown_status_map(self, docs: Iterable[Documento]) -> dict[int, bool]:
         return {doc.id: self.has_markdown(doc) for doc in docs}
@@ -195,25 +219,34 @@ class DocumentosService:
             doc = Documento(
                 nombre=p.name,
                 path=rel_path,
+                markdown_path=None,
                 size_bytes=stat.st_size,
                 modified_at=mtime,
+                markdown_updated_at=None,
                 chunks=0,
                 hash=file_hash,
+                markdown_source_hash=None,
                 status=status or "cargado",
                 error_message=None,
                 numero_expediente=numero_expediente,
                 tipo_documento=tipo_documento,
             )
             db.session.add(doc)
+            self.sync_markdown_metadata_from_disk(doc)
             
         else:
             
             doc.nombre = p.name
             doc.size_bytes = stat.st_size
             doc.modified_at = mtime
+            previous_hash = doc.hash
             doc.hash = file_hash
             doc.numero_expediente = numero_expediente
             doc.tipo_documento = tipo_documento
+            if previous_hash != file_hash:
+                self.delete_markdown_file(doc)
+            elif not self.has_markdown(doc):
+                self.sync_markdown_metadata_from_disk(doc)
             if status is not None:
                 doc.status = status
                 doc.error_message = None
@@ -250,11 +283,19 @@ class DocumentosService:
 
     def delete_markdown_file(self, doc: Documento) -> None:
         try:
-            md_path = self.markdown_path_for_doc(doc)
-            if md_path.exists():
-                md_path.unlink()
+            candidate_paths: list[Path] = []
+            if doc.markdown_path:
+                candidate_paths.append(Path(doc.markdown_path))
+            if doc.nombre:
+                candidate_paths.append(self.markdown_path_for_filename(doc.nombre))
+
+            for md_path in candidate_paths:
+                if md_path.exists():
+                    md_path.unlink()
         except Exception:
             pass
+        finally:
+            self.clear_markdown_metadata(doc)
 
     def delete_document_relations(self, doc: Documento) -> None:
         chunk_ids_subq = db.session.query(Chunk.id).filter(Chunk.document_id == doc.id).subquery()
@@ -282,11 +323,17 @@ class DocumentosService:
         if not pdf_path.exists():
             raise FileNotFoundError(f"PDF no existe en contenedor: {pdf_path}")
 
-        self.markdown_converter(pdf_path, self.markdown_dir, on_page_start=on_page_start)
+        self.delete_markdown_file(doc)
+        md_path = self.markdown_converter(pdf_path, self.markdown_dir, on_page_start=on_page_start)
+        doc.markdown_path = str(md_path)
+        doc.markdown_source_hash = doc.hash
+        doc.markdown_updated_at = datetime.now(ZoneInfo("Europe/Madrid"))
+        db.session.commit()
         return True
 
     def convert_pending_to_markdown(self, on_progress=None, on_current_doc=None, should_cancel=None, on_page_start=None) -> dict[str, int]:
         converted = 0
+        failed = 0
         skipped = 0
 
         docs = Documento.query.order_by(Documento.modified_at.desc()).all()
@@ -312,15 +359,22 @@ class DocumentosService:
                 def page_callback(page: int, total_pages: int, doc_index=i, total_docs=total):
                     on_page_start(doc_index, total_docs, page, total_pages)
 
-            if self.convert_document_to_markdown(doc, on_page_start=page_callback):
-                converted += 1
-            else:
-                skipped += 1
+            try:
+                if self.convert_document_to_markdown(doc, on_page_start=page_callback):
+                    converted += 1
+                else:
+                    skipped += 1
+            except JobCancelledError:
+                raise
+            except Exception:
+                db.session.rollback()
+                failed += 1
             if on_progress:
                 on_progress(i, total)
 
         return {
             "converted": converted,
+            "failed": failed,
             "skipped": skipped,
             "total": total,
         }

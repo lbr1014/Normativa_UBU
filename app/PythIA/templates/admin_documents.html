@@ -119,6 +119,7 @@
                   <th class="d-none d-lg-table-cell" style="width: 210px;">{{ t("docs.uploaded") }}</th>
                   <th style="width: 105px;">{{ t("docs.chunks") }}</th>
                   <th style="width: 140px;">{{ t("docs.status") }}</th>
+                  <th style="width: 140px;">{{ t("docs.markdown_status") }}</th>
                   <th class="text-end" style="width: 120px;">{{ t("common.actions") }}</th>
                 </tr>
               </thead>
@@ -138,18 +139,28 @@
                     <td class="d-none d-lg-table-cell">{{ d.modified_at.strftime("%Y-%m-%d %H:%M:%S") }}</td>
                     <td>{{ d.chunks if d.chunks is not none else 0 }}</td>
                     <td>
+                      {% if d.status == "indexado" %}
+                        <span class="badge text-bg-success">{{ t("docs.indexed") }}</span>
+                      {% elif d.status == "procesado" %}
+                        <span class="badge text-bg-info">{{ t("docs.processing") }}</span>
+                      {% elif d.status == "fallido" %}
+                        <span class="badge text-bg-danger">{{ t("docs.failed") }}</span>
+                      {% else %}
+                        <span class="badge text-bg-secondary">{{ t("docs.not_indexed") }}</span>
+                      {% endif %}
+                    </td>
+                    <td>
                       <div class="d-flex flex-column gap-1">
-                        <span class="doc-status">
-                          {% if markdown_status.get(d.id) %}
-                            {{ t("docs.status_with_markdown") }}
-                          {% else %}
-                            {{ d.status }}
-                          {% endif %}
-                        </span>
                         {% if markdown_status.get(d.id) %}
                           <span class="badge text-bg-success">{{ t("docs.with_markdown") }}</span>
+                          {% if d.markdown_updated_at %}
+                            <span class="doc-status small">{{ d.markdown_updated_at.strftime("%Y-%m-%d %H:%M:%S") }}</span>
+                          {% else %}
+                            <span class="doc-status small">{{ t("docs.markdown_ready") }}</span>
+                          {% endif %}
                         {% else %}
                           <span class="badge text-bg-secondary">{{ t("docs.without_markdown") }}</span>
+                          <span class="doc-status small">{{ t("docs.markdown_pending") }}</span>
                         {% endif %}
                       </div>
                     </td>

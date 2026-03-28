@@ -182,16 +182,15 @@ def documents_page_url() -> str:
 
 
 def markdown_dir() -> Path:
-    configured = current_app.config.get("DOCS_MD_DIR")
-    base = Path(configured).resolve() if configured else (pliegos_dir() / "markdown").resolve()
+    base = (pliegos_dir() / "markdown").resolve()
     base.mkdir(parents=True, exist_ok=True)
     return base
 
 
-def convert_pdf_to_markdown(pdf_path: Path, output_dir: Path, on_page_start=None) -> None:
+def convert_pdf_to_markdown(pdf_path: Path, output_dir: Path, on_page_start=None) -> Path:
     from ..markdown.Conversion_markdown import process_pdf
 
-    process_pdf(pdf_path, output_dir, on_page_start=on_page_start)
+    return process_pdf(pdf_path, output_dir, on_page_start=on_page_start)
 
 
 @admin_bp.post("/documents/upload")
@@ -320,8 +319,15 @@ def markdown_async(app, job_id: int, user_email: str, docs_url: str, lang: str =
                 db.session.commit()
                 return
 
-            if stats["converted"] == 0:
+            if stats["converted"] == 0 and stats.get("failed", 0) == 0:
                 done_message = translate_for(lang, "markdown.none_pending")
+            elif stats.get("failed", 0):
+                done_message = translate_for(
+                    lang,
+                    "markdown.done_stats_with_failures",
+                    count=stats["converted"],
+                    failed=stats["failed"],
+                )
             else:
                 done_message = translate_for(lang, "markdown.done_stats", count=stats["converted"])
             _mark_job_done(job, message=done_message)
