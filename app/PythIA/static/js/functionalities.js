@@ -3,6 +3,19 @@
    ========================= */
 
 function initLightEffect(selector = ".luz") {
+  function updateEffectFromPoint(clientX, clientY) {
+    const target = document.elementFromPoint(clientX, clientY);
+    const el = target?.closest?.(selector);
+    if (!el) return;
+
+    const rect = el.getBoundingClientRect();
+    const x = ((clientX - rect.left) / rect.width) * 100;
+    const y = ((clientY - rect.top) / rect.height) * 100;
+
+    el.style.setProperty("--x", `${x}%`);
+    el.style.setProperty("--y", `${y}%`);
+  }
+
   document.addEventListener("mousemove", function (e) {
     const el = e.target.closest(selector);
     if (!el) return;
@@ -14,6 +27,18 @@ function initLightEffect(selector = ".luz") {
     el.style.setProperty("--x", `${x}%`);
     el.style.setProperty("--y", `${y}%`);
   });
+
+  document.addEventListener("touchstart", function (e) {
+    const touch = e.touches?.[0];
+    if (!touch) return;
+    updateEffectFromPoint(touch.clientX, touch.clientY);
+  }, { passive: true });
+
+  document.addEventListener("touchmove", function (e) {
+    const touch = e.touches?.[0];
+    if (!touch) return;
+    updateEffectFromPoint(touch.clientX, touch.clientY);
+  }, { passive: true });
 }
 
 /* =========================
