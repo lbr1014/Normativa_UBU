@@ -629,21 +629,6 @@ body[data-theme="light"] .app-navbar .navbar-toggler-icon {
   border-radius: var(--app-radius-lg);
 }
 
-.surface-block {
-  border-radius: var(--app-radius-lg);
-  overflow: hidden;
-}
-
-.surface-inset {
-  background: var(--app-inset-bg);
-  border: var(--app-inset-border);
-  border-radius: var(--app-radius-md);
-}
-
-.text-soft {
-  color: var(--app-text-soft);
-}
-
 .text-muted-app {
   color: var(--app-text-muted);
 }
@@ -681,16 +666,13 @@ body[data-theme="light"] .app-navbar .navbar-toggler-icon {
   gap: 1rem;
 }
 
-.auth-container .form-label,
-.checkbox-row,
-.form-group label {
+.auth-container .form-label {
   font-weight: 700;
   color: var(--app-label-text);
 }
 
 .auth-container .form-control,
-.auth-container .form-select,
-.form-input {
+.auth-container .form-select {
   width: 100%;
   padding: 0.8rem 0.95rem;
   border-radius: var(--app-radius-sm);
@@ -699,17 +681,14 @@ body[data-theme="light"] .app-navbar .navbar-toggler-icon {
   color: var(--app-input-text);
 }
 
-.auth-container .form-control::placeholder,
-.form-input::placeholder {
+.auth-container .form-control::placeholder {
   color: var(--app-text-muted);
 }
 
 .auth-container .form-control:hover,
 .auth-container .form-control:focus,
 .auth-container .form-select:hover,
-.auth-container .form-select:focus,
-.form-input:hover,
-.form-input:focus {
+.auth-container .form-select:focus {
   border-color: var(--app-input-focus-border);
   background: var(--app-input-hover-bg);
   color: var(--app-input-text);
@@ -726,8 +705,7 @@ body[data-theme="light"] .app-navbar .navbar-toggler-icon {
   margin-top: 0;
 }
 
-.auth-container .btn,
-.form-actions .btn {
+.auth-container .btn {
   width: 100%;
 }
 
@@ -751,7 +729,6 @@ body[data-theme="light"] .app-navbar .navbar-toggler-icon {
   text-decoration: underline;
 }
 
-.error,
 .invalid-feedback.d-block {
   color: #fca5a5;
   font-weight: 600;
@@ -759,7 +736,6 @@ body[data-theme="light"] .app-navbar .navbar-toggler-icon {
   margin-top: 0.35rem;
 }
 
-body[data-theme="light"] .error,
 body[data-theme="light"] .invalid-feedback.d-block {
   color: #b91c1c;
 }
