@@ -24,6 +24,10 @@ from pypdf.errors import PdfReadError, PdfStreamError
 from qdrant_client import QdrantClient
 from qdrant_client import models as qmodels
 from sentence_transformers import SentenceTransformer
+try:
+    import torch
+except ImportError:  # Dependencia opcional para detectar GPU
+    torch = None
 
 # Logger
 logger = logging.getLogger(__name__)    
@@ -35,7 +39,7 @@ logger = logging.getLogger(__name__)
 @contextmanager
 def timed_block(name: str):
     """
-    Metodo para medir el tiempo de un bloque de código.
+    Método para medir el tiempo de un bloque de código.
     Escribe el resultado en el logger.
     """
     start = time.perf_counter()
@@ -61,7 +65,7 @@ class Settings:
     
     # Embeddings
     TEXT_EMBEDDING_MODEL_ID: str = "sentence-transformers/all-MiniLM-L6-v2"
-    RAG_MODEL_DEVICE: str = "cpu"
+    RAG_MODEL_DEVICE: str = "cuda" if torch and torch.cuda.is_available() else "cpu"
 
     # Qdrant
     USE_QDRANT_CLOUD: bool = False
@@ -152,10 +156,12 @@ class EmbeddingModelSingleton:
     def __call__(self, input_text, to_list: bool = True):
         """
         Calcula los embeddings de un texto o lista de textos.
-        Argsumentos:
+        
+        Args:
             input_text: str o list[str] con el texto de entrada.
             to_list: si es True, devuelve los vectores como listas de Python,
                      lo cual facilita su uso y serialización.
+                     
         Returns:
             Vector o lista de vectores de embeddings.
         """
@@ -227,8 +233,8 @@ class VectorBaseDocument(BaseModel, Generic[T]):
     @classmethod
     def get_collection_name(cls) -> str:
         """
-        Obtiene el nombre de colección de Qdrant para esta clase.
-        Cambia los espacios por '_' y elimina las mayúsculas.
+        Genera el nombre de la colección de Qdrant para la clase actual, quitando las 
+        mayúsculas del nombre de la clase y separando las palabras con un guión bajo (_).
         """
         name = cls.__name__
         s1 = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
@@ -239,7 +245,7 @@ class VectorBaseDocument(BaseModel, Generic[T]):
     def _ensure_collection(cls) -> None:
         """
         Garantiza que exista la colección asociada en Qdrant.
-        Si la colección no existe, la crea usnado:
+        Si la colección no existe, la crea usando:
             tamaño de vector `embedding_model.embedding_size`
             métrica de similitud por coseno.
         """
@@ -318,9 +324,11 @@ class VectorBaseDocument(BaseModel, Generic[T]):
     ) -> tuple[list[T], UUID | None]:
         """
         Recupera documentos de la colección usando scroll (paginación).
-        Argsumentos:
+        
+        Args:
             limit: número máximo de documentos a devolver.
             offset: id a partir del cual continuar el scroll.
+            
         Returns:
             (lista_de_docs, siguiente_offset) donde siguiente_offset
             puede usarse en la siguiente llamada para seguir recorriendo.
@@ -347,10 +355,12 @@ class VectorBaseDocument(BaseModel, Generic[T]):
     ) -> list[T]:
         """
         Realiza una búsqueda vectorial en Qdrant.
-        Argumentos:
+        
+        Args:
             query_vector: vector de consulta (embedding de la pregunta o del texto).
             limit: número máximo de resultados a devolver.
             **kwargs: parámetros adicionales que se pasan a qdrant.search.
+            
         Returns:
             Lista de instancias de la clase con los puntos más similares.
         """
@@ -381,7 +391,7 @@ def chunk_text(text: str) -> list[str]:
     """
     # Obtiene el tokenizer del modelo y calculamos un límite de tokens
     tokenizer = embedding_model.tokenizer
-    # Márgen de seguridad, solo se usa el 80% de la capacidad del modelo
+    # Margen de seguridad, solo se usa el 80% de la capacidad del modelo
     max_len = int(embedding_model.max_input_length * 0.8)
 
     chunks: list[str] = []
@@ -480,7 +490,7 @@ if __name__ == "__main__":
                 vectors = embedding_model(chunks, to_list=True)
 
             # Se forman las entidades de dominio listas para guardar en Qdrant
-            with timed_block(f"guardar qdrant {pdf_path.name}"):
+            with timed_block(f"guardar Qdrant {pdf_path.name}"):
                 docs: list[VectorBaseDocument] = []
                 for chunk, vec in zip(chunks, vectors):
                     docs.append(
