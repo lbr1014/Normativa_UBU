@@ -437,21 +437,6 @@ def qdrant_delete_by_filename(filename: str) -> None:
         ),
     )
     
-def qdrant_count_chunks_by_filename(filename: str) -> int:
-    """
-    Cuenta cuántos chunks hay indexados en Qdrant para un PDF.
-    
-    Argumentos:
-        filename: Nombre del archivo PDF a eliminar de la base vectorial.
-    """
-    VectorBaseDocument._ensure_collection()
-    res = qdrant.count(
-        collection_name=VectorBaseDocument.get_collection_name(),
-        count_filter=_qdrant_filter_by_filename(filename),
-        exact=True,
-    )
-    return int(getattr(res, "count", 0))
-
 def qdrant_get_payloads(point_ids: list[str]) -> dict[str, dict]:
     ids = [i for i in point_ids if i]
     if not ids:
@@ -979,7 +964,12 @@ async def obtener_mejor_chunk(
         "retrieved": retrieved, 
     }
 
-def index_pdf(pdf_path: Path, document_id: int | None = None) -> list[VectorBaseDocument]:
+def index_pdf(
+    pdf_path: Path,
+    document_id: int | None = None,
+    numero_expediente: str | None = None,
+    tipo_documento: str | None = None,
+) -> list[VectorBaseDocument]:
     """
     Esta función indexa un PDF para ello lee el texto, lo trocea en chunks, calcula embeddings y guarda los puntos en Qdrant.
     """
@@ -1036,6 +1026,8 @@ def index_pdf(pdf_path: Path, document_id: int | None = None) -> list[VectorBase
                 "filename": pdf_path.name,
                 "title": title,
                 "sha256": doc_hash,
+                "numero_expediente": numero_expediente,
+                "tipo_documento": tipo_documento,
             }
             if document_id is not None:
                 base_meta["document_id"] = int(document_id)

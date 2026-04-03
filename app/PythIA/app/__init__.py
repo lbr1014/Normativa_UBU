@@ -12,6 +12,7 @@ from .vector_update_state import VectorUpdateState
 from .web_scraping_state import WebScrapingSate
 from .rag_query_state import RAGQueryState
 from .markdown_conversion_state import MarkdownConversionState
+from .error_handling import register_error_handlers
 from .inetrnacionalizacion.tarduccion import init_app as init_i18n, t
 
 def create_app():
@@ -37,7 +38,6 @@ def create_app():
 
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     app.config["DOCS_DIR"] = os.environ.get("DOCS_DIR", "pliegos")
-    app.config["DOCS_MD_DIR"] = os.environ.get("DOCS_MD_DIR")
     
     # Flask Mail
     app.config["MAIL_SERVER"] = os.environ.get("MAIL_SERVER", "")
@@ -78,5 +78,6 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(rag_bp)
+    register_error_handlers(app)
 
     return app

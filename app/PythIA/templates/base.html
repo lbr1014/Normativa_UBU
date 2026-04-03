@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{ current_locale }}">
+<html lang="{{ current_locale }}" data-bs-theme="dark">
 <head>
     <meta charset="UTF-8" name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}{{ t("app.default_title") }}{% endblock %}</title>
@@ -9,152 +9,82 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/luz.css') }}">
     {% block styles %}{% endblock %}
 </head>
-<body data-theme="dark">
+<body class="{% block body_class %}{% endblock %}" data-theme="dark">
+{% include "components/app_header.html" %}
 
-<header class="main-header shadow-sm">
-  <div class="container-fluid px-3 px-md-4">
-    <div class="header-layout d-flex align-items-center justify-content-between gap-3 py-2 flex-wrap">
-      <div class="d-flex align-items-center gap-3 header-brand">
-        <img src="{{ url_for('static', filename='img/PythIA_logo.png') }}" alt="Logo PythIA" class="logo-header">
-        <div class="user-info">
-          {% if current_user.is_authenticated %}
-            <p class="welcome mb-0">{{ t("nav.hello", name=current_user.nombre) }}</p>
+  {% set breadcrumb_items = [] %}
+  {% if request.endpoint == 'main.pag_principal' %}
+    {% set breadcrumb_items = [{"label": t("nav.home")}] %}
+  {% elif request.endpoint == 'main.historial' %}
+    {% set breadcrumb_items = [
+      {"label": t("nav.home"), "url": url_for('main.pag_principal')},
+      {"label": t("history.title")}
+    ] %}
+  {% elif request.endpoint == 'main.edit_user' %}
+    {% set breadcrumb_items = [
+      {"label": t("nav.home"), "url": url_for('main.pag_principal')},
+      {"label": t("user.edit_title")}
+    ] %}
+  {% elif request.endpoint == 'admin.documents_list_page' %}
+    {% set breadcrumb_items = [
+      {"label": t("nav.home"), "url": url_for('main.pag_principal')},
+      {"label": t("docs.manage_title")}
+    ] %}
+  {% elif request.endpoint == 'admin.users' %}
+    {% set breadcrumb_items = [
+      {"label": t("nav.home"), "url": url_for('main.pag_principal')},
+      {"label": t("users.title")}
+    ] %}
+  {% elif request.endpoint == 'admin.create_user' %}
+    {% set breadcrumb_items = [
+      {"label": t("nav.home"), "url": url_for('main.pag_principal')},
+      {"label": t("users.title"), "url": url_for('admin.users')},
+      {"label": t("admin.create_user_title")}
+    ] %}
+  {% elif request.endpoint == 'rag.rag_page' %}
+    {% set breadcrumb_items = [
+      {"label": t("nav.home"), "url": url_for('main.pag_principal')},
+      {"label": t("rag.page_title")}
+    ] %}
+  {% elif request.endpoint == 'auth.login' %}
+    {% set breadcrumb_items = [{"label": t("auth.login_title")}] %}
+  {% elif request.endpoint == 'auth.singup' %}
+    {% set breadcrumb_items = [{"label": t("auth.signup_title")}] %}
+  {% elif request.endpoint == 'auth.forgot_password' %}
+    {% set breadcrumb_items = [
+      {"label": t("auth.login_title"), "url": url_for('auth.login')},
+      {"label": t("auth.forgot_password_title")}
+    ] %}
+  {% elif request.endpoint == 'auth.reset_password' %}
+    {% set breadcrumb_items = [
+      {"label": t("auth.login_title"), "url": url_for('auth.login')},
+      {"label": t("auth.reset_password_title")}
+    ] %}
+  {% endif %}
 
-            {% if current_user.is_admin %}
-              <span class="app-badge admin mt-1">{{ t("nav.admin") }}</span>
-            {% else %}
-              <span class="app-badge user mt-1">{{ t("nav.user") }}</span>
-            {% endif %}
-
-            <p class="last-login mb-0">
-              {{ t("nav.last_login") }}
-              {% if current_user.last_login %}
-                {{ current_user.last_login.strftime("%d/%m/%Y %H:%M:%S") }}
-              {% else %}
-                -
-              {% endif %}
-            </p>
+  {% if breadcrumb_items %}
+    <nav aria-label="breadcrumb" class="app-breadcrumb-shell">
+      <ol class="breadcrumb app-breadcrumb mb-0">
+        {% for item in breadcrumb_items %}
+          {% if item.url and not loop.last %}
+            <li class="breadcrumb-item">
+              <a href="{{ item.url }}">{{ item.label }}</a>
+            </li>
           {% else %}
-            <p class="welcome mb-0"><strong>{{ titulo or t("app.welcome") }}</strong></p>
-            <p class="home-author mb-0 mt-1">{{ autor }}</p>
+            <li class="breadcrumb-item{% if loop.last %} active{% endif %}"{% if loop.last %} aria-current="page"{% endif %}>
+              {{ item.label }}
+            </li>
           {% endif %}
-        </div>
-      </div>
+        {% endfor %}
+      </ol>
+    </nav>
+  {% endif %}
 
-      <div class="header-actions d-flex align-items-center gap-2 flex-wrap justify-content-md-end">
-        {% if current_user.is_authenticated %}
-          <div class="dropdown d-none d-md-block">
-            <button class="btn btn-light btn-header" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-              {{ t("nav.options") }}
-            </button>
-
-            <ul class="dropdown-menu dropdown-menu-end">
-              {% if current_user.is_admin %}
-                {% if request.endpoint != 'admin.documents_list_page' %}
-                  <li><a class="dropdown-item" href="{{ url_for('admin.documents_list_page') }}">{{ t("nav.manage_documents") }}</a></li>
-                {% endif %}
-                {% if request.endpoint != 'admin.users' %}
-                  <li><a class="dropdown-item" href="{{ url_for('admin.users') }}">{{ t("nav.manage_users") }}</a></li>
-                {% endif %}
-              {% endif %}
-
-              {% if request.endpoint != 'main.historial' %}
-                <li><a class="dropdown-item" href="{{ url_for('main.historial') }}">{{ t("nav.query_history") }}</a></li>
-              {% endif %}
-              {% if request.endpoint != 'main.edit_user' %}
-                <li><a class="dropdown-item" href="{{ url_for('main.edit_user') }}">{{ t("nav.edit_user") }}</a></li>
-              {% endif %}
-              {% if request.endpoint != 'main.pag_principal' %}
-                <li><a class="dropdown-item" href="{{ url_for('main.pag_principal') }}">{{ t("nav.home") }}</a></li>
-              {% endif %}
-            </ul>
-          </div>
-
-          <div class="dropdown d-none d-md-block">
-            <button class="btn btn-outline-light btn-header" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-              {{ t("nav.settings") }}
-            </button>
-
-            <ul class="dropdown-menu dropdown-menu-end mobile-nav-menu">
-              <li><h6 class="dropdown-header">{{ t("nav.appearance") }}</h6></li>
-              <li><button type="button" class="dropdown-item theme-option" data-theme-value="dark">{{ t("nav.dark_mode") }}</button></li>
-              <li><button type="button" class="dropdown-item theme-option" data-theme-value="light">{{ t("nav.light_mode") }}</button></li>
-              <li><hr class="dropdown-divider"></li>
-              <li><h6 class="dropdown-header">{{ t("nav.internationalization") }}</h6></li>
-              {% for lang_code, lang_name in supported_languages.items() %}
-                <li>
-                  <form method="POST" action="{{ url_for('set_language_route') }}" class="m-0">
-                    <input type="hidden" name="lang" value="{{ lang_code }}">
-                    <input type="hidden" name="next" value="{{ request.full_path if request.query_string else request.path }}">
-                    <button type="submit" class="dropdown-item{% if current_locale == lang_code %} active{% endif %}">
-                      {{ t("lang." ~ lang_code) }}
-                    </button>
-                  </form>
-                </li>
-              {% endfor %}
-              <li><hr class="dropdown-divider"></li>
-              <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">{{ t("nav.logout") }}</a></li>
-            </ul>
-          </div>
-
-          <div class="dropdown d-md-none">
-            <button class="btn btn-outline-light btn-header btn-header-menu" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="{{ t('nav.open_menu') }}">
-              <span class="menu-dots" aria-hidden="true">&#8942;</span>
-            </button>
-
-            <ul class="dropdown-menu dropdown-menu-end">
-              <li><h6 class="dropdown-header">{{ t("nav.options") }}</h6></li>
-              {% if current_user.is_admin %}
-                {% if request.endpoint != 'admin.documents_list_page' %}
-                  <li><a class="dropdown-item" href="{{ url_for('admin.documents_list_page') }}">{{ t("nav.manage_documents") }}</a></li>
-                {% endif %}
-                {% if request.endpoint != 'admin.users' %}
-                  <li><a class="dropdown-item" href="{{ url_for('admin.users') }}">{{ t("nav.manage_users") }}</a></li>
-                {% endif %}
-              {% endif %}
-
-              {% if request.endpoint != 'main.historial' %}
-                <li><a class="dropdown-item" href="{{ url_for('main.historial') }}">{{ t("nav.query_history") }}</a></li>
-              {% endif %}
-              {% if request.endpoint != 'main.edit_user' %}
-                <li><a class="dropdown-item" href="{{ url_for('main.edit_user') }}">{{ t("nav.edit_user") }}</a></li>
-              {% endif %}
-              {% if request.endpoint != 'main.pag_principal' %}
-                <li><a class="dropdown-item" href="{{ url_for('main.pag_principal') }}">{{ t("nav.home") }}</a></li>
-              {% endif %}
-
-              <li><hr class="dropdown-divider"></li>
-              <li><h6 class="dropdown-header">{{ t("nav.settings") }}</h6></li>
-              <li><button type="button" class="dropdown-item theme-option" data-theme-value="dark">{{ t("nav.dark_mode") }}</button></li>
-              <li><button type="button" class="dropdown-item theme-option" data-theme-value="light">{{ t("nav.light_mode") }}</button></li>
-              <li><hr class="dropdown-divider"></li>
-              <li><h6 class="dropdown-header">{{ t("nav.internationalization") }}</h6></li>
-              {% for lang_code, lang_name in supported_languages.items() %}
-                <li>
-                  <form method="POST" action="{{ url_for('set_language_route') }}" class="m-0">
-                    <input type="hidden" name="lang" value="{{ lang_code }}">
-                    <input type="hidden" name="next" value="{{ request.full_path if request.query_string else request.path }}">
-                    <button type="submit" class="dropdown-item{% if current_locale == lang_code %} active{% endif %}">
-                      {{ t("lang." ~ lang_code) }}
-                    </button>
-                  </form>
-                </li>
-              {% endfor %}
-              <li><hr class="dropdown-divider"></li>
-              <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">{{ t("nav.logout") }}</a></li>
-            </ul>
-          </div>
-        {% endif %}
-      </div>
+  <main class="app-main-shell {% block main_content_class %}{% endblock %}">
+    <div class="{% block page_width_class %}app-page-width{% endblock %}">
+      {% block content %}{% endblock %}
     </div>
-  </div>
-</header>
-
-  <div class="page-scroll">
-    <main class="main-content{% block main_content_class %}{% endblock %}">
-        {% block content %}{% endblock %}
-    </main>
-  </div>
+  </main>
   <script>
     window.PYTHIA_I18N = {{ client_translations|tojson }};
     window.pythiaTranslate = function(key, params) {

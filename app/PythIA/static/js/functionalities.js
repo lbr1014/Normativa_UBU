@@ -3,6 +3,19 @@
    ========================= */
 
 function initLightEffect(selector = ".luz") {
+  function updateEffectFromPoint(clientX, clientY) {
+    const target = document.elementFromPoint(clientX, clientY);
+    const el = target?.closest?.(selector);
+    if (!el) return;
+
+    const rect = el.getBoundingClientRect();
+    const x = ((clientX - rect.left) / rect.width) * 100;
+    const y = ((clientY - rect.top) / rect.height) * 100;
+
+    el.style.setProperty("--x", `${x}%`);
+    el.style.setProperty("--y", `${y}%`);
+  }
+
   document.addEventListener("mousemove", function (e) {
     const el = e.target.closest(selector);
     if (!el) return;
@@ -14,6 +27,18 @@ function initLightEffect(selector = ".luz") {
     el.style.setProperty("--x", `${x}%`);
     el.style.setProperty("--y", `${y}%`);
   });
+
+  document.addEventListener("touchstart", function (e) {
+    const touch = e.touches?.[0];
+    if (!touch) return;
+    updateEffectFromPoint(touch.clientX, touch.clientY);
+  }, { passive: true });
+
+  document.addEventListener("touchmove", function (e) {
+    const touch = e.touches?.[0];
+    if (!touch) return;
+    updateEffectFromPoint(touch.clientX, touch.clientY);
+  }, { passive: true });
 }
 
 /* =========================
@@ -87,15 +112,21 @@ function initDeleteModal(modalId = "deleteConfirmModal") {
 
 function initThemeSelector() {
   const body = document.body;
+  const root = document.documentElement;
   if (!body) return;
 
   const storageKey = "pythia_theme";
   const buttons = document.querySelectorAll(".theme-option");
+  const mediaQuery = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+
+  function getSystemTheme() {
+    return mediaQuery?.matches ? "dark" : "light";
+  }
 
   function applyTheme(theme) {
     const resolvedTheme = theme === "light" ? "light" : "dark";
     body.setAttribute("data-theme", resolvedTheme);
-    localStorage.setItem(storageKey, resolvedTheme);
+    root.setAttribute("data-bs-theme", resolvedTheme);
 
     buttons.forEach((button) => {
       const isActive = button.dataset.themeValue === resolvedTheme;
@@ -104,13 +135,21 @@ function initThemeSelector() {
     });
   }
 
-  const savedTheme = localStorage.getItem(storageKey) || body.getAttribute("data-theme") || "dark";
-  applyTheme(savedTheme);
+  const savedTheme = localStorage.getItem(storageKey);
+  const initialTheme = savedTheme || getSystemTheme() || body.getAttribute("data-theme") || "dark";
+  applyTheme(initialTheme);
 
   buttons.forEach((button) => {
     button.addEventListener("click", function () {
-      applyTheme(button.dataset.themeValue);
+      const resolvedTheme = button.dataset.themeValue === "light" ? "light" : "dark";
+      localStorage.setItem(storageKey, resolvedTheme);
+      applyTheme(resolvedTheme);
     });
+  });
+
+  mediaQuery?.addEventListener?.("change", function (event) {
+    if (localStorage.getItem(storageKey)) return;
+    applyTheme(event.matches ? "dark" : "light");
   });
 }
 

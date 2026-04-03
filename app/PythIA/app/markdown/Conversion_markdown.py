@@ -69,6 +69,8 @@ OCR_RETRY_MAX_IMAGE_SIDES = [
     if value.strip()
 ]
 OCR_PAGE_FAILURE_MODE = os.getenv("OCR_PAGE_FAILURE_MODE", "placeholder").strip().lower()
+PDF_INFO_TIMEOUT_SECONDS = int(os.getenv("PDF_INFO_TIMEOUT_SECONDS", "30"))
+PDF_RENDER_TIMEOUT_SECONDS = int(os.getenv("PDF_RENDER_TIMEOUT_SECONDS", "120"))
 
 
 class OllamaOCRException(RuntimeError):
@@ -158,7 +160,7 @@ async def _post_ollama_chat_async(client: httpx.AsyncClient, payload: dict) -> d
 
 
 def get_pdf_page_count(pdf_path: Path) -> int:
-    info = pdfinfo_from_path(str(pdf_path))
+    info = pdfinfo_from_path(str(pdf_path), timeout=PDF_INFO_TIMEOUT_SECONDS)
     pages = int(info.get("Pages", 0))
     if pages <= 0:
         raise RuntimeError(f"No se pudo determinar el numero de paginas de {pdf_path.name}.")
@@ -176,6 +178,7 @@ def pdf_page_to_image(pdf_path: Path, page_number: int, output_dir: Path, dpi: i
         last_page=page_number,
         fmt="png",
         single_file=True,
+        timeout=PDF_RENDER_TIMEOUT_SECONDS,
     )
     if not images:
         raise RuntimeError(f"No se pudo convertir la pagina {page_number} de {pdf_path.name}.")
@@ -414,10 +417,11 @@ async def process_pdf_async(pdf_path: Path, output_dir: Path, on_page_start=None
     out_path = output_dir / f"{pdf_path.stem}.md"
     out_path.write_text(full_md, encoding="utf-8")
     print(f"Markdown guardado en: {out_path}")
+    return out_path
 
 
 def process_pdf(pdf_path: Path, output_dir: Path, on_page_start=None):
-    asyncio.run(process_pdf_async(pdf_path, output_dir, on_page_start=on_page_start))
+    return asyncio.run(process_pdf_async(pdf_path, output_dir, on_page_start=on_page_start))
 
 
 def main():
