@@ -1,0 +1,67 @@
+from io import BytesIO
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
+
+from tests.support import BaseAppTestCase
+
+from app.extensions import db
+from app.usuario import User
+from app.vector_update_state import VectorUpdateState
+
+
+class AdminRoutesIntegrationTest(BaseAppTestCase):
+    def setUp(self):
+        super().setUp()
+        self.admin = self.create_user(email="admin@example.com", is_admin=True)
+        self.login(self.admin.email)
+
+    def test_admin_can_toggle_and_delete_users(self):
+        user = self.create_user(email="user@example.com", is_admin=False)
+
+        toggle = self.client.post(f"/admin/users/{user.id}", follow_redirects=False)
+        self.assertEqual(toggle.status_code, 302)
+        db.session.refresh(user)
+        self.assertTrue(user.is_admin)
+
+        delete = self.client.post(f"/admin/users/{user.id}/delete", follow_redirects=False)
+        self.assertEqual(delete.status_code, 302)
+        self.assertIsNone(db.session.get(User, user.id))
+
+    def test_admin_documents_list_uses_service_pagination(self):
+        fake_service = MagicMock()
+        fake_service.list_documents_paginated.return_value = SimpleNamespace(items=[], page=1, pages=1, total=0)
+        fake_service.get_markdown_status_map.return_value = {}
+        fake_service.count_pending_markdown.return_value = 0
+
+        with patch("app.admin.routes.documentos_service", return_value=fake_service):
+            response = self.client.get("/admin/documents/list?page=1")
+
+        self.assertEqual(response.status_code, 200)
+        fake_service.sync_from_folder.assert_called_once()
+        fake_service.purge_missing_files.assert_called_once()
+        fake_service.list_documents_paginated.assert_called_once_with(1, 10)
+
+    def test_admin_upload_documents_delegates_to_service(self):
+        fake_service = MagicMock()
+
+        with patch("app.admin.routes.documentos_service", return_value=fake_service):
+            response = self.client.post(
+                "/admin/documents/upload",
+                data={"files": (BytesIO(b"%PDF-1.4"), "nuevo.pdf")},
+                content_type="multipart/form-data",
+                follow_redirects=False,
+            )
+
+        self.assertEqual(response.status_code, 302)
+        fake_service.save_uploads.assert_called_once()
+
+    @patch("app.admin.routes.executor.submit")
+    def test_admin_vector_update_creates_queued_job(self, mock_submit):
+        response = self.client.post("/admin/vector-db/update")
+
+        self.assertEqual(response.status_code, 202)
+        job_id = response.get_json()["job_id"]
+        job = db.session.get(VectorUpdateState, job_id)
+        self.assertIsNotNone(job)
+        self.assertEqual(job.status, "queued")
+        mock_submit.assert_called_once()

@@ -114,11 +114,9 @@ services:
     build: .
     container_name: flask_tests
     working_dir: /app
-    command: sh -lc "coverage run --source=app -m unittest discover -s tests -t . && coverage xml -o coverage.xml && coverage report -m && coverage html"
+    command: sh /app/tests/run_tests.sh
     volumes:
-      - ./tests:/app/tests
-      - ./app:/app/app
-      - ./coverage:/app/htmlcov
+      - ./:/app
     environment:
       PYTHONPATH: /app
       DATABASE_URL: "sqlite:///:memory:"
@@ -130,4 +128,3 @@ volumes:
   qdrantdata:
   ollama:
   hf_cache:
-  test:
