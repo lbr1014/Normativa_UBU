@@ -21,13 +21,17 @@ from pathlib import Path
 from typing import Any, Generic, Iterable, Optional, Type, TypeVar, Dict
 from uuid import UUID, uuid4
 
-import requests
+import httpx
 from pydantic import BaseModel, Field
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError, PdfStreamError
 from qdrant_client import QdrantClient
 from qdrant_client import models as qmodels
 from sentence_transformers import SentenceTransformer
+try:
+    import torch
+except ImportError:  # pragma: no cover - entorno sin torch fuera de Docker
+    torch = None
 
 from hashlib import sha256
 
@@ -36,6 +40,10 @@ logger = logging.getLogger(__name__)
 
 
 class QueryCancelledError(RuntimeError):
+    pass
+
+
+class OllamaTimeoutError(RuntimeError):
     pass
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
@@ -77,8 +85,43 @@ class Settings:
     """
     
     # Embeddings
-    TEXT_EMBEDDING_MODEL_ID: str = "sentence-transformers/all-MiniLM-L6-v2"
-    RAG_MODEL_DEVICE: str = "cpu"
+    TEXT_EMBEDDING_MODEL_ID: str = os.getenv(
+        "TEXT_EMBEDDING_MODEL_ID",
+        "sentence-transformers/all-MiniLM-L6-v2",
+    )
+    RAG_MODEL_DEVICE: str = os.getenv(
+        "RAG_MODEL_DEVICE",
+        "cuda" if torch is not None and torch.cuda.is_available() else "cpu",
+    )
+    EMBEDDING_BATCH_SIZE: int = int(os.getenv("EMBEDDING_BATCH_SIZE", "32"))
+
+    # Ollama
+    _ollama_num_gpu = os.getenv("OLLAMA_NUM_GPU")
+    OLLAMA_NUM_GPU: int = (
+        int(_ollama_num_gpu)
+        if _ollama_num_gpu not in (None, "")
+        else (-1 if torch is not None and torch.cuda.is_available() else 0)
+    )
+    OLLAMA_NUM_GPU_SOURCE: str = (
+        "env"
+        if _ollama_num_gpu not in (None, "")
+        else ("auto-cuda-full-offload" if torch is not None and torch.cuda.is_available() else "auto-cpu")
+    )
+    OLLAMA_CONNECT_TIMEOUT_SECONDS: float = float(
+        os.getenv("OLLAMA_CONNECT_TIMEOUT_SECONDS", "10")
+    )
+    _ollama_read_timeout = os.getenv("OLLAMA_READ_TIMEOUT_SECONDS")
+    OLLAMA_READ_TIMEOUT_SECONDS: Optional[float] = (
+        float(_ollama_read_timeout)
+        if _ollama_read_timeout not in (None, "")
+        else None
+    )
+    OLLAMA_WRITE_TIMEOUT_SECONDS: float = float(
+        os.getenv("OLLAMA_WRITE_TIMEOUT_SECONDS", "120")
+    )
+    OLLAMA_POOL_TIMEOUT_SECONDS: float = float(
+        os.getenv("OLLAMA_POOL_TIMEOUT_SECONDS", "10")
+    )
 
     # Qdrant
     USE_QDRANT_CLOUD: bool = False
@@ -89,6 +132,28 @@ class Settings:
 
 
 settings = Settings()
+
+
+def _embedding_execution_backend() -> str:
+    device = settings.RAG_MODEL_DEVICE
+    if device.startswith("cuda"):
+        if torch is None:
+            return f"{device} (torch no disponible)"
+        if not torch.cuda.is_available():
+            return f"{device} (CUDA no disponible)"
+        gpu_name = torch.cuda.get_device_name(0)
+        gpu_count = torch.cuda.device_count()
+        return f"GPU {device} ({gpu_name}, total_gpus={gpu_count})"
+    return f"CPU ({device})"
+
+
+def _ollama_execution_backend() -> str:
+    num_gpu = settings.OLLAMA_NUM_GPU
+    if num_gpu == -1:
+        return f"GPU (num_gpu=-1, all layers when possible, source={settings.OLLAMA_NUM_GPU_SOURCE})"
+    if num_gpu > 0:
+        return f"GPU (num_gpu={num_gpu} layers, source={settings.OLLAMA_NUM_GPU_SOURCE})"
+    return f"CPU (num_gpu=0, source={settings.OLLAMA_NUM_GPU_SOURCE})"
 
 
 # =========================
@@ -176,7 +241,12 @@ class EmbeddingModelSingleton:
         Returns:
             Vector o lista de vectores de embeddings.
         """
-        emb = self._model.encode(input_text)
+        emb = self._model.encode(
+            input_text,
+            batch_size=settings.EMBEDDING_BATCH_SIZE,
+            convert_to_numpy=True,
+            show_progress_bar=False,
+        )
         if to_list:
             if isinstance(input_text, list):
                 #  Lista de vectores
@@ -190,6 +260,11 @@ start_model = time.perf_counter()
 # Instancia única disponible para el resto del código
 embedding_model = EmbeddingModelSingleton()
 logger.info("Tiempo carga modelo embeddings: %.3f s", time.perf_counter() - start_model)
+logger.info(
+    "Modelo de embeddings cargado en %s | model_id=%s",
+    _embedding_execution_backend(),
+    settings.TEXT_EMBEDDING_MODEL_ID,
+)
 
 
 # =========================
@@ -362,21 +437,6 @@ def qdrant_delete_by_filename(filename: str) -> None:
         ),
     )
     
-def qdrant_count_chunks_by_filename(filename: str) -> int:
-    """
-    Cuenta cuántos chunks hay indexados en Qdrant para un PDF.
-    
-    Argumentos:
-        filename: Nombre del archivo PDF a eliminar de la base vectorial.
-    """
-    VectorBaseDocument._ensure_collection()
-    res = qdrant.count(
-        collection_name=VectorBaseDocument.get_collection_name(),
-        count_filter=_qdrant_filter_by_filename(filename),
-        exact=True,
-    )
-    return int(getattr(res, "count", 0))
-
 def qdrant_get_payloads(point_ids: list[str]) -> dict[str, dict]:
     ids = [i for i in point_ids if i]
     if not ids:
@@ -662,25 +722,83 @@ def iter_clean_lines(text: str) -> Iterable[str]:
         if line:
             yield line
 
-def recuperacion_chunk(user_query: str, k: int = 10) -> list[VectorBaseDocument]:
+
+def build_metadata_filter(
+    numero_expediente: str | None = None,
+    tipo_documento: str | None = None,
+) -> qmodels.Filter | None:
+    must: list[qmodels.FieldCondition] = []
+
+    if numero_expediente:
+        must.append(
+            qmodels.FieldCondition(
+                key="metadata.numero_expediente",
+                match=qmodels.MatchValue(value=numero_expediente),
+            )
+        )
+
+    if tipo_documento:
+        must.append(
+            qmodels.FieldCondition(
+                key="metadata.tipo_documento",
+                match=qmodels.MatchValue(value=tipo_documento),
+            )
+        )
+
+    if not must:
+        return None
+
+    return qmodels.Filter(must=must)
+
+def recuperacion_chunk(
+    user_query: str,
+    k: int = 10,
+    numero_expediente: str | None = None,
+    tipo_documento: str | None = None,
+) -> list[VectorBaseDocument]:
     """
     Dada una pregunta del usuario, recupera los chunks más similares
     desde Qdrant.
     """
+    logger.info(
+        "Recuperando chunks para consulta RAG con embeddings en %s",
+        _embedding_execution_backend(),
+    )
     # Embedding de la pregunta
     query_vector = embedding_model(user_query, to_list=True)
 
     # Búsqueda vectorial en Qdrant
-    docs = VectorBaseDocument.search(query_vector=query_vector, limit=k)
+    query_filter = build_metadata_filter(
+        numero_expediente=numero_expediente,
+        tipo_documento=tipo_documento,
+    )
+    docs = VectorBaseDocument.search(
+        query_vector=query_vector,
+        limit=k,
+        query_filter=query_filter,
+    )
 
     return docs
 
-def recuperacion_chunk_con_scores(user_query: str, k: int = 10) -> list[qmodels.ScoredPoint]:
+def recuperacion_chunk_con_scores(
+    user_query: str,
+    k: int = 10,
+    numero_expediente: str | None = None,
+    tipo_documento: str | None = None,
+) -> list[qmodels.ScoredPoint]:
     """
     Recupera los k chunks más similares desde Qdrant, incluyendo score e id del punto.
     """
+    logger.info(
+        "Recuperando chunks para consulta RAG con embeddings en %s",
+        _embedding_execution_backend(),
+    )
     # Embedding de la pregunta
     query_vector = embedding_model(user_query, to_list=True)
+    query_filter = build_metadata_filter(
+        numero_expediente=numero_expediente,
+        tipo_documento=tipo_documento,
+    )
     try:
         VectorBaseDocument._ensure_collection()
 
@@ -689,6 +807,7 @@ def recuperacion_chunk_con_scores(user_query: str, k: int = 10) -> list[qmodels.
             collection_name=VectorBaseDocument.get_collection_name(),
             query=query_vector,
             limit=k,
+            query_filter=query_filter,
             with_payload=True,
             with_vectors=False,
         )
@@ -701,7 +820,7 @@ def recuperacion_chunk_con_scores(user_query: str, k: int = 10) -> list[qmodels.
 # =========================
 # Ollama
 # =========================
-def ask_ollama(
+async def ask_ollama(
     prompt: str,
     model: str = "llama3.1:8b-instruct-q4_K_M",
     should_cancel=None,
@@ -712,48 +831,73 @@ def ask_ollama(
     if should_cancel and should_cancel():
         raise QueryCancelledError("Consulta cancelada por el usuario.")
 
-    url = f"{OLLAMA_BASE_URL}/api/generate"
-
     full_prompt = (
         "Responde en español de forma breve y precisa.\n\n"
         f"{prompt}"
     )
-
-    resp = requests.post(
-        url,
-        json={
-            "model": model,
-            "prompt": full_prompt,
-            "stream": True,
-        },
-        timeout=120,
-        stream=True,
-    )
-    resp.raise_for_status()
     chunks: list[str] = []
 
+    request_payload = {
+        "model": model,
+        "prompt": full_prompt,
+        "stream": True,
+        "options": {
+            "num_gpu": settings.OLLAMA_NUM_GPU,
+        },
+    }
+
+    logger.info(
+        "Consulta a Ollama | model=%s | backend=%s | base_url=%s",
+        model,
+        _ollama_execution_backend(),
+        OLLAMA_BASE_URL,
+    )
+
+    timeout = httpx.Timeout(
+        connect=settings.OLLAMA_CONNECT_TIMEOUT_SECONDS,
+        read=settings.OLLAMA_READ_TIMEOUT_SECONDS,
+        write=settings.OLLAMA_WRITE_TIMEOUT_SECONDS,
+        pool=settings.OLLAMA_POOL_TIMEOUT_SECONDS,
+    )
     try:
-        for line in resp.iter_lines(decode_unicode=True):
-            if should_cancel and should_cancel():
-                raise QueryCancelledError("Consulta cancelada por el usuario.")
+        async with httpx.AsyncClient(base_url=OLLAMA_BASE_URL, timeout=timeout) as client:
+            async with client.stream(
+                "POST",
+                "/api/generate",
+                json=request_payload,
+            ) as resp:
+                resp.raise_for_status()
 
-            if not line:
-                continue
+                async for line in resp.aiter_lines():
+                    if should_cancel and should_cancel():
+                        raise QueryCancelledError("Consulta cancelada por el usuario.")
+                    if not line:
+                        continue
 
-            payload = json.loads(line)
-            piece = payload.get("response")
-            if piece:
-                chunks.append(piece)
+                    payload = json.loads(line)
+                    piece = payload.get("response")
+                    if piece:
+                        chunks.append(piece)
 
-            if payload.get("done"):
-                break
-    finally:
-        resp.close()
-
+                    if payload.get("done"):
+                        break
+    except httpx.TimeoutException as exc:
+        timeout_label = (
+            f"{settings.OLLAMA_READ_TIMEOUT_SECONDS:g} s"
+            if settings.OLLAMA_READ_TIMEOUT_SECONDS is not None
+            else "sin limite"
+        )
+        raise OllamaTimeoutError(
+            f"Ollama ha superado el tiempo de espera de lectura ({timeout_label})."
+        ) from exc
     return "".join(chunks)
 
 
-def obtener_chunk_de_query(user_query: str) -> dict | None:
+def obtener_chunk_de_query(
+    user_query: str,
+    numero_expediente: str | None = None,
+    tipo_documento: str | None = None,
+) -> dict | None:
     """
     Toma una pregunta de usuario, recupera el chunk más relevante de Qdrant
     y devuelve:
@@ -764,7 +908,12 @@ def obtener_chunk_de_query(user_query: str) -> dict | None:
 
     Devuelve None si no hay resultados.
     """
-    docs = recuperacion_chunk(user_query, k=1)
+    docs = recuperacion_chunk(
+        user_query,
+        k=1,
+        numero_expediente=numero_expediente,
+        tipo_documento=tipo_documento,
+    )
     if not docs:
         return None
 
@@ -779,11 +928,13 @@ def obtener_chunk_de_query(user_query: str) -> dict | None:
     }
     
     
-def obtener_mejor_chunk(
+async def obtener_mejor_chunk(
     user_query: str,
     model: str = "llama3.1:8b-instruct-q4_K_M",
     should_cancel=None,
     on_status=None,
+    numero_expediente: str | None = None,
+    tipo_documento: str | None = None,
     ) -> dict:
     """
     1) Recupera de Qdrant los 10 chunk más parecido a la pregunta.
@@ -804,7 +955,12 @@ def obtener_mejor_chunk(
     if on_status:
         on_status("Recuperando fragmentos relevantes...")
 
-    points = recuperacion_chunk_con_scores(user_query, k=10)
+    points = recuperacion_chunk_con_scores(
+        user_query,
+        k=10,
+        numero_expediente=numero_expediente,
+        tipo_documento=tipo_documento,
+    )
     if not points:
         return {
             "answer": "No he encontrado ningún fragmento relevante en la base de datos.",
@@ -813,6 +969,10 @@ def obtener_mejor_chunk(
             "segment_index": -1,
             "chunk": "",
             "retrieved": [],
+            "applied_filters": {
+                "numero_expediente": numero_expediente,
+                "tipo_documento": tipo_documento,
+            },
         }
     
     # Normaliza a lista de dicts
@@ -864,7 +1024,7 @@ def obtener_mejor_chunk(
     if on_status:
         on_status("Generando respuesta del modelo...")
 
-    answer = ask_ollama(prompt, model=model, should_cancel=should_cancel)
+    answer = await ask_ollama(prompt, model=model, should_cancel=should_cancel)
 
     return {
         "answer": answer,
@@ -872,10 +1032,19 @@ def obtener_mejor_chunk(
         "filename": best.get("filename", ""),
         "segment_index": best.get("segment_index", -1),
         "chunk": best.get("chunk", ""),
-        "retrieved": retrieved, 
+        "retrieved": retrieved,
+        "applied_filters": {
+            "numero_expediente": numero_expediente,
+            "tipo_documento": tipo_documento,
+        },
     }
 
-def index_pdf(pdf_path: Path, document_id: int | None = None) -> list[VectorBaseDocument]:
+def index_pdf(
+    pdf_path: Path,
+    document_id: int | None = None,
+    numero_expediente: str | None = None,
+    tipo_documento: str | None = None,
+) -> list[VectorBaseDocument]:
     """
     Esta función indexa un PDF para ello lee el texto, lo trocea en chunks, calcula embeddings y guarda los puntos en Qdrant.
     """
@@ -932,6 +1101,8 @@ def index_pdf(pdf_path: Path, document_id: int | None = None) -> list[VectorBase
                 "filename": pdf_path.name,
                 "title": title,
                 "sha256": doc_hash,
+                "numero_expediente": numero_expediente,
+                "tipo_documento": tipo_documento,
             }
             if document_id is not None:
                 base_meta["document_id"] = int(document_id)

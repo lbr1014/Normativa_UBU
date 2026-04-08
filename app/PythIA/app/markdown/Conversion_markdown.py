@@ -1,12 +1,19 @@
+import asyncio
 import base64
 import os
 import re
+import shutil
 import sys
 import tempfile
 from pathlib import Path
 
-import requests
-from pdf2image import convert_from_path
+import httpx
+from PIL import Image
+from pdf2image import convert_from_path, pdfinfo_from_path
+try:
+    import torch
+except ImportError:  # pragma: no cover - entorno sin torch fuera de Docker
+    torch = None
 
 PROMPT_BASE = """
 You are converting a Spanish PDF (often legal / administrative) into clean Markdown.
@@ -28,7 +35,7 @@ Rules:
 - If there is an image, wrap a short description in <img></img>.
 - Wrap watermarks in <watermark>...</watermark>.
 - Wrap page numbers in <page_number>...</page_number>.
-- Prefer ☐ and ☑ for check boxes.
+- Prefer ☑ and ☒ for check boxes.
 
 Index / table of contents:
 - If a line has a section title followed by dots and then a page number
@@ -41,12 +48,58 @@ Return only valid Markdown, no explanations.
 
 MODEL_NAME = os.getenv("OCR_MODEL_NAME", "blaifa/Nanonets-OCR-s")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434").rstrip("/")
-OLLAMA_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_TIMEOUT_SECONDS", "300"))
-DEFAULT_NUM_GPU = int(os.getenv("OLLAMA_NUM_GPU", "0"))
+OLLAMA_CONNECT_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_CONNECT_TIMEOUT_SECONDS", "10"))
+OLLAMA_READ_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_READ_TIMEOUT_SECONDS", "300"))
+_ollama_num_gpu = os.getenv("OLLAMA_NUM_GPU")
+DEFAULT_NUM_GPU = (
+    int(_ollama_num_gpu)
+    if _ollama_num_gpu not in (None, "")
+    else (-1 if torch is not None and torch.cuda.is_available() else 0)
+)
+OLLAMA_NUM_GPU_SOURCE = (
+    "env"
+    if _ollama_num_gpu not in (None, "")
+    else ("auto-cuda-full-offload" if torch is not None and torch.cuda.is_available() else "auto-cpu")
+)
+PDF_RENDER_DPI = int(os.getenv("PDF_RENDER_DPI", "200"))
+OCR_MAX_IMAGE_SIDE = int(os.getenv("OCR_MAX_IMAGE_SIDE", "1600"))
+OCR_RETRY_MAX_IMAGE_SIDES = [
+    int(value.strip())
+    for value in os.getenv("OCR_RETRY_MAX_IMAGE_SIDES", "1600,1280,1024,896,768").split(",")
+    if value.strip()
+]
+OCR_PAGE_FAILURE_MODE = os.getenv("OCR_PAGE_FAILURE_MODE", "placeholder").strip().lower()
+PDF_INFO_TIMEOUT_SECONDS = int(os.getenv("PDF_INFO_TIMEOUT_SECONDS", "30"))
+PDF_RENDER_TIMEOUT_SECONDS = int(os.getenv("PDF_RENDER_TIMEOUT_SECONDS", "120"))
 
 
 class OllamaOCRException(RuntimeError):
     """Error de OCR contra Ollama con contexto suficiente para depuración."""
+
+
+def _ocr_execution_backend() -> str:
+    if DEFAULT_NUM_GPU == -1:
+        if torch is not None and torch.cuda.is_available():
+            gpu_name = torch.cuda.get_device_name(0)
+            gpu_count = torch.cuda.device_count()
+            return (
+                "GPU "
+                f"(num_gpu=-1, all layers when possible, gpu={gpu_name}, total_gpus={gpu_count}, "
+                f"source={OLLAMA_NUM_GPU_SOURCE})"
+            )
+        return f"GPU solicitada (num_gpu=-1, source={OLLAMA_NUM_GPU_SOURCE})"
+    if DEFAULT_NUM_GPU > 0:
+        return f"GPU parcial (num_gpu={DEFAULT_NUM_GPU}, source={OLLAMA_NUM_GPU_SOURCE})"
+    return f"CPU (num_gpu=0, source={OLLAMA_NUM_GPU_SOURCE})"
+
+
+def _page_failure_markdown(page_number: int, total_pages: int, error: Exception) -> str:
+    message = str(error).replace("\n", " ").strip()
+    return (
+        f"<!-- OCR failed on page {page_number}/{total_pages}: {message} -->\n\n"
+        f"> [OCR no disponible para la pagina {page_number}/{total_pages}. "
+        "La conversion continuo con el resto del documento.]"
+    )
 
 
 def _build_chat_payload(user_content: str, image_base64: str, num_gpu: int) -> dict:
@@ -66,7 +119,7 @@ def _build_chat_payload(user_content: str, image_base64: str, num_gpu: int) -> d
     }
 
 
-def _response_error_details(response: requests.Response) -> str:
+def _response_error_details(response: httpx.Response) -> str:
     try:
         data = response.json()
     except ValueError:
@@ -82,16 +135,19 @@ def _response_error_details(response: requests.Response) -> str:
     return str(data)[:500]
 
 
-def _post_ollama_chat(payload: dict) -> dict:
-    response = requests.post(
-        f"{OLLAMA_BASE_URL}/api/chat",
-        json=payload,
-        timeout=OLLAMA_TIMEOUT_SECONDS,
-    )
+async def _post_ollama_chat_async(client: httpx.AsyncClient, payload: dict) -> dict:
+    try:
+        response = await client.post("/api/chat", json=payload)
+    except httpx.TimeoutException as exc:
+        raise OllamaOCRException(
+            f"Timeout en Ollama tras {OLLAMA_READ_TIMEOUT_SECONDS}s con el modelo '{MODEL_NAME}'."
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise OllamaOCRException(f"No se pudo conectar con Ollama: {exc}") from exc
 
     try:
         response.raise_for_status()
-    except requests.HTTPError as exc:
+    except httpx.HTTPStatusError as exc:
         details = _response_error_details(response)
         raise OllamaOCRException(
             f"Ollama devolvio HTTP {response.status_code} para el modelo '{MODEL_NAME}': {details}"
@@ -103,21 +159,62 @@ def _post_ollama_chat(payload: dict) -> dict:
         raise OllamaOCRException("Ollama devolvio una respuesta no JSON en /api/chat.") from exc
 
 
-def pdf_to_images(pdf_path: Path, dpi: int = 300):
-    """Devuelve una lista de rutas a imágenes PNG generadas a partir del PDF."""
-    images = convert_from_path(str(pdf_path), dpi=dpi)
-
-    tmp_dir = Path(tempfile.mkdtemp(prefix="nanonets_ocr_"))
-    image_paths = []
-    for i, img in enumerate(images, start=1):
-        img_path = tmp_dir / f"{pdf_path.stem}_page_{i}.png"
-        img.save(img_path, "PNG")
-        image_paths.append(img_path)
-
-    return image_paths
+def get_pdf_page_count(pdf_path: Path) -> int:
+    info = pdfinfo_from_path(str(pdf_path), timeout=PDF_INFO_TIMEOUT_SECONDS)
+    pages = int(info.get("Pages", 0))
+    if pages <= 0:
+        raise RuntimeError(f"No se pudo determinar el numero de paginas de {pdf_path.name}.")
+    return pages
 
 
-def ocr_page_with_nanonets(image_path: Path, page_number: int, total_pages: int) -> str:
+def pdf_page_to_image(pdf_path: Path, page_number: int, output_dir: Path, dpi: int = PDF_RENDER_DPI) -> Path:
+    """
+    Convierte una sola página del PDF en PNG para evitar cargar el documento completo en memoria.
+    """
+    images = convert_from_path(
+        str(pdf_path),
+        dpi=dpi,
+        first_page=page_number,
+        last_page=page_number,
+        fmt="png",
+        single_file=True,
+        timeout=PDF_RENDER_TIMEOUT_SECONDS,
+    )
+    if not images:
+        raise RuntimeError(f"No se pudo convertir la pagina {page_number} de {pdf_path.name}.")
+
+    img_path = output_dir / f"{pdf_path.stem}_page_{page_number}.png"
+    images[0].save(img_path, "PNG")
+    return img_path
+
+
+def resize_image_for_ocr(image_path: Path, max_side: int) -> Path:
+    """
+    Limita el tamaño de la imagen para evitar fallos internos del modelo visual en Ollama.
+    """
+    with Image.open(image_path) as image:
+        width, height = image.size
+        longest_side = max(width, height)
+        if longest_side <= max_side:
+            return image_path
+
+        scale = max_side / longest_side
+        resized = image.resize(
+            (max(1, int(width * scale)), max(1, int(height * scale))),
+            Image.Resampling.LANCZOS,
+        )
+
+        resized_path = image_path.with_name(f"{image_path.stem}_max{max_side}{image_path.suffix}")
+        resized.save(resized_path, "PNG", optimize=True)
+        return resized_path
+
+
+async def ocr_page_with_nanonets_async(
+    client: httpx.AsyncClient,
+    image_path: Path,
+    page_number: int,
+    total_pages: int,
+) -> str:
     """
     Llama a Ollama con Nanonets-OCR-s para una página. Para ello se usa la GPU
     """
@@ -127,18 +224,35 @@ def ocr_page_with_nanonets(image_path: Path, page_number: int, total_pages: int)
           "Use consistent headings and formatting across pages.\n"
     )
 
-    image_base64 = base64.b64encode(image_path.read_bytes()).decode("ascii")
     attempts = [DEFAULT_NUM_GPU]
     if DEFAULT_NUM_GPU != 0:
         attempts.append(0)
 
     last_error = None
-    for num_gpu in attempts:
-        try:
-            data = _post_ollama_chat(_build_chat_payload(user_content, image_base64, num_gpu))
-            return data["message"]["content"]
-        except (OllamaOCRException, KeyError) as exc:
-            last_error = exc
+    temp_files_to_delete = []
+    try:
+        for max_side in OCR_RETRY_MAX_IMAGE_SIDES or [OCR_MAX_IMAGE_SIDE]:
+            candidate_path = resize_image_for_ocr(image_path, max_side)
+            if candidate_path != image_path:
+                temp_files_to_delete.append(candidate_path)
+
+            image_base64 = base64.b64encode(candidate_path.read_bytes()).decode("ascii")
+
+            for num_gpu in attempts:
+                try:
+                    data = await _post_ollama_chat_async(
+                        client,
+                        _build_chat_payload(user_content, image_base64, num_gpu),
+                    )
+                    return data["message"]["content"]
+                except (OllamaOCRException, KeyError) as exc:
+                    last_error = exc
+    finally:
+        for temp_path in temp_files_to_delete:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
     raise OllamaOCRException(
         f"Fallo el OCR de la pagina {page_number}/{total_pages} con {image_path.name}: {last_error}"
@@ -149,7 +263,7 @@ def clean_index_dots(markdown: str) -> str:
     """
     Postprocesado: líneas tipo
     '1. OBJETO DEL CONTRATO............. 3'
-    → '1. OBJETO DEL CONTRATO 3'
+    -> '1. OBJETO DEL CONTRATO 3'
 
     Evita líneas que sean solo puntos.
     """
@@ -158,15 +272,13 @@ def clean_index_dots(markdown: str) -> str:
 
     for line in markdown.splitlines():
         stripped = line.strip()
-        if stripped and all(c == "." for c in stripped):
-            # Se omiten líneaa que solo tienen puntos
+        if stripped and all(char == "." for char in stripped):
             continue
 
-        m = pattern.match(line)
-        if m:
-            left, _, right = m.groups()
-            new_line = f"{left.strip()} {right.strip()}"
-            cleaned_lines.append(new_line)
+        match = pattern.match(line)
+        if match:
+            left, _, right = match.groups()
+            cleaned_lines.append(f"{left.strip()} {right.strip()}")
         else:
             cleaned_lines.append(line)
 
@@ -197,10 +309,10 @@ def normalize_headings(markdown: str) -> str:
     letter_multi_re = re.compile(r"^([A-Z])\.(\d+(?:\.\d+)*)\.\s*(.*)$")
 
     def is_mostly_upper(text: str) -> bool:
-        letters = [c for c in text if c.isalpha()]
+        letters = [char for char in text if char.isalpha()]
         if not letters:
             return False
-        upper = sum(1 for c in letters if c.isupper())
+        upper = sum(1 for char in letters if char.isupper())
         return upper / len(letters) >= 0.7
 
     for line in lines:
@@ -216,39 +328,35 @@ def normalize_headings(markdown: str) -> str:
         if raw.startswith((" ", "\t", "-", "*", ">", "|", "<")):
             out_lines.append(raw)
             continue
-
+        
         # 1) Títulos tipo "1. TEXTO" (requiere mayúsculas)
-        m = single_num_re.match(stripped)
-        if m:
-            num, title = m.groups()
+        match = single_num_re.match(stripped)
+        if match:
+            num, title = match.groups()
             if is_mostly_upper(title):
                 out_lines.append(f"# {num}. {title.strip()}")
-                continue  # ya procesado
+                continue
 
         # 2) Títulos tipo "1.1. Texto"
-        m = level2_re.match(stripped)
-        if m:
-            num, title = m.groups()
+        match = level2_re.match(stripped)
+        if match:
+            num, title = match.groups()
             out_lines.append(f"## {num}. {title.strip()}")
             continue
 
         # 3) Títulos tipo "1.1.1. Texto"
-        m = level3_re.match(stripped)
-        if m:
-            num, title = m.groups()
+        match = level3_re.match(stripped)
+        if match:
+            num, title = match.groups()
             out_lines.append(f"### {num}. {title.strip()}")
             continue
 
         # 4) Códigos tipo "G.2.2." o "G.2.2. Texto"
-        m = letter_multi_re.match(stripped)
-        if m:
-            letter, nums, title = m.groups()
+        match = letter_multi_re.match(stripped)
+        if match:
+            letter, nums, title = match.groups()
             code = f"{letter}.{nums}."
-            if title:
-                out_lines.append(f"### {code} {title.strip()}")
-            else:
-                # Solo el código sin texto, también lo marcamos como sección
-                out_lines.append(f"### {code}")
+            out_lines.append(f"### {code} {title.strip()}".rstrip())
             continue
 
         # Si nada encaja, dejamos la línea tal cual
@@ -257,19 +365,49 @@ def normalize_headings(markdown: str) -> str:
     return "\n".join(out_lines)
 
 
-def process_pdf(pdf_path: Path, output_dir: Path, on_page_start=None):
-    print(f"Procesando {pdf_path.name}...")
+async def process_pdf_async(pdf_path: Path, output_dir: Path, on_page_start=None):
+    print(
+        f"Procesando {pdf_path.name}... "
+        f"OCR model={MODEL_NAME} | backend={_ocr_execution_backend()} | base_url={OLLAMA_BASE_URL}"
+    )
 
-    image_paths = pdf_to_images(pdf_path)
-    total_pages = len(image_paths)
+    total_pages = get_pdf_page_count(pdf_path)
     page_markdowns = []
+    tmp_dir = Path(tempfile.mkdtemp(prefix="nanonets_ocr_"))
+    timeout = httpx.Timeout(
+        connect=OLLAMA_CONNECT_TIMEOUT_SECONDS,
+        read=OLLAMA_READ_TIMEOUT_SECONDS,
+        write=OLLAMA_READ_TIMEOUT_SECONDS,
+        pool=OLLAMA_CONNECT_TIMEOUT_SECONDS,
+    )
 
-    for i, img_path in enumerate(image_paths, start=1):
-        if on_page_start is not None:
-            on_page_start(i, total_pages)
-        print(f"  - Página {i}/{total_pages}")
-        md_page = ocr_page_with_nanonets(img_path, i, total_pages)
-        page_markdowns.append(md_page)
+    try:
+        async with httpx.AsyncClient(base_url=OLLAMA_BASE_URL, timeout=timeout) as client:
+            for page_number in range(1, total_pages + 1):
+                if on_page_start is not None:
+                    on_page_start(page_number, total_pages)
+                print(f"  - Pagina {page_number}/{total_pages}")
+                img_path = pdf_page_to_image(pdf_path, page_number, tmp_dir)
+                try:
+                    try:
+                        page_markdowns.append(
+                            await ocr_page_with_nanonets_async(client, img_path, page_number, total_pages)
+                        )
+                    except OllamaOCRException as exc:
+                        if OCR_PAGE_FAILURE_MODE == "raise":
+                            raise
+                        print(
+                            f"  ! OCR omitido en pagina {page_number}/{total_pages}: {exc}",
+                            file=sys.stderr,
+                        )
+                        page_markdowns.append(_page_failure_markdown(page_number, total_pages, exc))
+                finally:
+                    try:
+                        img_path.unlink(missing_ok=True)
+                    except OSError:
+                        pass
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
     full_md = "\n\n".join(page_markdowns)
     full_md = clean_index_dots(full_md)
@@ -278,7 +416,12 @@ def process_pdf(pdf_path: Path, output_dir: Path, on_page_start=None):
     output_dir.mkdir(parents=True, exist_ok=True)
     out_path = output_dir / f"{pdf_path.stem}.md"
     out_path.write_text(full_md, encoding="utf-8")
-    print(f"  → Markdown guardado en: {out_path}")
+    print(f"Markdown guardado en: {out_path}")
+    return out_path
+
+
+def process_pdf(pdf_path: Path, output_dir: Path, on_page_start=None):
+    return asyncio.run(process_pdf_async(pdf_path, output_dir, on_page_start=on_page_start))
 
 
 def main():

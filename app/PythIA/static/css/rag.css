@@ -6,12 +6,12 @@
 
 .rag-title{
   margin: 0;
-  color: #ffffff;
+  color: var(--app-text);
   font-weight: 800;
 }
 
 .rag-subtitle{
-  color: rgba(255,255,255,.78);
+  color: var(--app-text-soft);
   font-size: 0.98rem;
   line-height: 1.6;
 }
@@ -20,7 +20,7 @@
 .rag-section-title,
 .rag-debug summary,
 .rag-meta strong{
-  color: #ffffff;
+  color: var(--app-text);
   font-weight: 700;
 }
 
@@ -28,21 +28,21 @@
   min-height: 140px;
   resize: vertical;
   border-radius: var(--app-radius-sm);
-  border: 1px solid rgba(255,255,255,.16);
-  background: rgba(255,255,255,.92);
-  color: #1f2d3d;
+  border: 1px solid var(--app-input-border);
+  background: var(--app-input-bg);
+  color: var(--app-input-text);
 }
 
 .rag-textarea:focus{
-  border-color: #ffffff;
-  background: rgba(255,255,255,.88);
-  box-shadow: 0 0 0 3px rgba(219,220,221,.18), 0 4px 14px rgba(219,220,221,.25);
+  border-color: var(--app-input-focus-border);
+  background: var(--app-input-hover-bg);
+  box-shadow: var(--app-input-focus-ring);
 }
 
 .rag-status{
   min-height: 1.2em;
   font-size: .95rem;
-  color: rgba(255,255,255,.78);
+  color: var(--app-text-soft);
   text-align: center;
 }
 
@@ -55,9 +55,15 @@
   min-width: 190px;
 }
 
+.rag-form .btn-modelo{
+  width: min(100%, 680px);
+  min-height: 64px;
+  border-radius: 22px;
+}
+
 .rag-result,
 .rag-debug{
-  border-top: 1px solid rgba(255,255,255,.10);
+  border-top: 1px solid rgba(var(--app-primary-rgb), .12);
   padding-top: 1.25rem;
 }
 
@@ -65,15 +71,15 @@
 .rag-chunk{
   padding: 14px 16px;
   border-radius: var(--app-radius-sm);
-  background: rgba(255,255,255,.08);
-  border: 1px solid rgba(255,255,255,.10);
-  color: #ffffff;
+  background: var(--app-inset-bg);
+  border: var(--app-inset-border);
+  color: var(--app-text);
   white-space: pre-wrap;
   line-height: 1.6;
 }
 
 .rag-meta{
-  color: rgba(255,255,255,.88);
+  color: var(--app-text-soft);
 }
 
 @media (min-width: 768px){

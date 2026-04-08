@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import logging
+import re
 import time
+import unicodedata
 from typing import Any, Dict, Optional
 
 from flask_login import current_user
@@ -10,9 +12,10 @@ from app.extensions import db
 from app.consulta import Consulta
 from app.chunk import Chunk
 from app.consultaChunk import ConsultaChunk
+from app.inetrnacionalizacion.tarduccion import translate_for
 logger = logging.getLogger(__name__)
 
-from .PrototipoRAG import QueryCancelledError, obtener_mejor_chunk
+from .PrototipoRAG import OllamaTimeoutError, QueryCancelledError, obtener_mejor_chunk
 from qdrant_client import models as qmodels
 
 EMPTY_ANSWER: Dict[str, Any] = {
@@ -23,33 +26,153 @@ EMPTY_ANSWER: Dict[str, Any] = {
     "chunk": "",
 }
 
-def rag_answer(question: str, should_cancel=None, on_status=None, user_id: int | None = None) -> Dict[str, Any]:
+EXPEDIENTE_KEYWORDS = {
+    "administrativo",
+    "administrativa",
+    "administrativos",
+    "administrativas",
+    "tecnico",
+    "tecnica",
+    "tecnicos",
+    "tecnicas",
+    "pliego",
+    "pliegos",
+    "documento",
+    "documentos",
+    "sobre",
+    "del",
+    "de",
+    "que",
+    "y",
+    "o",
+}
+
+
+def normalize_text(value: str | None) -> str:
+    value = (value or "").strip().lower()
+    if not value:
+        return ""
+    normalized = unicodedata.normalize("NFKD", value)
+    normalized = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def detect_tipo_documento(question: str) -> str | None:
+    normalized = normalize_text(question)
+    asks_admin = any(
+        token in normalized
+        for token in (
+            "pliego administrativo",
+            "pliegos administrativos",
+            "clausulas administrativas",
+            "clausula administrativa",
+        )
+    )
+    asks_tech = any(
+        token in normalized
+        for token in (
+            "pliego tecnico",
+            "pliegos tecnicos",
+            "prescripciones tecnicas",
+            "prescripcion tecnica",
+        )
+    )
+
+    if asks_admin and not asks_tech:
+        return "administrativo"
+    if asks_tech and not asks_admin:
+        return "tecnico"
+    return None
+
+
+def extract_expediente_candidate(question: str) -> str | None:
+    question = (question or "").strip()
+    if not question:
+        return None
+
+    quoted = re.search(
+        r'expediente(?:\s+n[uú]mero|\s+n[ºo.]?)?\s*[:#-]?\s*["“](.+?)["”]',
+        question,
+        re.IGNORECASE,
+    )
+    if quoted:
+        return quoted.group(1).strip() or None
+
+    match = re.search(
+        r"expediente(?:\s+n[uú]mero|\s+n[ºo.]?)?\s*[:#-]?\s*([A-Za-z0-9][A-Za-z0-9/_.-]*(?:\s+[A-Za-z0-9][A-Za-z0-9/_.-]*){0,5})",
+        question,
+        re.IGNORECASE,
+    )
+    if not match:
+        return None
+
+    words = match.group(1).strip().split()
+    while words and normalize_text(words[-1]) in EXPEDIENTE_KEYWORDS:
+        words.pop()
+    candidate = " ".join(words).strip(" ,.;:")
+    return candidate or None
+
+
+def resolve_numero_expediente(question: str) -> str | None:
+    candidate = extract_expediente_candidate(question)
+    if not candidate:
+        return None
+
+    normalized_candidate = normalize_text(candidate)
+    available = (
+        db.session.query(Chunk.numero_expediente)
+        .filter(Chunk.numero_expediente.isnot(None))
+        .distinct()
+        .all()
+    )
+    existing_values = [value for (value,) in available if value]
+
+    for value in existing_values:
+        if normalize_text(value) == normalized_candidate:
+            return value
+
+    compact_candidate = re.sub(r"[\s./_-]+", "", normalized_candidate)
+    for value in existing_values:
+        normalized_value = normalize_text(value)
+        if re.sub(r"[\s./_-]+", "", normalized_value) == compact_candidate:
+            return value
+
+    return candidate
+
+async def rag_answer(question: str, should_cancel=None, on_status=None, user_id: int | None = None, lang: str = "es") -> Dict[str, Any]:
     """
     Devuelve dict con:
       answer, title, filename, segment_index, chunk
     y además guarda la consulta en BBDD asociada al usuario logueado.
     """
     question = (question or "").strip()
-    invalid = validate_question(question)
+    invalid = validate_question(question, lang=lang)
     if invalid:
         return invalid
 
     start = time.perf_counter()
     data: Dict[str, Any]
+    numero_expediente = resolve_numero_expediente(question)
+    tipo_documento = detect_tipo_documento(question)
 
     try:
         if on_status:
-            on_status("Preparando consulta...")
-        data = obtener_mejor_chunk(
+            on_status(translate_for(lang, "rag.preparing"))
+        data = await obtener_mejor_chunk(
             question,
             should_cancel=should_cancel,
             on_status=on_status,
+            numero_expediente=numero_expediente,
+            tipo_documento=tipo_documento,
         )
     except QueryCancelledError:
         raise
+    except OllamaTimeoutError as e:
+        logger.warning("Timeout consultando Ollama: %s", e)
+        data = message_error(translate_for(lang, "rag.timeout_error"))
     except Exception as e:
         logger.exception("Error en rag_answer: %s", e)
-        data = message_error("Ha ocurrido un error consultando el sistema. Inténtalo de nuevo.")
+        data = message_error(translate_for(lang, "rag.system_error"))
 
     elapsed = time.perf_counter() - start
 
@@ -71,11 +194,11 @@ def message_error(msg: str) -> Dict[str, Any]:
     out["answer"] = msg
     return out
 
-def validate_question(question: str) -> Optional[Dict[str, Any]]:
+def validate_question(question: str, lang: str = "es") -> Optional[Dict[str, Any]]:
     if not question:
-        return message_error("Escribe una pregunta.")
+        return message_error(translate_for(lang, "rag.empty_question"))
     if len(question) > 2000:
-        return message_error("La pregunta es demasiado larga (máx. 2000 caracteres).")
+        return message_error(translate_for(lang, "rag.question_too_long"))
     return None
 
 def try_persist(question: str, data: Dict[str, Any], elapsed: float, user_id: int | None = None) -> None:

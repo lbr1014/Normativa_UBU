@@ -1,51 +1,38 @@
-/* =========================
-   PÁGINA DE INICIO
-   ========================= */
-
 .home-hero h1,
 .home-hero h2,
-.home-hero h3,
+.home-hero h3 {
+  color: var(--app-heading);
+}
+
 .home-hero p {
-  color: #ffffff;
+  color: var(--app-text);
 }
 
-.logo-header{
-  width: 64px;
-  height: 64px;
-  object-fit: cover;
-  display: block;
-  border: none;
-  outline: none;
-  box-shadow: none;
-  background: transparent;
-  border-radius: 50%;
-}
-
-.main-content.home-hero{
+.main-content.home-hero {
   max-width: 100%;
   padding: 0;
   text-align: center;
 }
 
-.hero-block{
+.hero-block {
   max-width: 980px;
-  padding: 60px 20px 20px;
+  padding: 3.75rem 1.25rem 1.25rem;
 }
 
-.hero-badge{
+.hero-badge {
   display: inline-block;
-  padding: 8px 16px;
+  padding: 0.55rem 1rem;
   border-radius: 999px;
-  background: rgba(255,255,255,.10);
-  border: 1px solid rgba(255,255,255,.14);
-  color: #e8f1f8;
-  font-size: 13px;
+  background: var(--app-primary-soft);
+  border: 1px solid rgba(var(--app-primary-rgb), 0.14);
+  color: var(--app-heading);
+  font-size: 0.8125rem;
   font-weight: 700;
-  letter-spacing: .3px;
-  box-shadow: 0 8px 24px rgba(0,0,0,.12);
+  letter-spacing: 0.02em;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
 }
 
-.hero-title{
+.hero-title {
   font-size: clamp(2rem, 5vw, 4rem);
   line-height: 1.08;
   font-weight: 800;
@@ -54,11 +41,16 @@
   margin-right: auto;
 }
 
-.hero-subtitle{
+.hero-subtitle {
   max-width: 760px;
-  margin-top: 20px;
+  margin-top: 1.25rem;
   font-size: clamp(1rem, 2vw, 1.35rem);
   line-height: 1.7;
-  color: rgba(255,255,255,.82);
+  color: var(--app-text-soft);
 }
 
+@media (max-width: 768px) {
+  .hero-block {
+    padding-top: 2.25rem;
+  }
+}

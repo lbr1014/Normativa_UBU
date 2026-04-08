@@ -1,5 +1,4 @@
-from flask import Flask
-from pathlib import Path
+from flask import Flask, flash, redirect, request, url_for
 import os
 from dotenv import load_dotenv
 
@@ -51,7 +50,7 @@ def create_app():
     app.config["SECRET_KEY"] = _get_required_env("SECRET_KEY")
     db_url = _build_database_url_from_env()
     if not db_url:
-        raise RuntimeError("DATABASE_URL no está definida (Postgres requerido).")
+        raise RuntimeError("DATABASE_URL no está definida y no se pudo construir con POSTGRES_*.")
 
     if db_url.startswith("postgres://"):
         db_url = db_url.replace("postgres://", "postgresql://", 1)
@@ -74,10 +73,16 @@ def create_app():
     db.init_app(app)
     migrate.init_app(app, db)
     mail.init_app(app)
+    init_i18n(app)
 
     login_manager.init_app(app)
     login_manager.login_view = "auth.login"
-    login_manager.login_message = "Debes iniciar sesión para acceder a esta página."
+    login_manager.login_message = t("auth.login_required")
+
+    @login_manager.unauthorized_handler
+    def _unauthorized():
+        flash(t("auth.login_required"), "warning")
+        return redirect(url_for("auth.login", next=request.path))
 
     @login_manager.user_loader
     def load_user(user_id: str):
@@ -93,5 +98,6 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(rag_bp)
+    register_error_handlers(app)
 
     return app
