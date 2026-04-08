@@ -61,6 +61,11 @@
                 <a class="nav-link app-nav-link" href="{{ url_for('main.edit_user') }}">{{ t("nav.edit_user") }}</a>
               </li>
             {% endif %}
+            {% if request.endpoint != 'main.stats_page' %}
+              <li class="nav-item">
+                <a class="nav-link app-nav-link" href="{{ url_for('main.stats_page') }}">{{ t("nav.usage_stats") }}</a>
+              </li>
+            {% endif %}
             {% if current_user.is_admin and request.endpoint != 'admin.documents_list_page' %}
               <li class="nav-item">
                 <a class="nav-link app-nav-link" href="{{ url_for('admin.documents_list_page') }}">{{ t("nav.manage_documents") }}</a>
@@ -135,6 +140,11 @@
         {% if request.endpoint != 'main.edit_user' %}
           <li class="nav-item">
             <a class="nav-link app-nav-link" href="{{ url_for('main.edit_user') }}">{{ t("nav.edit_user") }}</a>
+          </li>
+        {% endif %}
+        {% if request.endpoint != 'main.stats_page' %}
+          <li class="nav-item">
+            <a class="nav-link app-nav-link" href="{{ url_for('main.stats_page') }}">{{ t("nav.usage_stats") }}</a>
           </li>
         {% endif %}
         {% if current_user.is_admin and request.endpoint != 'admin.documents_list_page' %}
