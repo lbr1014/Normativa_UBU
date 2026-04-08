@@ -12,6 +12,33 @@ from .vector_update_state import VectorUpdateState
 from .web_scraping_state import WebScrapingSate
 from .rag_query_state import RAGQueryState
 from .markdown_conversion_state import MarkdownConversionState
+from .error_handling import register_error_handlers
+from .inetrnacionalizacion.tarduccion import init_app as init_i18n, t
+
+
+def _get_required_env(var_name: str) -> str:
+    value = os.environ.get(var_name)
+    if value:
+        return value
+    raise RuntimeError(f"{var_name} no está definida. Revisa tu .env o variables de entorno.")
+
+
+def _build_database_url_from_env() -> str | None:
+    db_url = os.environ.get("DATABASE_URL")
+    if db_url:
+        return db_url
+
+    user = os.environ.get("POSTGRES_USER")
+    password = os.environ.get("POSTGRES_PASSWORD")
+    database = os.environ.get("POSTGRES_DB")
+    host = os.environ.get("POSTGRES_HOST", "db")
+    port = os.environ.get("POSTGRES_PORT", "5432")
+
+    if not user or not password or not database:
+        return None
+
+    return f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}"
+
 
 def create_app():
     load_dotenv("secret.env")
@@ -21,11 +48,8 @@ def create_app():
         static_folder=os.path.join(os.path.dirname(__file__), "..", "static"),
     )
 
-    SECRET_KEY  = os.environ.get("SECRET_KEY")
-    if not SECRET_KEY :
-        raise RuntimeError("SECRET_KEY no está definida. Revisa tu .env o variables de entorno.")
-    app.config["SECRET_KEY"] = SECRET_KEY 
-    db_url = os.environ.get("DATABASE_URL")
+    app.config["SECRET_KEY"] = _get_required_env("SECRET_KEY")
+    db_url = _build_database_url_from_env()
     if not db_url:
         raise RuntimeError("DATABASE_URL no está definida (Postgres requerido).")
 
@@ -36,8 +60,7 @@ def create_app():
 
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     app.config["DOCS_DIR"] = os.environ.get("DOCS_DIR", "pliegos")
-    app.config["DOCS_MD_DIR"] = os.environ.get("DOCS_MD_DIR")
-    
+
     # Flask Mail
     app.config["MAIL_SERVER"] = os.environ.get("MAIL_SERVER", "")
     app.config["MAIL_PORT"] = int(os.environ.get("MAIL_PORT", "587"))
@@ -46,7 +69,6 @@ def create_app():
     app.config["MAIL_USERNAME"] = os.environ.get("MAIL_USERNAME", "")
     app.config["MAIL_PASSWORD"] = os.environ.get("MAIL_PASSWORD", "")
     app.config["MAIL_DEFAULT_SENDER"] = os.environ.get("MAIL_DEFAULT_SENDER", app.config["MAIL_USERNAME"])
-
 
     # init extensions
     db.init_app(app)
@@ -59,8 +81,8 @@ def create_app():
 
     @login_manager.user_loader
     def load_user(user_id: str):
-        return User.get_by_id(int(user_id))   
-    
+        return User.get_by_id(int(user_id))
+
     # register blueprints
     from .main.routes import main_bp
     from .auth.routes import auth_bp
