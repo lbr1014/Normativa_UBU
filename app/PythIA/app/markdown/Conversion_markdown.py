@@ -1,5 +1,11 @@
+"""
+Autora: Lydia Blanco Ruiz
+Script para convertir documentos PDF a Markdown mediante OCR y normalización de encabezados.
+"""
+
 import asyncio
 import base64
+import logging
 import os
 import re
 import shutil
@@ -14,6 +20,8 @@ try:
     import torch
 except ImportError:  # pragma: no cover - entorno sin torch fuera de Docker
     torch = None
+
+logger = logging.getLogger(__name__)
 
 PROMPT_BASE = """
 You are converting a Spanish PDF (often legal / administrative) into clean Markdown.
@@ -51,16 +59,15 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434").rstrip("/"
 OLLAMA_CONNECT_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_CONNECT_TIMEOUT_SECONDS", "10"))
 OLLAMA_READ_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_READ_TIMEOUT_SECONDS", "300"))
 _ollama_num_gpu = os.getenv("OLLAMA_NUM_GPU")
-DEFAULT_NUM_GPU = (
-    int(_ollama_num_gpu)
-    if _ollama_num_gpu not in (None, "")
-    else (-1 if torch is not None and torch.cuda.is_available() else 0)
-)
-OLLAMA_NUM_GPU_SOURCE = (
-    "env"
-    if _ollama_num_gpu not in (None, "")
-    else ("auto-cuda-full-offload" if torch is not None and torch.cuda.is_available() else "auto-cpu")
-)
+
+# Determinar configuración de GPU
+if _ollama_num_gpu not in (None, ""):
+    DEFAULT_NUM_GPU = int(_ollama_num_gpu)
+    OLLAMA_NUM_GPU_SOURCE = "env"
+else:
+    cuda_available = torch is not None and torch.cuda.is_available()
+    DEFAULT_NUM_GPU = -1 if cuda_available else 0
+    OLLAMA_NUM_GPU_SOURCE = "auto-cuda-full-offload" if cuda_available else "auto-cpu"
 PDF_RENDER_DPI = int(os.getenv("PDF_RENDER_DPI", "200"))
 OCR_MAX_IMAGE_SIDE = int(os.getenv("OCR_MAX_IMAGE_SIDE", "1600"))
 OCR_RETRY_MAX_IMAGE_SIDES = [
@@ -78,6 +85,13 @@ class OllamaOCRException(RuntimeError):
 
 
 def _ocr_execution_backend() -> str:
+    """
+    Determina el backend de ejecución para OCR basado en la configuración de GPU.
+
+    Returns:
+        str: Descripción del backend de ejecución (GPU, CPU, etc.) con detalles
+             sobre la configuración de GPU utilizada.
+    """
     if DEFAULT_NUM_GPU == -1:
         if torch is not None and torch.cuda.is_available():
             gpu_name = torch.cuda.get_device_name(0)
@@ -94,6 +108,17 @@ def _ocr_execution_backend() -> str:
 
 
 def _page_failure_markdown(page_number: int, total_pages: int, error: Exception) -> str:
+    """
+    Genera contenido Markdown para una página que falló durante el OCR.
+
+    Args:
+        page_number: Número de la página que falló (1-indexed).
+        total_pages: Número total de páginas del documento.
+        error: Excepción que causó el fallo del OCR.
+
+    Returns:
+        str: Contenido Markdown con comentario HTML y mensaje de error formateado.
+    """
     message = str(error).replace("\n", " ").strip()
     return (
         f"<!-- OCR failed on page {page_number}/{total_pages}: {message} -->\n\n"
@@ -103,6 +128,17 @@ def _page_failure_markdown(page_number: int, total_pages: int, error: Exception)
 
 
 def _build_chat_payload(user_content: str, image_base64: str, num_gpu: int) -> dict:
+    """
+    Construye el payload JSON para la API de chat de Ollama.
+
+    Args:
+        user_content: Contenido del mensaje del usuario (prompt + instrucciones).
+        image_base64: Imagen codificada en base64 para el OCR.
+        num_gpu: Número de GPUs a utilizar (-1 para todas, 0 para CPU, >0 para GPUs específicas).
+
+    Returns:
+        dict: Payload formateado para la API /api/chat de Ollama.
+    """
     return {
         "model": MODEL_NAME,
         "messages": [
@@ -120,6 +156,16 @@ def _build_chat_payload(user_content: str, image_base64: str, num_gpu: int) -> d
 
 
 def _response_error_details(response: httpx.Response) -> str:
+    """
+    Extrae detalles de error de una respuesta HTTP de Ollama.
+
+    Args:
+        response: Respuesta HTTP de la API de Ollama.
+
+    Returns:
+        str: Detalles del error extraídos del cuerpo de la respuesta,
+             limitados a 500 caracteres.
+    """
     try:
         data = response.json()
     except ValueError:
@@ -136,6 +182,20 @@ def _response_error_details(response: httpx.Response) -> str:
 
 
 async def _post_ollama_chat_async(client: httpx.AsyncClient, payload: dict) -> dict:
+    """
+    Realiza una petición POST asíncrona a la API de chat de Ollama.
+
+    Args:
+        client: Cliente HTTP asíncrono configurado para Ollama.
+        payload: Payload JSON para enviar a la API /api/chat.
+
+    Returns:
+        dict: Respuesta JSON de la API de Ollama.
+
+    Raises:
+        OllamaOCRException: Si ocurre un timeout, error de conexión,
+                           respuesta HTTP de error, o respuesta no JSON.
+    """
     try:
         response = await client.post("/api/chat", json=payload)
     except httpx.TimeoutException as exc:
@@ -160,6 +220,19 @@ async def _post_ollama_chat_async(client: httpx.AsyncClient, payload: dict) -> d
 
 
 def get_pdf_page_count(pdf_path: Path) -> int:
+    """
+    Obtiene el número total de páginas de un documento PDF.
+
+    Args:
+        pdf_path: Ruta al archivo PDF.
+
+    Returns:
+        int: Número total de páginas del documento.
+
+    Raises:
+        RuntimeError: Si no se puede determinar el número de páginas
+                     o si el documento no tiene páginas válidas.
+    """
     info = pdfinfo_from_path(str(pdf_path), timeout=PDF_INFO_TIMEOUT_SECONDS)
     pages = int(info.get("Pages", 0))
     if pages <= 0:
@@ -191,6 +264,17 @@ def pdf_page_to_image(pdf_path: Path, page_number: int, output_dir: Path, dpi: i
 def resize_image_for_ocr(image_path: Path, max_side: int) -> Path:
     """
     Limita el tamaño de la imagen para evitar fallos internos del modelo visual en Ollama.
+
+    Si la imagen es más grande que max_side en cualquiera de sus dimensiones,
+    se redimensiona manteniendo la proporción de aspecto.
+
+    Args:
+        image_path: Ruta a la imagen original.
+        max_side: Tamaño máximo permitido para el lado más largo de la imagen.
+
+    Returns:
+        Path: Ruta a la imagen redimensionada (o la original si no necesita redimensionamiento).
+             Las imágenes redimensionadas se guardan con un sufijo indicando el tamaño máximo.
     """
     with Image.open(image_path) as image:
         width, height = image.size
@@ -216,7 +300,23 @@ async def ocr_page_with_nanonets_async(
     total_pages: int,
 ) -> str:
     """
-    Llama a Ollama con Nanonets-OCR-s para una página. Para ello se usa la GPU
+    Realiza OCR en una página individual usando el modelo Nanonets-OCR-s de Ollama.
+
+    Intenta múltiples estrategias en caso de fallo:
+    1. Diferentes tamaños de imagen (si está configurado OCR_RETRY_MAX_IMAGE_SIDES)
+    2. Diferentes configuraciones de GPU (GPU primero, luego CPU como fallback)
+
+    Args:
+        client: Cliente HTTP asíncrono configurado para Ollama.
+        image_path: Ruta a la imagen de la página a procesar.
+        page_number: Número de la página actual (1-indexed).
+        total_pages: Número total de páginas del documento.
+
+    Returns:
+        str: Contenido Markdown generado por el modelo OCR.
+
+    Raises:
+        OllamaOCRException: Si todas las estrategias de OCR fallan.
     """
     user_content = (
         PROMPT_BASE
@@ -261,14 +361,21 @@ async def ocr_page_with_nanonets_async(
 
 def clean_index_dots(markdown: str) -> str:
     """
-    Postprocesado: líneas tipo
-    '1. OBJETO DEL CONTRATO............. 3'
-    -> '1. OBJETO DEL CONTRATO 3'
+    Postprocesa el contenido Markdown para limpiar líneas de índice con puntos separadores.
 
-    Evita líneas que sean solo puntos.
+    Convierte líneas como "1. OBJETO DEL CONTRATO............. 3"
+    en "1. OBJETO DEL CONTRATO 3".
+
+    También elimina líneas que consistan únicamente de puntos.
+
+    Args:
+        markdown: Contenido Markdown a procesar.
+
+    Returns:
+        str: Contenido Markdown con las líneas de índice limpiadas.
     """
     cleaned_lines = []
-    pattern = re.compile(r"^(.*?)(\.{3,})(\s*\d+.*?)$")
+    pattern = re.compile(r"^(.*)(\.{3,})(\s*\d+.*)$")
 
     for line in markdown.splitlines():
         stripped = line.strip()
@@ -283,6 +390,108 @@ def clean_index_dots(markdown: str) -> str:
             cleaned_lines.append(line)
 
     return "\n".join(cleaned_lines)
+
+
+def _should_skip_line(raw: str, stripped: str) -> bool:
+    """
+    Determina si una línea debe ser omitida del procesamiento de encabezados.
+
+    Args:
+        raw: Línea original sin modificar.
+        stripped: Línea con espacios en blanco eliminados de los extremos.
+
+    Returns:
+        bool: True si la línea debe ser omitida, False si debe procesarse.
+    """
+    # Línea vacía o ya título markdown
+    if not stripped or stripped.startswith("#"):
+        return True
+    # No tocar listas, tablas, citas ni HTML directamente
+    if raw.startswith((" ", "\t", "-", "*", ">", "|", "<")):
+        return True
+    return False
+
+
+def _is_mostly_upper(text: str) -> bool:
+    """
+    Verifica si un texto está mayoritariamente en mayúsculas.
+
+    Se considera mayoritariamente en mayúsculas si al menos el 70%
+    de los caracteres alfabéticos están en mayúscula.
+
+    Args:
+        text: Texto a analizar.
+
+    Returns:
+        bool: True si el texto está mayoritariamente en mayúsculas.
+    """
+    letters = [char for char in text if char.isalpha()]
+    if not letters:
+        return False
+    upper = sum(1 for char in letters if char.isupper())
+    return upper / len(letters) >= 0.7
+
+
+def _process_single_level_heading(stripped: str, single_num_re) -> str | None:
+    """
+    Procesa encabezados de nivel único que requieren estar en mayúsculas.
+
+    Convierte líneas como "1. OBJETO DEL CONTRATO" en "# 1. OBJETO DEL CONTRATO"
+    solo si el texto después del número está mayoritariamente en mayúsculas.
+
+    Args:
+        stripped: Línea de texto sin espacios en blanco extremos.
+        single_num_re: Expresión regular compilada para detectar números únicos.
+
+    Returns:
+        str | None: Encabezado Markdown de nivel 1 si coincide y está en mayúsculas,
+                   None si no cumple los criterios.
+    """
+    match = single_num_re.match(stripped)
+    if match:
+        num, title = match.groups()
+        if _is_mostly_upper(title):
+            return f"# {num}. {title.strip()}"
+    return None
+
+
+def _process_level2_heading(stripped: str, level2_re) -> str | None:
+    """
+    Procesa encabezados de nivel 2 (subsecciones).
+
+    Convierte líneas como "1.1. Definición" en "## 1.1. Definición".
+
+    Args:
+        stripped: Línea de texto sin espacios en blanco extremos.
+        level2_re: Expresión regular compilada para detectar números de nivel 2.
+
+    Returns:
+        str | None: Encabezado Markdown de nivel 2 si coincide, None en caso contrario.
+    """
+    match = level2_re.match(stripped)
+    if match:
+        num, title = match.groups()
+        return f"## {num}. {title.strip()}"
+    return None
+
+
+def _process_level3_heading(stripped: str, level3_re) -> str | None:
+    """Procesa encabezados de nivel 3."""
+    match = level3_re.match(stripped)
+    if match:
+        num, title = match.groups()
+        return f"### {num}. {title.strip()}"
+    return None
+
+
+def _process_letter_code_heading(stripped: str, letter_multi_re) -> str | None:
+    """Procesa códigos de letra con números múltiples."""
+    match = letter_multi_re.match(stripped)
+    if match:
+        letter, nums, title = match.groups()
+        code = f"{letter}.{nums}."
+        return f"### {code} {title.strip()}".rstrip()
+    return None
 
 
 def normalize_headings(markdown: str) -> str:
@@ -302,73 +511,43 @@ def normalize_headings(markdown: str) -> str:
     lines = markdown.splitlines()
     out_lines = []
 
+    # Compilar expresiones regulares
     single_num_re = re.compile(r"^(\d{1,2})\.\s+(.+)$")
     level2_re = re.compile(r"^(\d{1,2}\.\d{1,2})\.\s+(.+)$")
     level3_re = re.compile(r"^(\d{1,2}\.\d{1,2}\.\d{1,2})\.\s+(.+)$")
-    # Ejemplos: "G.2.2.", "A.3.1. Texto"
     letter_multi_re = re.compile(r"^([A-Z])\.(\d+(?:\.\d+)*)\.\s*(.*)$")
-
-    def is_mostly_upper(text: str) -> bool:
-        letters = [char for char in text if char.isalpha()]
-        if not letters:
-            return False
-        upper = sum(1 for char in letters if char.isupper())
-        return upper / len(letters) >= 0.7
 
     for line in lines:
         raw = line
         stripped = line.strip()
 
-        # Línea vacía o ya título markdown
-        if not stripped or stripped.startswith("#"):
+        if _should_skip_line(raw, stripped):
             out_lines.append(raw)
             continue
 
-        # No tocar listas, tablas, citas ni HTML directamente
-        if raw.startswith((" ", "\t", "-", "*", ">", "|", "<")):
+        # Intentar procesar diferentes tipos de encabezados
+        processed_line = (
+            _process_single_level_heading(stripped, single_num_re) or
+            _process_level2_heading(stripped, level2_re) or
+            _process_level3_heading(stripped, level3_re) or
+            _process_letter_code_heading(stripped, letter_multi_re)
+        )
+
+        if processed_line:
+            out_lines.append(processed_line)
+        else:
             out_lines.append(raw)
-            continue
-        
-        # 1) Títulos tipo "1. TEXTO" (requiere mayúsculas)
-        match = single_num_re.match(stripped)
-        if match:
-            num, title = match.groups()
-            if is_mostly_upper(title):
-                out_lines.append(f"# {num}. {title.strip()}")
-                continue
-
-        # 2) Títulos tipo "1.1. Texto"
-        match = level2_re.match(stripped)
-        if match:
-            num, title = match.groups()
-            out_lines.append(f"## {num}. {title.strip()}")
-            continue
-
-        # 3) Títulos tipo "1.1.1. Texto"
-        match = level3_re.match(stripped)
-        if match:
-            num, title = match.groups()
-            out_lines.append(f"### {num}. {title.strip()}")
-            continue
-
-        # 4) Códigos tipo "G.2.2." o "G.2.2. Texto"
-        match = letter_multi_re.match(stripped)
-        if match:
-            letter, nums, title = match.groups()
-            code = f"{letter}.{nums}."
-            out_lines.append(f"### {code} {title.strip()}".rstrip())
-            continue
-
-        # Si nada encaja, dejamos la línea tal cual
-        out_lines.append(raw)
 
     return "\n".join(out_lines)
 
 
 async def process_pdf_async(pdf_path: Path, on_page_start=None) -> str:
-    print(
-        f"Procesando {pdf_path.name}... "
-        f"OCR model={MODEL_NAME} | backend={_ocr_execution_backend()} | base_url={OLLAMA_BASE_URL}"
+    logger.info(
+        "Procesando %s... OCR model=%s | backend=%s | base_url=%s",
+        pdf_path.name,
+        MODEL_NAME,
+        _ocr_execution_backend(),
+        OLLAMA_BASE_URL,
     )
 
     total_pages = get_pdf_page_count(pdf_path)
@@ -386,7 +565,7 @@ async def process_pdf_async(pdf_path: Path, on_page_start=None) -> str:
             for page_number in range(1, total_pages + 1):
                 if on_page_start is not None:
                     on_page_start(page_number, total_pages)
-                print(f"  - Pagina {page_number}/{total_pages}")
+                logger.info("Pagina %s/%s", page_number, total_pages)
                 img_path = pdf_page_to_image(pdf_path, page_number, tmp_dir)
                 try:
                     try:
@@ -396,10 +575,7 @@ async def process_pdf_async(pdf_path: Path, on_page_start=None) -> str:
                     except OllamaOCRException as exc:
                         if OCR_PAGE_FAILURE_MODE == "raise":
                             raise
-                        print(
-                            f"  ! OCR omitido en pagina {page_number}/{total_pages}: {exc}",
-                            file=sys.stderr,
-                        )
+                        logger.warning("OCR omitido en pagina %s/%s: %s", page_number, total_pages, exc)
                         page_markdowns.append(_page_failure_markdown(page_number, total_pages, exc))
                 finally:
                     try:
@@ -425,13 +601,13 @@ def save_markdown_to_file(pdf_path: Path, output_dir: Path, on_page_start=None) 
     full_md = process_pdf(pdf_path, on_page_start=on_page_start)
     out_path = output_dir / f"{pdf_path.stem}.md"
     out_path.write_text(full_md, encoding="utf-8")
-    print(f"Markdown guardado en: {out_path}")
+    logger.info("Markdown guardado en: %s", out_path)
     return out_path
 
 
 def main():
     if len(sys.argv) < 3:
-        print("Uso: python pdfs_a_markdown_nanonets.py <carpeta_pdfs> <carpeta_salida>")
+        logger.error("Uso: python pdfs_a_markdown_nanonets.py <carpeta_pdfs> <carpeta_salida>")
         sys.exit(1)
 
     in_dir = Path(sys.argv[1])
@@ -439,7 +615,7 @@ def main():
 
     pdf_files = sorted(in_dir.glob("*.pdf"))
     if not pdf_files:
-        print(f"No se han encontrado PDFs en {in_dir}")
+        logger.warning("No se han encontrado PDFs en %s", in_dir)
         sys.exit(1)
 
     for pdf in pdf_files:
