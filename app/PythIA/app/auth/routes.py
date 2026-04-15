@@ -15,6 +15,9 @@ from ..extensions import db, mail
 from ..inetrnacionalizacion.tarduccion import t
 
 
+MAIN_PAGE_ENDPOINT = "main.pag_principal"
+
+
 def _serializer() -> URLSafeTimedSerializer:
     """Crea el serializador usado para tokens de recuperación.
 
@@ -70,7 +73,7 @@ def login():
             user.update_last_login()
             db.session.commit()
             login_user(user)
-            return redirect(url_for("main.pag_principal"))
+            return redirect(url_for(MAIN_PAGE_ENDPOINT))
 
         form.password.errors.append(t("auth.invalid_credentials"))
 
@@ -87,7 +90,7 @@ def logout():
     """
     form = EmptyForm()
     if not form.validate_on_submit():
-        return redirect(url_for("main.pag_principal"))
+        return redirect(url_for(MAIN_PAGE_ENDPOINT))
     logout_user()
     return redirect(url_for("main.inicio"))
 
@@ -118,7 +121,7 @@ def singup():
         db.session.commit()
 
         login_user(user)
-        return redirect(url_for("main.pag_principal"))
+        return redirect(url_for(MAIN_PAGE_ENDPOINT))
 
     return render_template("singup.html", form=form)
 

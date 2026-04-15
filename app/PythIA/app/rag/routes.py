@@ -20,6 +20,7 @@ from app.rag.service import rag_answer, validate_question
 from app.inetrnacionalizacion.tarduccion import get_locale, localize_runtime_message, t, translate_for
 
 rag_bp = Blueprint("rag", __name__, url_prefix="/rag")
+MADRID_TIMEZONE = ZoneInfo("Europe/Madrid")
 
 
 @rag_bp.get("/")
@@ -148,7 +149,7 @@ def rag_cancel(job_id: int):
 
     if job.status == "queued":
         job.status = "cancelled"
-        job.finished_at = datetime.now(ZoneInfo("Europe/Madrid"))
+        job.finished_at = datetime.now(MADRID_TIMEZONE)
 
     db.session.commit()
     return jsonify({"status": job.status, "message": localize_runtime_message(job.message)}), 202
@@ -163,7 +164,7 @@ def run_rag_query_async(app, job_id: int, user_id: int, lang: str = "es") -> Non
         user_id: Identificador del usuario propietario.
         lang: Idioma usado para mensajes de estado.
     """
-    zone_now = datetime.now(ZoneInfo("Europe/Madrid"))
+    zone_now = datetime.now(MADRID_TIMEZONE)
 
     with app.app_context():
         job = db.session.get(RAGQueryState, job_id)
@@ -210,14 +211,14 @@ def run_rag_query_async(app, job_id: int, user_id: int, lang: str = "es") -> Non
             if job.cancel_requested:
                 job.status = "cancelled"
                 job.message = localize_runtime_message("Consulta cancelada.", lang)
-                job.finished_at = datetime.now(ZoneInfo("Europe/Madrid"))
+                job.finished_at = datetime.now(MADRID_TIMEZONE)
                 db.session.commit()
                 return
 
             job.status = "done"
             job.message = localize_runtime_message("Consulta finalizada.", lang)
             job.result_payload = result
-            job.finished_at = datetime.now(ZoneInfo("Europe/Madrid"))
+            job.finished_at = datetime.now(MADRID_TIMEZONE)
             db.session.commit()
         except QueryCancelledError:
             db.session.rollback()
@@ -225,7 +226,7 @@ def run_rag_query_async(app, job_id: int, user_id: int, lang: str = "es") -> Non
             if job:
                 job.status = "cancelled"
                 job.message = localize_runtime_message("Consulta cancelada.", lang)
-                job.finished_at = datetime.now(ZoneInfo("Europe/Madrid"))
+                job.finished_at = datetime.now(MADRID_TIMEZONE)
                 db.session.commit()
         except Exception as exc:
             db.session.rollback()
@@ -234,7 +235,7 @@ def run_rag_query_async(app, job_id: int, user_id: int, lang: str = "es") -> Non
                 job.status = "failed"
                 job.message = localize_runtime_message("La consulta ha fallado.", lang)
                 job.error = str(exc)
-                job.finished_at = datetime.now(ZoneInfo("Europe/Madrid"))
+                job.finished_at = datetime.now(MADRID_TIMEZONE)
                 db.session.commit()
             app.logger.exception("Error en run_rag_query_async")
         finally:

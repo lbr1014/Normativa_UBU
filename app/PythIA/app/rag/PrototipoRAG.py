@@ -46,6 +46,10 @@ class QueryCancelledError(RuntimeError):
 class OllamaTimeoutError(RuntimeError):
     pass
 
+
+QUERY_CANCELLED_MESSAGE = "Consulta cancelada por el usuario."
+
+
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
 
 # Qdrant (Docker / remoto)
@@ -97,16 +101,16 @@ class Settings:
 
     # Ollama
     _ollama_num_gpu = os.getenv("OLLAMA_NUM_GPU")
-    OLLAMA_NUM_GPU: int = (
-        int(_ollama_num_gpu)
-        if _ollama_num_gpu not in (None, "")
-        else (-1 if torch is not None and torch.cuda.is_available() else 0)
-    )
-    OLLAMA_NUM_GPU_SOURCE: str = (
-        "env"
-        if _ollama_num_gpu not in (None, "")
-        else ("auto-cuda-full-offload" if torch is not None and torch.cuda.is_available() else "auto-cpu")
-    )
+    _cuda_available = torch is not None and torch.cuda.is_available()
+    if _ollama_num_gpu not in (None, ""):
+        OLLAMA_NUM_GPU: int = int(_ollama_num_gpu)
+        OLLAMA_NUM_GPU_SOURCE: str = "env"
+    elif _cuda_available:
+        OLLAMA_NUM_GPU: int = -1
+        OLLAMA_NUM_GPU_SOURCE: str = "auto-cuda-full-offload"
+    else:
+        OLLAMA_NUM_GPU: int = 0
+        OLLAMA_NUM_GPU_SOURCE: str = "auto-cpu"
     OLLAMA_CONNECT_TIMEOUT_SECONDS: float = float(
         os.getenv("OLLAMA_CONNECT_TIMEOUT_SECONDS", "10")
     )
@@ -828,7 +832,7 @@ async def ask_ollama(
     Envía un prompt a Ollama usando /api/generate y devuelve el texto de respuesta.
     """
     if should_cancel and should_cancel():
-        raise QueryCancelledError("Consulta cancelada por el usuario.")
+        raise QueryCancelledError(QUERY_CANCELLED_MESSAGE)
 
     full_prompt = (
         "Responde en español de forma breve y precisa.\n\n"
@@ -869,7 +873,7 @@ async def ask_ollama(
 
                 async for line in resp.aiter_lines():
                     if should_cancel and should_cancel():
-                        raise QueryCancelledError("Consulta cancelada por el usuario.")
+                        raise QueryCancelledError(QUERY_CANCELLED_MESSAGE)
                     if not line:
                         continue
 
@@ -949,7 +953,7 @@ async def obtener_mejor_chunk(
     """
     user_query = (user_query or "").strip()
     if should_cancel and should_cancel():
-        raise QueryCancelledError("Consulta cancelada por el usuario.")
+        raise QueryCancelledError(QUERY_CANCELLED_MESSAGE)
 
     if on_status:
         on_status("Recuperando fragmentos relevantes...")
@@ -980,7 +984,7 @@ async def obtener_mejor_chunk(
     
     for idx, p in enumerate(points, start=1):
         if should_cancel and should_cancel():
-            raise QueryCancelledError("Consulta cancelada por el usuario.")
+            raise QueryCancelledError(QUERY_CANCELLED_MESSAGE)
 
         payload = p.payload or {}
         meta = (payload.get("metadata") or {})
