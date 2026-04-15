@@ -1,6 +1,11 @@
+"""
+Autora: Lydia Blanco Ruiz
+Script para descargar los PDFs de pliegos a partir de las URLs extraídas por web scraping.
+"""
+
 import asyncio
 import json
-import shutil
+import logging
 import os
 from typing import Any, Awaitable, Iterable, List, Tuple
 import aiofiles
@@ -16,6 +21,7 @@ DEST.mkdir(parents=True, exist_ok=True)
 
 # Playwright usa milisegundos para los timeouts
 TIMEOUT_MS = 90_000
+logger = logging.getLogger(__name__)
 
 
 def limpiar_expediente(expediente: str) -> str:
@@ -37,14 +43,12 @@ async def descargar_pdf_es(context, url: str, expediente: str, nombre_doc: str, 
     """
     try:
         response = await context.request.get(url, timeout=TIMEOUT_MS)
-    except Exception as e:
-        print(f"ERROR de red al descargar [{expediente}] {nombre_doc} #{indice}: {e}")
+    except Exception:
+        logger.exception("Error de red al descargar [%s] %s #%s", expediente, nombre_doc, indice)
         return False
 
     if not response.ok:
-        print(
-            f"ERROR HTTP {response.status} al descargar [{expediente}] {nombre_doc} #{indice}: {url}"
-        )
+        logger.error("Error HTTP %s al descargar [%s] %s #%s: %s", response.status, expediente, nombre_doc, indice, url)
         return False
 
     try:
@@ -55,12 +59,10 @@ async def descargar_pdf_es(context, url: str, expediente: str, nombre_doc: str, 
         es_pdf = ("application/pdf" in ctype) or contenido.startswith(b"%PDF-")
 
         if not es_pdf:
-            print(f"ERROR: la descarga NO es PDF ({ctype}).")
+            logger.warning("La descarga no es PDF (%s).", ctype)
             return False
-    except Exception as e:
-        print(
-            f"ERROR al leer el cuerpo de la respuesta [{expediente}] {nombre_doc} #{indice}: {e}"
-        )
+    except Exception:
+        logger.exception("Error al leer el cuerpo de la respuesta [%s] %s #%s", expediente, nombre_doc, indice)
         return False
 
     base_exp = limpiar_expediente(expediente)
@@ -72,27 +74,32 @@ async def descargar_pdf_es(context, url: str, expediente: str, nombre_doc: str, 
     try:
         async with aiofiles.open(destino, "wb") as f:
             await f.write(contenido)
-        print(f"Guardado: {destino.name}")
+        logger.info("Guardado: %s", destino.name)
         return True
-    except Exception as e:
-        print(f"ERROR al guardar archivo [{expediente}] {nombre_doc} #{indice}: {e}")
+    except Exception:
+        logger.exception("Error al guardar archivo [%s] %s #%s", expediente, nombre_doc, indice)
         return False
 
 
 async def extraer_urls_pliegos_desde_pagina(context, url: str, expediente: str, nombre_doc: str):
     """
-    Entra en la URL HTML de 'Documento de Pliegos' y extrae las URLs
-    de:
-        - 'Pliego Prescripciones Técnicas'
-        - 'Pliego Cláusulas Administrativas'
-    devolviendo una lista de tuplas [(nombre_enlace, url_pdf), ...]
+    Extrae URLs de PDFs desde una página HTML de pliegos.
+
+    Args:
+        context: Contexto Playwright usado para abrir la página.
+        url: URL HTML de detalle del documento.
+        expediente: Número de expediente asociado.
+        nombre_doc: Nombre del documento de pliegos.
+
+    Returns:
+        Lista de tuplas ``(nombre_enlace, url_pdf)``.
     """
     page = await context.new_page()
     try:
-        print(f"Abrir página de pliegos [{expediente}] {nombre_doc}: {url}")
+        logger.info("Abrir pagina de pliegos [%s] %s: %s", expediente, nombre_doc, url)
         await page.goto(url, wait_until="networkidle", timeout=TIMEOUT_MS)
-    except Exception as e:
-        print(f"ERROR al cargar la página [{expediente}] {nombre_doc}: {e}")
+    except Exception:
+        logger.exception("Error al cargar la pagina [%s] %s", expediente, nombre_doc)
         await page.close()
         return []
 
@@ -108,17 +115,17 @@ async def extraer_urls_pliegos_desde_pagina(context, url: str, expediente: str, 
 
         try:
             count = await locator.count()
-        except Exception as e:
-            print(f"ERROR al buscar enlace '{nombre}' en [{expediente}]: {e}")
+        except Exception:
+            logger.exception("Error al buscar enlace '%s' en [%s]", nombre, expediente)
             continue
 
         if count == 0:
-            print(f"No se encontró el enlace '{nombre}' en [{expediente}]")
+            logger.warning("No se encontro el enlace '%s' en [%s]", nombre, expediente)
             continue
 
         href = await locator.first.get_attribute("href")
         if not href:
-            print(f"Enlace '{nombre}' en [{expediente}] sin href")
+            logger.warning("Enlace '%s' en [%s] sin href", nombre, expediente)
             continue
 
         encontrados.append((nombre, href))
@@ -129,8 +136,14 @@ async def extraer_urls_pliegos_desde_pagina(context, url: str, expediente: str, 
 
 async def procesar_pagina_pliego(context, url: str, expediente: str, nombre_doc: str, dic_urls: dict):
     """
-    Entra en la página HTML del pliego, extrae las URLs de los PDFs que nos interesan
-    y las añade al diccionario dic_urls[expediente].
+    Procesa una página de pliegos y acumula sus URLs de PDF.
+
+    Args:
+        context: Contexto Playwright usado para abrir la página.
+        url: URL HTML de detalle del documento.
+        expediente: Número de expediente asociado.
+        nombre_doc: Nombre del documento de pliegos.
+        dic_urls: Diccionario acumulador por expediente.
     """
     urls_encontradas = await extraer_urls_pliegos_desde_pagina(context, url, expediente, nombre_doc)
     if not urls_encontradas:
@@ -140,6 +153,22 @@ async def procesar_pagina_pliego(context, url: str, expediente: str, nombre_doc:
 
 
 async def run():
+    """
+    Ejecuta el flujo completo de extracción y descarga de pliegos de licitaciones.
+
+    Lee las licitaciones desde el JSON de entrada, extrae las URLs de los pliegos
+    desde las páginas HTML, descarga todos los PDFs encontrados y guarda un
+    resumen en JSON con las URLs procesadas.
+
+    El proceso incluye:
+    - Carga de datos desde resultados_playwright_asincrono_servidor.json
+    - Extracción paralela de URLs de PDFs desde páginas de pliegos
+    - Descarga concurrente de todos los PDFs encontrados
+    - Guardado de metadatos en pliegos_pdfs.json
+
+    Returns:
+        None: Los PDFs se guardan en el directorio DEST y los metadatos en JSON_SALIDA.
+    """
     items = json.loads(RUTA_JSON.read_text(encoding="utf-8"))
 
     pdfs_por_expediente = defaultdict(list)
@@ -178,17 +207,26 @@ async def run():
 
             await write_json(JSON_SALIDA, datos_para_json)
 
-            print(f"Diccionario de pliegos guardado en: {JSON_SALIDA}")
+            logger.info("Diccionario de pliegos guardado en: %s", JSON_SALIDA)
 
-            # Crear ZIP con todo lo descargado
-            # zip_path = shutil.make_archive(DEST.name, "zip", root_dir=DEST)
-            # print(f"ZIP creado: {zip_path}")
+            # Crear ZIP con todo lo descargado si se necesita exportacion local.
             
         finally:
             await context.close()
             await browser.close()
             
 def get_paginas(context, items: list[dict], dic_urls) -> List[Awaitable[Any]]:
+    """
+    Construye las tareas asíncronas de extracción de páginas de pliegos.
+
+    Args:
+        context: Contexto Playwright compartido.
+        items: Licitaciones leídas desde el JSON de entrada.
+        dic_urls: Diccionario acumulador de URLs.
+
+    Returns:
+        Lista de tareas asíncronas.
+    """
     return [
         procesar_pagina_pliego(
             context=context,
@@ -202,7 +240,13 @@ def get_paginas(context, items: list[dict], dic_urls) -> List[Awaitable[Any]]:
 
 def iterar_paginas(items: list[dict]) -> Iterable[Tuple[str, str, str]]:
     """
-    Devuleve el expediente, nombre del documento y la primera url
+    Itera por las páginas de pliegos incluidas en el JSON.
+
+    Args:
+        items: Licitaciones leídas desde el JSON de entrada.
+
+    Yields:
+        Tuplas con expediente, nombre del documento y primera URL.
     """
     for item in items:
         datos = item.get("datos", {}) or {}
@@ -221,17 +265,42 @@ def iterar_paginas(items: list[dict]) -> Iterable[Tuple[str, str, str]]:
                 yield expediente, nombre_doc, url
                 
 def es_pliego (nombre_doc: str) -> bool:
+    """
+    Indica si un nombre de documento corresponde a un pliego.
+
+    Args:
+        nombre_doc: Nombre del documento.
+
+    Returns:
+        ``True`` si el nombre contiene la palabra ``pliego``.
+    """
     if not nombre_doc:
         return False
     return "pliego" in nombre_doc.lower()
             
 def primera_url(doc: dict) -> str:
+    """
+    Obtiene la primera URL de un campo de URLs separadas por barras.
+
+    Args:
+        doc: Diccionario de metadatos de un documento.
+
+    Returns:
+        Primera URL encontrada o cadena vacía.
+    """
     urls_str = doc.get("Ver documentos (urls)")
     if not urls_str:
         return ""
     return (urls_str.split("|")[0] or "").strip()
 
 async def write_json(path, data: dict) -> None:
+    """
+    Escribe un diccionario en JSON con codificación UTF-8.
+
+    Args:
+        path: Ruta de salida.
+        data: Datos que se quieren serializar.
+    """
     payload = json.dumps(data, ensure_ascii=False, indent=2)
     async with aiofiles.open(path, "w", encoding="utf-8") as f:
         await f.write(payload)

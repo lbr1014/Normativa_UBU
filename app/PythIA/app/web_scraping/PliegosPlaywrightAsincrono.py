@@ -1,5 +1,11 @@
+"""
+Autora: Lydia Blanco Ruiz
+Script para extraer licitaciones desde la Plataforma de Contratación mediante Playwright asíncrono.
+"""
+
 import asyncio
 import json
+import logging
 import re
 import time
 import os
@@ -14,6 +20,7 @@ from playwright.async_api import TimeoutError as PWTimeoutError
 BASE_URL = "https://contrataciondelestado.es/wps/portal/plataforma"
 OUTPUT_JSON = "resultados_playwright_asincrono_servidor.json"
 QUERY = "licitacion"
+logger = logging.getLogger(__name__)
 OBJETIVO = "Junta de Gobierno de la Diputación Provincial de Burgos"
 
 
@@ -51,12 +58,12 @@ async def eleccion_organo(frame_arbol: Frame, texto_objetivo: str) -> None:
     await sel.wait_for(state="visible")
     await sel.scroll_into_view_if_needed()
 
-    print("SELECT ENCONTRADO")
+    logger.info("Select encontrado")
 
     # Asegura que hay opciones cargadas
     await sel.locator("option").first.wait_for(state="attached")
 
-    print("OPTIONS CARGADAS")
+    logger.info("Opciones cargadas")
 
     # Busca la option por texto
     opcion = sel.locator(
@@ -64,14 +71,14 @@ async def eleccion_organo(frame_arbol: Frame, texto_objetivo: str) -> None:
     ).first
     await opcion.wait_for(state="attached")
 
-    print("BÚSQUEDA POR TEXTO")
+    logger.info("Busqueda por texto")
     # Selecciona por value la opción
     value = await opcion.get_attribute("value")
     if value:
         await sel.select_option(value=value)
     else:
         await sel.select_option(label=texto_objetivo)
-    print("SELECCiÓN POR ÍNDICES")
+    logger.info("Seleccion por indices")
 
     # Pulsa el botón Añadir
     btn_anadir = frame_arbol.get_by_role("button", name=re.compile(r"^Añadir$", re.I))
@@ -81,17 +88,18 @@ async def eleccion_organo(frame_arbol: Frame, texto_objetivo: str) -> None:
 
 def pestana_diputacion(busqueda: str) -> str:
     """
-    Devuelve la clave de pestaña a abrir según el texto de búsqueda.
+    Devuelve la clave de pestaña que se debe abrir.
 
-    Argumentos:
-        busqeuda: texto que de búsqueda segun el cual se va a seleccioanr la pestaña.
+    Args:
+        busqueda: Texto de búsqueda usado para seleccionar la pestaña.
+
     Returns:
-        nombre de pestaña a abrir
+        Nombre de la pestaña a abrir.
 
     """
     b = (busqueda or "").lower()
-    print(busqueda)
-    print(any(k in b for k in ("pliego", "pliegos", "doc", "documento", "documentos")))
+    logger.debug("Busqueda: %s", busqueda)
+    logger.debug("Busqueda documental: %s", any(k in b for k in ("pliego", "pliegos", "doc", "documento", "documentos")))
     if any(k in b for k in ("pliego", "pliegos", "doc", "documento", "documentos")):
         return "Documentos"
     if any(
@@ -177,21 +185,24 @@ async def ir_pestana(page: Page, clave: str) -> None:
 
 async def extraer_licitaciones(page: Page, resultados: list[dict], index: dict[str, int]) -> list[dict]:
     """
-    Recorre las licitaciones de la página entrando en cada una
-    Argumentos:
-        page: la página actual (Licitacion) de la cual queremos extrear el JSON
+    Recorre las licitaciones de la página y extrae sus detalles.
 
-    Return:
-        Devuelve un diccionario con la información extraida.
+    Args:
+        page: Página actual de licitaciones.
+        resultados: Lista acumulada de licitaciones.
+        index: Índice de expedientes ya procesados.
+
+    Returns:
+        Lista actualizada con la información extraída.
     """
-    print("voy a descaragr licitaciones")
+    logger.info("Descargando licitaciones")
     url = page.url
     tabla = page.locator(r"#tableLicitacionesPerfilContratante")
     await tabla.wait_for(state="visible")
 
     filas = tabla.locator("tbody tr")
     total = await filas.count()
-    print(f"Filas en la página: {total}")
+    logger.info("Filas en la pagina: %s", total)
 
     boton_siguiente = page.locator(
         r"#viewns_Z7_AVEQAI930GRPE02BR764FO30G0_\:form1\:siguienteLink"
@@ -203,7 +214,7 @@ async def extraer_licitaciones(page: Page, resultados: list[dict], index: dict[s
     while True:
 
         total = await filas.count()
-        print(f"Filas en la página {pagina} : {total}")
+        logger.info("Filas en la pagina %s: %s", pagina, total)
 
         for i in range(total):
             await tabla.wait_for(state="visible")
@@ -227,12 +238,12 @@ async def extraer_licitaciones(page: Page, resultados: list[dict], index: dict[s
             await guardar_licitacion_json(resultados)
             
             if nuevo:
-                print(f"Guardada nueva licitación: {datos.get('Expediente')}")
+                logger.info("Guardada nueva licitacion: %s", datos.get("Expediente"))
             else:
-                print(f"Actualizada (duplicado): {datos.get('Expediente')}")
+                logger.info("Actualizada (duplicado): %s", datos.get("Expediente"))
 
             j += 1
-            print(f"Licitación visitada #{i + 1} Total {j}")
+            logger.info("Licitacion visitada #%s Total %s", i + 1, j)
 
             await page.goto(url)
             await ir_pestana(page, "Licitaciones")
@@ -254,12 +265,13 @@ async def extraer_licitaciones(page: Page, resultados: list[dict], index: dict[s
 
 async def extraer_detalles_licitacion(page: Page) -> dict:
     """
-    Extrae los campos visibles de la página actual de licitaciones en formato JSON
-    Argumentos:
-        page: la página actual de la cual queremos extrear el JSON
+    Extrae los campos visibles de una licitación.
 
-    Return:
-        Devuelve un diccionario con la información extraida.
+    Args:
+        page: Página de detalle de una licitación.
+
+    Returns:
+        Diccionario con la información extraída.
     """
     datos: dict[str, str] = {}
     # Localiza la primera tabla
@@ -288,11 +300,25 @@ async def extraer_detalles_licitacion(page: Page) -> dict:
     if documentos:
         datos["Documentos"] = documentos
         
-    print (datos)
+    logger.debug("Datos extraidos: %s", datos)
 
     return datos
 
 async def parse_head_table(page: Page, datos: dict[str, object], head_sel: str) -> None:
+    """
+    Extrae información de la tabla de encabezado de una licitación.
+
+    Procesa la tabla principal que contiene información básica como órgano de
+    contratación, expediente, objeto del contrato y enlaces relacionados.
+
+    Args:
+        page: Página de Playwright con la licitación cargada.
+        datos: Diccionario donde se almacenarán los datos extraídos.
+        head_sel: Selector CSS de la tabla de encabezado.
+
+    Returns:
+        None: Los datos se modifican en el diccionario pasado por referencia.
+    """
     head_table = page.locator(head_sel)
     if not await head_table.count():
         return
@@ -343,6 +369,20 @@ async def parse_head_table(page: Page, datos: dict[str, object], head_sel: str) 
             datos["Enlace a la licitación"] = urljoin(page.url, href)
 
 async def parse_label_value_table(page: Page, datos: dict[str, object], tabla_sel: str) -> None:
+    """
+    Extrae pares etiqueta-valor de una tabla de detalles.
+
+    Procesa tablas que contienen información en formato etiqueta-valor,
+    extrayendo tanto etiquetas como valores de cada fila.
+
+    Args:
+        page: Página de Playwright con la tabla cargada.
+        datos: Diccionario donde se almacenarán los datos extraídos.
+        tabla_sel: Selector CSS de la tabla a procesar.
+
+    Returns:
+        None: Los datos se modifican en el diccionario pasado por referencia.
+    """
     tabla = page.locator(tabla_sel)
     if not await tabla.count():
         return
@@ -372,6 +412,19 @@ async def parse_label_value_table(page: Page, datos: dict[str, object], tabla_se
         datos[label] = value
         
 async def parse_documentos(page: Page) -> Optional[list[dict[str, str]]]:
+    """
+    Extrae la lista de documentos asociados a una licitación.
+
+    Procesa la tabla de documentos que incluye información sobre publicaciones,
+    enlaces a documentos y datos del DOUE (Diario Oficial de la Unión Europea).
+
+    Args:
+        page: Página de Playwright con la sección de documentos cargada.
+
+    Returns:
+        Lista de diccionarios con información de cada documento, o None si
+        no hay documentos disponibles.
+    """
     docs_sel = "#myTablaDetalleVISUOE"
     docs_table = page.locator(docs_sel)
     if not await docs_table.count():
@@ -407,6 +460,20 @@ async def parse_documentos(page: Page) -> Optional[list[dict[str, str]]]:
     return documentos or None
 
 async def documentos_extract_links(page: Page, links_td: Locator, doc_data: dict[str, str]) -> None:
+    """
+    Extrae URLs de enlaces de documentos de una celda de tabla.
+
+    Busca todos los enlaces href válidos en una celda de la tabla de documentos
+    y los concatena en una cadena separada por pipes.
+
+    Args:
+        page: Página de Playwright para resolver URLs relativas.
+        links_td: Localizador de Playwright apuntando a la celda con enlaces.
+        doc_data: Diccionario del documento donde se almacenarán las URLs.
+
+    Returns:
+        None: Las URLs se agregan al diccionario doc_data si existen.
+    """
     hrefs: list[str] = []
     if await links_td.count():
         enlaces = links_td.locator("a[href]")
@@ -420,6 +487,20 @@ async def documentos_extract_links(page: Page, links_td: Locator, doc_data: dict
         doc_data["Ver documentos (urls)"] = " | ".join(hrefs)
 
 async def parse_documentos_doue(page: Page, row: Locator, doc_data: dict[str, str]) -> None:
+    """
+    Extrae información del DOUE (Diario Oficial de la Unión Europea) de una fila de documento.
+
+    Procesa la columna DOUE que contiene fechas de envío, enlaces de publicación
+    y fechas de publicación del Diario Oficial de la Unión Europea.
+
+    Args:
+        page: Página de Playwright para resolver URLs relativas.
+        row: Localizador de Playwright apuntando a la fila del documento.
+        doc_data: Diccionario del documento donde se almacenarán los datos DOUE.
+
+    Returns:
+        None: Los datos DOUE se agregan al diccionario doc_data si existen.
+    """
     doue_td = row.locator("td:nth-of-type(4)")
     if await doue_td.count():
         # Envío
@@ -444,6 +525,20 @@ async def parse_documentos_doue(page: Page, row: Locator, doc_data: dict[str, st
 
 
 async def set_if_text(datos: dict[str, str], key: str, value: Locator) -> None:
+    """
+    Establece un valor en el diccionario si el localizador contiene texto.
+
+    Extrae el texto del localizador, lo normaliza y lo asigna a la clave
+    especificada solo si el texto no está vacío.
+
+    Args:
+        datos: Diccionario donde se almacenará el valor.
+        key: Clave bajo la cual se almacenará el valor.
+        value: Localizador de Playwright del cual extraer el texto.
+
+    Returns:
+        None: El valor se agrega al diccionario solo si existe texto válido.
+    """
         
     if not await value.count():
         return
@@ -511,6 +606,23 @@ def actualizar_por_expediente(
 
 # ========== MAIN ============
 async def run() -> None:
+    """
+    Ejecuta el proceso completo de scraping de licitaciones.
+
+    Realiza web scraping automatizado de la Plataforma de Contratación del
+    Estado para extraer información de licitaciones de la Junta de Gobierno
+    de la Diputación Provincial de Burgos. Utiliza Playwright para navegación
+    headless y guarda los resultados en formato JSON.
+
+    El proceso incluye:
+    - Carga de resultados existentes para evitar duplicados
+    - Navegación automatizada por la plataforma
+    - Extracción de datos de licitaciones y documentos asociados
+    - Guardado incremental de resultados
+
+    Returns:
+        None: Los resultados se guardan en el archivo OUTPUT_JSON.
+    """
     resultado = cargar_resultados_existentes()
     
     # Construye índice por Expediente a partir de lo ya guardado
@@ -540,7 +652,7 @@ async def run() -> None:
 
         try:
             await page.goto(BASE_URL, wait_until="networkidle", timeout=90_000)
-            print("Título:", await page.title())
+            logger.info("Titulo: %s", await page.title())
 
             # Abre la pestaña "Perfil Contratante"
             try:
@@ -597,7 +709,7 @@ async def run() -> None:
 
             # Va a la pestaña correcta segun la query
             destino = pestana_diputacion(QUERY)
-            print(f"Iré a la pestaña: {destino}")
+            logger.info("Ire a la pestana: %s", destino)
             await ir_pestana(page, destino)
 
             # Extrae las licitaciones y las guarda
@@ -605,7 +717,7 @@ async def run() -> None:
                 resultado = await extraer_licitaciones(page,  resultado, index)
 
         except PWTimeoutError as e:
-            print("Timeout al cargar o encontrar elementos: ", e)
+            logger.warning("Timeout al cargar o encontrar elementos: %s", e)
             #raise
         finally:
             await guardar_licitacion_json(resultado)
@@ -616,3 +728,4 @@ async def run() -> None:
 
 if __name__ == "__main__":
     asyncio.run(run())
+
