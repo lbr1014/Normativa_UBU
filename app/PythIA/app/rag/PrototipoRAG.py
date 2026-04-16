@@ -30,7 +30,7 @@ from qdrant_client import models as qmodels
 from sentence_transformers import SentenceTransformer
 try:
     import torch
-except ImportError:  # pragma: no cover - entorno sin torch fuera de Docker
+except ImportError:
     torch = None
 
 from hashlib import sha256

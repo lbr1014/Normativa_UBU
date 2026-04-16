@@ -17,7 +17,7 @@ from PIL import Image
 from pdf2image import convert_from_path, pdfinfo_from_path
 try:
     import torch
-except ImportError:  # pragma: no cover - entorno sin torch fuera de Docker
+except ImportError:  # entorno sin torch fuera de Docker
     torch = None
 
 logger = logging.getLogger(__name__)

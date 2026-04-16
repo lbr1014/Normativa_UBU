@@ -749,7 +749,7 @@ def update_sql(doc, vector_docs) -> None:
             c.numero_expediente = numero_expediente
             c.tipo_documento = tipo_documento
 
-        exists = Embedding.query.filter_by(chunk_id=c.id, model_id=embedding_model.model_id).first()
+        exists = Embedding.query.filter_by(chunk_id=c.id).first()
         if not exists:
             e = Embedding(
                 chunk_id=c.id,
@@ -758,3 +758,7 @@ def update_sql(doc, vector_docs) -> None:
                 distance="cosine",
             )
             db.session.add(e)
+        else:
+            exists.model_id = embedding_model.model_id
+            exists.embedding_size = embedding_model.embedding_size
+            exists.distance = "cosine"
