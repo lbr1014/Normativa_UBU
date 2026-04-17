@@ -53,7 +53,8 @@ Index / table of contents:
 Return only valid Markdown, no explanations.
 """
 
-MODEL_NAME = os.getenv("OCR_MODEL_NAME", "blaifa/Nanonets-OCR-s")
+DEFAULT_OCR_MODEL_NAME = os.getenv("OCR_MODEL_NAME", "blaifa/Nanonets-OCR-s")
+MODEL_NAME = DEFAULT_OCR_MODEL_NAME
 OLLAMA_CONNECT_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_CONNECT_TIMEOUT_SECONDS", "10"))
 OLLAMA_READ_TIMEOUT_SECONDS = int(os.getenv("OLLAMA_READ_TIMEOUT_SECONDS", "300"))
 _ollama_num_gpu = os.getenv("OLLAMA_NUM_GPU")
@@ -91,6 +92,22 @@ OLLAMA_BASE_URL = _service_url_from_env("OLLAMA_BASE_URL", "ollama:11434")
 
 class OllamaOCRException(RuntimeError):
     """Error de OCR contra Ollama con contexto suficiente para depuración."""
+
+
+def resolve_ocr_model(model_name: str | None = None) -> str:
+    """
+    Resuelve el modelo visual de Ollama que se usara para OCR.
+
+    Si no se le pasa ningun valor, se usa el modelo configurado.
+    
+    Args:
+        model: nombre del modelo a usar (opcional).
+        
+    Returns:
+        El nombre del modelo a usar, limpio de espacios.
+    """
+    selected_model = (model_name or "").strip()
+    return selected_model or DEFAULT_OCR_MODEL_NAME
 
 
 def _ocr_execution_backend() -> str:
@@ -136,7 +153,12 @@ def _page_failure_markdown(page_number: int, total_pages: int, error: Exception)
     )
 
 
-def _build_chat_payload(user_content: str, image_base64: str, num_gpu: int) -> dict:
+def _build_chat_payload(
+    user_content: str,
+    image_base64: str,
+    num_gpu: int,
+    model_name: str | None = None,
+) -> dict:
     """
     Construye el payload JSON para la API de chat de Ollama.
 
@@ -149,7 +171,7 @@ def _build_chat_payload(user_content: str, image_base64: str, num_gpu: int) -> d
         dict: Payload formateado para la API /api/chat de Ollama.
     """
     return {
-        "model": MODEL_NAME,
+        "model": resolve_ocr_model(model_name),
         "messages": [
             {
                 "role": "user",
@@ -205,11 +227,12 @@ async def _post_ollama_chat_async(client: httpx.AsyncClient, payload: dict) -> d
         OllamaOCRException: Si ocurre un timeout, error de conexión,
                            respuesta HTTP de error, o respuesta no JSON.
     """
+    model_name = str(payload.get("model") or MODEL_NAME)
     try:
         response = await client.post("/api/chat", json=payload)
     except httpx.TimeoutException as exc:
         raise OllamaOCRException(
-            f"Timeout en Ollama tras {OLLAMA_READ_TIMEOUT_SECONDS}s con el modelo '{MODEL_NAME}'."
+            f"Timeout en Ollama tras {OLLAMA_READ_TIMEOUT_SECONDS}s con el modelo '{model_name}'."
         ) from exc
     except httpx.HTTPError as exc:
         raise OllamaOCRException(f"No se pudo conectar con Ollama: {exc}") from exc
@@ -219,7 +242,7 @@ async def _post_ollama_chat_async(client: httpx.AsyncClient, payload: dict) -> d
     except httpx.HTTPStatusError as exc:
         details = _response_error_details(response)
         raise OllamaOCRException(
-            f"Ollama devolvió HTTP {response.status_code} para el modelo '{MODEL_NAME}': {details}"
+            f"Ollama devolvió HTTP {response.status_code} para el modelo '{model_name}': {details}"
         ) from exc
 
     try:
@@ -319,6 +342,7 @@ async def ocr_page_with_nanonets_async(
     image_path: Path,
     page_number: int,
     total_pages: int,
+    model_name: str | None = None,
 ) -> str:
     """
     Realiza OCR en una página individual usando el modelo Nanonets-OCR-s de Ollama.
@@ -339,6 +363,7 @@ async def ocr_page_with_nanonets_async(
     Raises:
         OllamaOCRException: Si todas las estrategias de OCR fallan.
     """
+    resolved_model = resolve_ocr_model(model_name)
     user_content = (
         PROMPT_BASE
         + f"\n\nThis is page {page_number} of {total_pages} of a Spanish PDF. "
@@ -363,7 +388,7 @@ async def ocr_page_with_nanonets_async(
                 try:
                     data = await _post_ollama_chat_async(
                         client,
-                        _build_chat_payload(user_content, image_base64, num_gpu),
+                        _build_chat_payload(user_content, image_base64, num_gpu, model_name=resolved_model),
                     )
                     return data["message"]["content"]
                 except (OllamaOCRException, KeyError) as exc:
@@ -658,7 +683,7 @@ def normalize_headings(markdown: str) -> str:
     return "\n".join(out_lines)
 
 
-async def process_pdf_async(pdf_path: Path, on_page_start=None) -> str:
+async def process_pdf_async(pdf_path: Path, on_page_start=None, model_name: str | None = None) -> str:
     """
     Procesa un PDF de forma asíncrona convirtiéndolo a Markdown mediante OCR.
 
@@ -670,10 +695,11 @@ async def process_pdf_async(pdf_path: Path, on_page_start=None) -> str:
     Returns:
         str: Contenido completo del PDF convertido a Markdown.
     """
+    resolved_model = resolve_ocr_model(model_name)
     logger.info(
         "Procesando %s... OCR model=%s | backend=%s | base_url=%s",
         pdf_path.name,
-        MODEL_NAME,
+        resolved_model,
         _ocr_execution_backend(),
         OLLAMA_BASE_URL,
     )
@@ -698,7 +724,13 @@ async def process_pdf_async(pdf_path: Path, on_page_start=None) -> str:
                 try:
                     try:
                         page_markdowns.append(
-                            await ocr_page_with_nanonets_async(client, img_path, page_number, total_pages)
+                            await ocr_page_with_nanonets_async(
+                                client,
+                                img_path,
+                                page_number,
+                                total_pages,
+                                model_name=resolved_model,
+                            )
                         )
                     except OllamaOCRException as exc:
                         if OCR_PAGE_FAILURE_MODE == "raise":
@@ -720,7 +752,7 @@ async def process_pdf_async(pdf_path: Path, on_page_start=None) -> str:
     return full_md
 
 
-def process_pdf(pdf_path: Path, on_page_start=None) -> str:
+def process_pdf(pdf_path: Path, on_page_start=None, model_name: str | None = None) -> str:
     """
     Procesa un PDF convirtiéndolo a Markdown mediante OCR.
 
@@ -732,10 +764,15 @@ def process_pdf(pdf_path: Path, on_page_start=None) -> str:
     Returns:
         str: Contenido completo del PDF convertido a Markdown.
     """
-    return asyncio.run(process_pdf_async(pdf_path, on_page_start=on_page_start))
+    return asyncio.run(process_pdf_async(pdf_path, on_page_start=on_page_start, model_name=model_name))
 
 
-def save_markdown_to_file(pdf_path: Path, output_dir: Path, on_page_start=None) -> Path:
+def save_markdown_to_file(
+    pdf_path: Path,
+    output_dir: Path,
+    on_page_start=None,
+    model_name: str | None = None,
+) -> Path:
     """
     Procesa un PDF y guarda el contenido Markdown en un archivo.
 
@@ -749,7 +786,7 @@ def save_markdown_to_file(pdf_path: Path, output_dir: Path, on_page_start=None) 
         Path: Ruta al archivo Markdown generado.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
-    full_md = process_pdf(pdf_path, on_page_start=on_page_start)
+    full_md = process_pdf(pdf_path, on_page_start=on_page_start, model_name=model_name)
     out_path = output_dir / f"{pdf_path.stem}.md"
     out_path.write_text(full_md, encoding="utf-8")
     logger.info("Markdown guardado en: %s", out_path)

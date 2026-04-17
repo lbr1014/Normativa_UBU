@@ -109,6 +109,10 @@ class Settings:
     EMBEDDING_BATCH_SIZE: int = int(os.getenv("EMBEDDING_BATCH_SIZE", "32"))
 
     # Ollama
+    DEFAULT_RAG_LLM_MODEL: str = os.getenv(
+        "RAG_LLM_MODEL",
+        os.getenv("OLLAMA_MODEL", "llama3.1:8b-instruct-q4_K_M"),
+    )
     _ollama_num_gpu = os.getenv("OLLAMA_NUM_GPU")
     _cuda_available = torch is not None and torch.cuda.is_available()
     if _ollama_num_gpu not in (None, ""):
@@ -167,6 +171,22 @@ def _ollama_execution_backend() -> str:
     if num_gpu > 0:
         return f"GPU (num_gpu={num_gpu} layers, source={settings.OLLAMA_NUM_GPU_SOURCE})"
     return f"CPU (num_gpu=0, source={settings.OLLAMA_NUM_GPU_SOURCE})"
+
+
+def resolve_rag_llm_model(model: str | None = None) -> str:
+    """
+    Resuelve el modelo LLM que se usara para una consulta RAG.
+
+    Si no se le pasa ningun valor, se usa el modelo configurado.
+    
+    Args:
+        model: nombre del modelo a usar (opcional).
+        
+    Returns:
+        El nombre del modelo a usar, limpio de espacios.
+    """
+    selected_model = (model or "").strip()
+    return selected_model or settings.DEFAULT_RAG_LLM_MODEL
 
 
 # =========================
@@ -834,7 +854,7 @@ def recuperacion_chunk_con_scores(
 # =========================
 async def ask_ollama(
     prompt: str,
-    model: str = "llama3.1:8b-instruct-q4_K_M",
+    model: str | None = None,
     should_cancel=None,
 ) -> str:
     """
@@ -843,6 +863,7 @@ async def ask_ollama(
     if should_cancel and should_cancel():
         raise QueryCancelledError(QUERY_CANCELLED_MESSAGE)
 
+    model_name = resolve_rag_llm_model(model)
     full_prompt = (
         "Responde en español de forma breve y precisa.\n\n"
         f"{prompt}"
@@ -850,7 +871,7 @@ async def ask_ollama(
     chunks: list[str] = []
 
     request_payload = {
-        "model": model,
+        "model": model_name,
         "prompt": full_prompt,
         "stream": True,
         "options": {
@@ -860,7 +881,7 @@ async def ask_ollama(
 
     logger.info(
         "Consulta a Ollama | model=%s | backend=%s | base_url=%s",
-        model,
+        model_name,
         _ollama_execution_backend(),
         OLLAMA_BASE_URL,
     )
@@ -942,7 +963,7 @@ def obtener_chunk_de_query(
     
 async def obtener_mejor_chunk(
     user_query: str,
-    model: str = "llama3.1:8b-instruct-q4_K_M",
+    model: str | None = None,
     should_cancel=None,
     on_status=None,
     numero_expediente: str | None = None,
@@ -961,6 +982,7 @@ async def obtener_mejor_chunk(
         - retrieved: top 10 chunks 
     """
     user_query = (user_query or "").strip()
+    model_name = resolve_rag_llm_model(model)
     if should_cancel and should_cancel():
         raise QueryCancelledError(QUERY_CANCELLED_MESSAGE)
 
@@ -981,6 +1003,7 @@ async def obtener_mejor_chunk(
             "segment_index": -1,
             "chunk": "",
             "retrieved": [],
+            "model": model_name,
             "applied_filters": {
                 "numero_expediente": numero_expediente,
                 "tipo_documento": tipo_documento,
@@ -1036,10 +1059,11 @@ async def obtener_mejor_chunk(
     if on_status:
         on_status("Generando respuesta del modelo...")
 
-    answer = await ask_ollama(prompt, model=model, should_cancel=should_cancel)
+    answer = await ask_ollama(prompt, model=model_name, should_cancel=should_cancel)
 
     return {
         "answer": answer,
+        "model": model_name,
         "title": best.get("title", ""),
         "filename": best.get("filename", ""),
         "segment_index": best.get("segment_index", -1),

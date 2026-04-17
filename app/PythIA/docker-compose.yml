@@ -60,7 +60,7 @@ services:
     volumes:
       - ollama:/root/.ollama
     entrypoint: ["sh", "-lc"]
-    command: ["ollama pull llama3.1:8b-instruct-q4_K_M && ollama pull blaifa/Nanonets-OCR-s"]
+    command: ["ollama pull ${RAG_LLM_MODEL:-llama3.1:8b-instruct-q4_K_M} && ollama pull ${OCR_MODEL_NAME:-blaifa/Nanonets-OCR-s}"]
     restart: "no"
 
   web:
@@ -85,6 +85,8 @@ services:
       - QDRANT_URL=${QDRANT_SERVICE_HOST}:${QDRANT_INTERNAL_PORT}
       - RAG_MODEL_DEVICE=${RAG_MODEL_DEVICE:-cuda}
       - RAG_MAX_WORKERS=${RAG_MAX_WORKERS:-4}
+      - RAG_LLM_MODEL=${RAG_LLM_MODEL:-llama3.1:8b-instruct-q4_K_M}
+      - OCR_MODEL_NAME=${OCR_MODEL_NAME:-blaifa/Nanonets-OCR-s}
       - DOCS_DIR=${DOCS_DIR}
       - GUNICORN_CMD_ARGS=--access-logfile - --error-logfile - --capture-output --log-level debug
       - OLLAMA_NUM_GPU=${OLLAMA_NUM_GPU}
@@ -129,6 +131,8 @@ services:
       PYTHONPATH: /app
       OLLAMA_BASE_URL: ${OLLAMA_SERVICE_HOST}:${OLLAMA_INTERNAL_PORT}
       QDRANT_URL: ${QDRANT_SERVICE_HOST}:${QDRANT_INTERNAL_PORT}
+      RAG_LLM_MODEL: ${RAG_LLM_MODEL:-llama3.1:8b-instruct-q4_K_M}
+      OCR_MODEL_NAME: ${OCR_MODEL_NAME:-blaifa/Nanonets-OCR-s}
       DATABASE_URL: "sqlite:///:memory:"
 
 

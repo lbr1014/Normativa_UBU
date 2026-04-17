@@ -18,6 +18,7 @@ class RAGQueryState(db.Model):
         id: Identificador de la consulta asíncrona.
         user_id: Identificador del usuario propietario.
         question: Pregunta enviada por el usuario.
+        model_name: Modelo LLM seleccionado para la consulta.
         status: Estado actual de la consulta.
         message: Mensaje visible para el usuario.
         result_payload: Resultado serializable de la consulta.
@@ -33,6 +34,7 @@ class RAGQueryState(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     question = db.Column(db.Text, nullable=False)
+    model_name = db.Column(db.String(255), nullable=True)
     status = db.Column(db.String(20), nullable=False, default="queued", index=True)
     message = db.Column(db.String(255), nullable=True)
     result_payload = db.Column(db.JSON, nullable=True)

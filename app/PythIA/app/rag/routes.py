@@ -15,7 +15,7 @@ from app.entities.rag_query_state import RAGQueryState
 from app.extensions import db
 from app.forms import EmptyForm, RAGQueryForm
 
-from app.rag.PrototipoRAG import QueryCancelledError
+from app.rag.PrototipoRAG import QueryCancelledError, resolve_rag_llm_model
 from app.rag.service import rag_answer, validate_question
 from app.inetrnacionalizacion.tarduccion import get_locale, localize_runtime_message, t, translate_for
 
@@ -66,6 +66,7 @@ def rag_ask():
         return jsonify({"error": t("rag.invalid_question")}), 400
 
     question = (form.question.data or "").strip()
+    model_name = resolve_rag_llm_model(form.model.data)
     current_lang = get_locale()
     invalid = validate_question(question, lang=current_lang)
     if invalid:
@@ -86,6 +87,7 @@ def rag_ask():
     job = RAGQueryState(
         user_id=int(current_user.id),
         question=question,
+        model_name=model_name,
         status="queued",
         message=t("rag.queued"),
         result_payload=None,
@@ -200,6 +202,7 @@ def run_rag_query_async(app, job_id: int, user_id: int, lang: str = "es") -> Non
             result = asyncio.run(
                 rag_answer(
                     job.question,
+                    model=job.model_name,
                     should_cancel=should_cancel,
                     on_status=on_status,
                     user_id=user_id,

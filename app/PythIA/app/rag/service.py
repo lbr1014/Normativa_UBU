@@ -198,7 +198,14 @@ def resolve_numero_expediente(question: str) -> str | None:
 
     return candidate
 
-async def rag_answer(question: str, should_cancel=None, on_status=None, user_id: int | None = None, lang: str = "es") -> Dict[str, Any]:
+async def rag_answer(
+    question: str,
+    model: str | None = None,
+    should_cancel=None,
+    on_status=None,
+    user_id: int | None = None,
+    lang: str = "es",
+) -> Dict[str, Any]:
     """
     Procesa una pregunta usando el sistema RAG y guarda la consulta en BD.
 
@@ -241,6 +248,7 @@ async def rag_answer(question: str, should_cancel=None, on_status=None, user_id:
             on_status(translate_for(lang, "rag.preparing"))
         data = await obtener_mejor_chunk(
             question,
+            model=model,
             should_cancel=should_cancel,
             on_status=on_status,
             numero_expediente=numero_expediente,

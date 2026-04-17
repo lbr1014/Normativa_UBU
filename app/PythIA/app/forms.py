@@ -314,6 +314,7 @@ class RAGQueryForm(LocalizedFlaskForm):
     }
 
     question = TextAreaField("Pregunta", validators=[DataRequired(), Length(max=2000)])
+    model = HiddenField(validators=[Optional(), Length(max=255)])
     submit = SubmitField("Preguntar")
 
 
