@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import importlib
 import os
 import runpy
@@ -217,6 +218,8 @@ class _AsyncStream:
     def __init__(self, lines=None, exc=None):
         self.lines = lines or []
         self.exc = exc
+        self.status_code = 200
+        self.text = ""
 
     async def __aenter__(self):
         if self.exc:
@@ -234,6 +237,22 @@ class _AsyncStream:
             yield line
 
 
+class _FailingAsyncStream(_AsyncStream):
+    def __init__(self, module, status_code=500, body=b"boom"):
+        super().__init__([])
+        self.module = module
+        self.status_code = status_code
+        self.body = body
+
+    def raise_for_status(self):
+        request = self.module.httpx.Request("POST", "http://ollama/api")
+        response = self.module.httpx.Response(self.status_code, request=request)
+        raise self.module.httpx.HTTPStatusError("error", request=request, response=response)
+
+    async def aread(self):
+        return self.body
+
+
 class _AsyncClient:
     stream_obj = _AsyncStream([])
     created = []
@@ -247,6 +266,9 @@ class _AsyncClient:
 
     async def __aexit__(self, *_args):
         return False
+
+    async def post(self, *_args, **_kwargs):
+        return SimpleNamespace(status_code=200, text="", raise_for_status=lambda: None)
 
     def stream(self, *_args, **kwargs):
         self.stream_kwargs = kwargs
@@ -302,6 +324,40 @@ class PrototipoRAGUnitTest(unittest.TestCase):
         self.assertIn("num_gpu=2", self.m._ollama_execution_backend())
         self.m.settings.OLLAMA_NUM_GPU = 0
         self.assertIn("CPU", self.m._ollama_execution_backend())
+
+    def test_rag_model_choices_and_pull_progress_formatting(self):
+        original_default = self.m.settings.DEFAULT_RAG_LLM_MODEL
+        original_models = self.m.settings.RAG_LLM_MODELS
+        try:
+            self.m.settings.DEFAULT_RAG_LLM_MODEL = "llama"
+            self.m.settings.RAG_LLM_MODELS = " llama, gemma , qwen, gemma "
+
+            self.assertEqual(self.m.resolve_rag_llm_model(" gemma "), "gemma")
+            self.assertEqual(self.m.resolve_rag_llm_model(" "), "llama")
+            self.assertEqual(self.m.get_available_rag_llm_models(), ["llama", "gemma", "qwen"])
+            self.assertEqual(
+                self.m.get_rag_llm_model_choices(),
+                [("llama", "llama"), ("gemma", "gemma"), ("qwen", "qwen")],
+            )
+        finally:
+            self.m.settings.DEFAULT_RAG_LLM_MODEL = original_default
+            self.m.settings.RAG_LLM_MODELS = original_models
+
+        self.assertEqual(self.m._format_bytes(None), "-")
+        self.assertEqual(self.m._format_bytes(-1), "-")
+        self.assertEqual(self.m._format_bytes(12), "12 B")
+        self.assertEqual(self.m._format_bytes(2048), "2.0 KB")
+        self.assertIn(
+            "50.0% (1.0 KB / 2.0 KB)",
+            self.m._format_ollama_pull_progress(
+                "gemma",
+                {"status": "pulling", "digest": "abcdef1234567890", "completed": 1024, "total": 2048},
+            ),
+        )
+        self.assertEqual(
+            self.m._format_ollama_pull_progress("gemma", {"completed": 1024}),
+            "gemma: descargando (1.0 KB)",
+        )
 
     def test_import_without_torch_and_auto_ollama_gpu_branches(self):
         auto_env = {"OLLAMA_NUM_GPU": "", "RAG_MODEL_DEVICE": None}
@@ -508,6 +564,207 @@ class PrototipoRAGUnitTest(unittest.TestCase):
         self.assertIn("5 s", str(ctx.exception))
         self.m.settings.OLLAMA_READ_TIMEOUT_SECONDS = None
 
+    def test_ask_ollama_reports_chat_http_errors(self):
+        _AsyncClient.created = []
+
+        _AsyncClient.stream_obj = _FailingAsyncStream(
+            self.m,
+            status_code=404,
+            body=b'{"error":"model not found"}',
+        )
+        with patch.object(self.m.httpx, "AsyncClient", _AsyncClient):
+            with self.assertRaises(self.m.OllamaModelNotFoundError):
+                asyncio.run(self.m.ask_ollama("prompt", model="missing"))
+
+        _AsyncClient.stream_obj = _FailingAsyncStream(
+            self.m,
+            status_code=500,
+            body=b"ollama down",
+        )
+        with patch.object(self.m.httpx, "AsyncClient", _AsyncClient):
+            with self.assertRaises(RuntimeError) as ctx:
+                asyncio.run(self.m.ask_ollama("prompt", model="broken"))
+        self.assertIn("HTTP 500", str(ctx.exception))
+
+        _AsyncClient.stream_obj = _FailingAsyncStream(self.m, status_code=500, body=b"")
+        with patch.object(self.m.httpx, "AsyncClient", _AsyncClient):
+            with self.assertRaises(self.m.httpx.HTTPStatusError):
+                asyncio.run(self.m.ask_ollama("prompt", model="broken"))
+
+    def test_ask_ollama_cancels_while_reading_chat_stream(self):
+        _AsyncClient.created = []
+        _AsyncClient.stream_obj = _AsyncStream(['{"response": "x"}'])
+        cancel_calls = {"n": 0}
+
+        def cancel_on_stream_line():
+            cancel_calls["n"] += 1
+            return cancel_calls["n"] > 1
+
+        with patch.object(self.m.httpx, "AsyncClient", _AsyncClient), patch.object(
+            self.m,
+            "ensure_ollama_model_available",
+            new_callable=unittest.mock.AsyncMock,
+        ):
+            with self.assertRaises(self.m.QueryCancelledError):
+                asyncio.run(self.m.ask_ollama("prompt", model="m", should_cancel=cancel_on_stream_line))
+
+    def test_ensure_ollama_model_ready_opens_client_and_delegates(self):
+        _AsyncClient.created = []
+        with patch.object(self.m.httpx, "AsyncClient", _AsyncClient), patch.object(
+            self.m,
+            "ensure_ollama_model_available",
+            new_callable=unittest.mock.AsyncMock,
+        ) as mock_ensure:
+            asyncio.run(self.m.ensure_ollama_model_ready("m"))
+
+        self.assertEqual(_AsyncClient.created[0].kwargs["base_url"], self.m.OLLAMA_BASE_URL)
+        mock_ensure.assert_awaited_once()
+
+    def test_ensure_ollama_model_available_error_and_download_paths(self):
+        class Response:
+            def __init__(self, module, status_code=200, text=""):
+                self.module = module
+                self.status_code = status_code
+                self.text = text
+
+            def raise_for_status(self):
+                request = self.module.httpx.Request("POST", "http://ollama/api/show")
+                response = self.module.httpx.Response(self.status_code, request=request)
+                raise self.module.httpx.HTTPStatusError("error", request=request, response=response)
+
+        class Client:
+            def __init__(self, module, show_response, stream_obj=None):
+                self.module = module
+                self.show_response = show_response
+                self.stream_obj = stream_obj or _AsyncStream([])
+
+            async def post(self, *_args, **_kwargs):
+                return self.show_response
+
+            def stream(self, *_args, **_kwargs):
+                return self.stream_obj
+
+        with self.assertRaises(self.m.QueryCancelledError):
+            asyncio.run(
+                self.m.ensure_ollama_model_available(
+                    Client(self.m, Response(self.m)),
+                    "m",
+                    should_cancel=lambda: True,
+                )
+            )
+
+        with self.assertRaises(RuntimeError) as ctx:
+            asyncio.run(
+                self.m.ensure_ollama_model_available(
+                    Client(self.m, Response(self.m, status_code=500, text="show failed")),
+                    "m",
+                )
+            )
+        self.assertIn("show failed", str(ctx.exception))
+
+        with self.assertRaises(self.m.OllamaModelNotFoundError) as ctx:
+            asyncio.run(
+                self.m.ensure_ollama_model_available(
+                    Client(
+                        self.m,
+                        Response(self.m, status_code=404),
+                        _FailingAsyncStream(self.m, status_code=500, body=b"pull failed"),
+                    ),
+                    "m",
+                )
+            )
+        self.assertIn("pull failed", str(ctx.exception))
+
+        with self.assertRaises(self.m.OllamaModelNotFoundError) as ctx:
+            asyncio.run(
+                self.m.ensure_ollama_model_available(
+                    Client(
+                        self.m,
+                        Response(self.m, status_code=404),
+                        _AsyncStream(['{"error": "manifest missing"}']),
+                    ),
+                    "m",
+                )
+            )
+        self.assertIn("manifest missing", str(ctx.exception))
+
+        statuses = []
+        asyncio.run(
+            self.m.ensure_ollama_model_available(
+                Client(
+                    self.m,
+                    Response(self.m, status_code=404),
+                    _AsyncStream([
+                        "",
+                        '{"status": "pulling", "digest": "abcdef123456", "completed": 1024, "total": 2048}',
+                        '{"status": "success", "done": true}',
+                    ]),
+                ),
+                "m",
+                on_status=statuses.append,
+            )
+        )
+        self.assertIn("Descargando modelo m", statuses[0])
+        self.assertTrue(any("m: success" in item for item in statuses))
+
+        cancel_calls = {"n": 0}
+
+        def cancel_after_download_starts():
+            cancel_calls["n"] += 1
+            return cancel_calls["n"] > 1
+
+        with self.assertRaises(self.m.QueryCancelledError):
+            asyncio.run(
+                self.m.ensure_ollama_model_available(
+                    Client(self.m, Response(self.m, status_code=404), _AsyncStream(['{"status": "pulling"}'])),
+                    "m",
+                    should_cancel=cancel_after_download_starts,
+                )
+            )
+
+    def test_ensure_ollama_model_available_timeout_paths(self):
+        class Response:
+            status_code = 404
+            text = ""
+
+        class Client:
+            async def post(self, *_args, **_kwargs):
+                return Response()
+
+            def stream(self, *_args, **_kwargs):
+                return _AsyncStream(['{"status": "pulling"}'])
+
+        original_total = self.m.settings.OLLAMA_PULL_TIMEOUT_SECONDS
+        original_idle = self.m.settings.OLLAMA_PULL_IDLE_TIMEOUT_SECONDS
+        try:
+            self.m.settings.OLLAMA_PULL_TIMEOUT_SECONDS = 30
+            self.m.settings.OLLAMA_PULL_IDLE_TIMEOUT_SECONDS = 0
+            original_monotonic = self.m.time.monotonic
+
+            def fake_monotonic():
+                for frame in inspect.stack():
+                    if frame.function == "ensure_ollama_model_available":
+                        return 0 if frame.lineno <= 300 else 31
+                return original_monotonic()
+
+            with patch.object(self.m.time, "monotonic", side_effect=fake_monotonic):
+                with self.assertRaises(self.m.OllamaTimeoutError) as ctx:
+                    asyncio.run(self.m.ensure_ollama_model_available(Client(), "m"))
+            self.assertIn("superó 30", str(ctx.exception))
+
+            async def fake_wait_for(*_args, **_kwargs):
+                raise asyncio.TimeoutError()
+
+            self.m.settings.OLLAMA_PULL_TIMEOUT_SECONDS = 0
+            self.m.settings.OLLAMA_PULL_IDLE_TIMEOUT_SECONDS = 12
+            with patch.object(self.m.asyncio, "wait_for", side_effect=fake_wait_for):
+                with self.assertRaises(self.m.OllamaTimeoutError) as ctx:
+                    asyncio.run(self.m.ensure_ollama_model_available(Client(), "m"))
+            self.assertIn("no avanzó durante 12", str(ctx.exception))
+        finally:
+            self.m.settings.OLLAMA_PULL_TIMEOUT_SECONDS = original_total
+            self.m.settings.OLLAMA_PULL_IDLE_TIMEOUT_SECONDS = original_idle
+
     def test_obtener_chunk_de_query_and_mejor_chunk_paths(self):
         doc = self.m.VectorBaseDocument(
             content="chunk",
@@ -523,7 +780,11 @@ class PrototipoRAGUnitTest(unittest.TestCase):
             asyncio.run(self.m.obtener_mejor_chunk(" pregunta ", should_cancel=lambda: True))
 
         statuses = []
-        with patch.object(self.m, "recuperacion_chunk_con_scores", return_value=[]):
+        with patch.object(self.m, "recuperacion_chunk_con_scores", return_value=[]), patch.object(
+            self.m,
+            "ensure_ollama_model_ready",
+            new_callable=unittest.mock.AsyncMock,
+        ):
             empty = asyncio.run(self.m.obtener_mejor_chunk(" pregunta ", on_status=statuses.append, numero_expediente="EXP"))
         self.assertEqual(empty["retrieved"], [])
         self.assertEqual(empty["applied_filters"]["numero_expediente"], "EXP")
@@ -547,6 +808,10 @@ class PrototipoRAGUnitTest(unittest.TestCase):
 
         with patch.object(self.m, "recuperacion_chunk_con_scores", return_value=[point]), patch.object(
             self.m,
+            "ensure_ollama_model_ready",
+            new_callable=unittest.mock.AsyncMock,
+        ), patch.object(
+            self.m,
             "ask_ollama",
             side_effect=fake_ask_ollama,
         ):
@@ -561,7 +826,11 @@ class PrototipoRAGUnitTest(unittest.TestCase):
             cancel_calls["n"] += 1
             return cancel_calls["n"] > 1
 
-        with patch.object(self.m, "recuperacion_chunk_con_scores", return_value=[point]):
+        with patch.object(self.m, "recuperacion_chunk_con_scores", return_value=[point]), patch.object(
+            self.m,
+            "ensure_ollama_model_ready",
+            new_callable=unittest.mock.AsyncMock,
+        ):
             with self.assertRaises(self.m.QueryCancelledError):
                 asyncio.run(self.m.obtener_mejor_chunk("pregunta", should_cancel=cancel_in_loop))
 
