@@ -90,6 +90,35 @@ body[data-theme="light"] .stats-filter-card .form-text {
     overflow: visible;
 }
 
+.stats-drill-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+    color: var(--bs-secondary-color);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.stats-drill-title {
+    min-width: 0;
+}
+
+.stats-drill-back {
+    border: 1px solid rgba(148, 163, 184, 0.32);
+    border-radius: 8px;
+    padding: 0.35rem 0.7rem;
+    background: rgba(148, 163, 184, 0.12);
+    color: var(--bs-body-color);
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+.stats-drill-back:hover {
+    background: rgba(93, 173, 226, 0.16);
+}
+
 .stats-view-toggle {
     display: inline-flex;
     align-items: center;

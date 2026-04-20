@@ -224,7 +224,17 @@ def _safe_created_at(consulta: Consulta) -> datetime:
     return created_at.replace(tzinfo=None) if created_at.tzinfo else created_at
 
 
-def _process_consulta_stats(consulta, monthly_counts, monthly_times, daily_counts, weekday_counts, hourly_counts, user_counter):
+def _process_consulta_stats(
+    consulta,
+    monthly_counts,
+    monthly_times,
+    daily_counts,
+    daily_times,
+    daily_hourly_counts,
+    weekday_counts,
+    hourly_counts,
+    user_counter,
+):
     """
     Procesa y actualiza las estadísticas de una consulta individual.
 
@@ -252,6 +262,8 @@ def _process_consulta_stats(consulta, monthly_counts, monthly_times, daily_count
     day_key = created_at.date().isoformat()
     if day_key in daily_counts:
         daily_counts[day_key] += 1
+        daily_times[day_key].append(float(consulta.tiempo_respuestas or 0))
+        daily_hourly_counts[day_key][created_at.hour] += 1
     
     weekday_counts[created_at.weekday()] += 1
     hourly_counts[created_at.hour] += 1
@@ -282,6 +294,8 @@ def build_usage_stats_payload(consultas, *, include_top_users: bool = False):
     monthly_counts = dict.fromkeys(recent_months, 0)
     monthly_times = defaultdict(list)
     daily_counts = {}
+    daily_times = defaultdict(list)
+    daily_hourly_counts = {}
     weekday_counts = dict.fromkeys(range(7), 0)
     hourly_counts = dict.fromkeys(range(24), 0)
     user_counter = defaultdict(int)
@@ -297,10 +311,21 @@ def build_usage_stats_payload(consultas, *, include_top_users: bool = False):
     current_day = calendar_start
     while current_day <= calendar_end:
         daily_counts[current_day.isoformat()] = 0
+        daily_hourly_counts[current_day.isoformat()] = dict.fromkeys(range(24), 0)
         current_day += timedelta(days=1)
 
     for consulta in consultas:
-        _process_consulta_stats(consulta, monthly_counts, monthly_times, daily_counts, weekday_counts, hourly_counts, user_counter)
+        _process_consulta_stats(
+            consulta,
+            monthly_counts,
+            monthly_times,
+            daily_counts,
+            daily_times,
+            daily_hourly_counts,
+            weekday_counts,
+            hourly_counts,
+            user_counter,
+        )
 
     monthly_queries = [
         {
@@ -338,6 +363,25 @@ def build_usage_stats_payload(consultas, *, include_top_users: bool = False):
         "daily_queries": [
             {"date": iso_date, "count": count}
             for iso_date, count in daily_counts.items()
+        ],
+        "daily_avg_time": [
+            {
+                "date": iso_date,
+                "avg_time": round(sum(daily_times[iso_date]) / len(daily_times[iso_date]), 2)
+                if daily_times[iso_date]
+                else 0,
+            }
+            for iso_date in daily_counts.keys()
+        ],
+        "daily_hourly_queries": [
+            {
+                "date": iso_date,
+                "hours": [
+                    {"hour": hour, "count": count}
+                    for hour, count in hourly_values.items()
+                ],
+            }
+            for iso_date, hourly_values in daily_hourly_counts.items()
         ],
         "weekday_queries": [
             {"weekday": weekday, "count": count}
