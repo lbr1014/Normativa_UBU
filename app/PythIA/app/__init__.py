@@ -6,10 +6,10 @@ Script para crear y configurar la aplicación Flask principal, incluyendo extens
 import os
 
 from dotenv import load_dotenv
-from flask import Flask, flash, redirect, request, url_for
+from flask import Flask, flash, jsonify, redirect, request, url_for
 
 from .documentos import DocumentosService
-from .error_handling import register_error_handlers
+from .error_handling import register_error_handlers, wants_json_response
 from .entities import Consulta, Documento, MarkdownConversionState, RAGQueryState, User, VectorUpdateState, WebScrapingSate
 from .extensions import csrf, db, login_manager, mail, migrate
 from .inetrnacionalizacion.tarduccion import init_app as init_i18n, t
@@ -115,6 +115,9 @@ def create_app():
         Returns:
             La respuesta de redireccion a la página de login.
         """
+        if wants_json_response():
+            return jsonify({"error": t("auth.login_required"), "status": 401}), 401
+
         flash(t("auth.login_required"), "warning")
         return redirect(url_for("auth.login", next=request.path))
 
@@ -133,9 +136,11 @@ def create_app():
     @app.context_processor
     def _inject_post_forms():
         """Expone formularios CSRF para acciones POST simples en plantillas."""
+        from .countries import country_name_for_code
         from .forms import EmptyForm, LanguageForm
 
         return {
+            "country_name_for_code": country_name_for_code,
             "post_form": EmptyForm(),
             "logout_form": EmptyForm(),
             "language_form": LanguageForm(),

@@ -17,7 +17,7 @@ from app.entities.rag_query_state import RAGQueryState
 from app.extensions import db
 from app.rag import routes as rag_routes
 from app.rag import service
-from app.rag.PrototipoRAG import OllamaTimeoutError, QueryCancelledError
+from app.rag.PrototipoRAG import OllamaModelNotFoundError, OllamaTimeoutError, QueryCancelledError
 
 
 class RAGServiceUnitTest(BaseAppTestCase):
@@ -238,6 +238,21 @@ class RAGServiceUnitTest(BaseAppTestCase):
 
         self.assertEqual(error_result["answer"], "rag.system_error")
         mock_exception.assert_called_once()
+
+    def test_rag_answer_handles_ollama_model_not_found_error(self):
+        user = self.create_user()
+
+        with patch(
+            "app.rag.service.obtener_mejor_chunk",
+            AsyncMock(side_effect=OllamaModelNotFoundError("missing")),
+        ), patch(
+            "app.rag.service.translate_for",
+            side_effect=lambda lang, key, **kwargs: key,
+        ), patch("app.rag.service.logger.warning") as mock_warning:
+            result = asyncio.run(service.rag_answer("Pregunta modelo", user_id=user.id))
+
+        self.assertEqual(result["answer"], "rag.model_not_found_error")
+        mock_warning.assert_called_once()
 
     def test_rag_answer_propagates_query_cancelled_error(self):
         with patch("app.rag.service.obtener_mejor_chunk", AsyncMock(side_effect=QueryCancelledError("cancelado"))):

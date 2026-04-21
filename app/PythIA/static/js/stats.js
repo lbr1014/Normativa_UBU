@@ -11,18 +11,11 @@
     dateStyle: "medium",
     timeStyle: "short",
   });
+  const formatDate = new Intl.DateTimeFormat(locale, { dateStyle: "medium" });
+  const formatDayShort = new Intl.DateTimeFormat(locale, { day: "2-digit", month: "short" });
 
   setupMonthlyChartToggle();
-
-  drawLineChart("#chart-monthly-avg-time", config.data.monthly_avg_time, {
-    xKey: "month",
-    yKey: "avg_time",
-    color: "#f5b041",
-    xFormatter: (value) => formatMonth.format(new Date(value)),
-    tickValues: selectTickValues(config.data.monthly_avg_time, "month", 4),
-    tooltipFormatter: (item) =>
-      `${formatMonth.format(new Date(item.month))}: ${item.avg_time} ${config.labels.seconds}`,
-  });
+  setupAvgTimeDrilldown();
 
   drawDonutChart("#chart-weekdays", config.data.weekday_queries, {
     labelKey: "weekday",
@@ -43,6 +36,10 @@
       labelFormatter: (value) => value,
       tooltipFormatter: (item) => `${item.user}: ${item.count}`,
     });
+  }
+
+  if (Array.isArray(config.data.user_locations) && config.data.user_locations.length) {
+    drawUserLocationsMap("#chart-user-locations", config.data.user_locations);
   }
 
   const summaryDate = document.querySelector("[data-stats-last-query]");
@@ -94,28 +91,119 @@
     if (!container) return;
 
     const buttons = Array.from(document.querySelectorAll("[data-monthly-view]"));
+    const state = { view: "bars", level: "months", month: null, week: null, day: null };
     const renderers = {
-      bars: () =>
+      bars: () => {
+        renderDrillHeader(container, state, {
+          rootLabel: config.labels.months || "Meses",
+          valueLabel: config.labels.queries || "Consultas",
+          onBack: () => {
+            if (state.level === "days") {
+              state.level = "weeks";
+              state.week = null;
+            } else {
+              state.level = "months";
+              state.month = null;
+            }
+            render();
+          },
+        });
+
+        if (state.level === "weeks") {
+          const weeklyData = buildWeeklyCountData(config.data.daily_queries, state.month);
+          drawBarChart("#chart-monthly-queries", weeklyData, {
+            xKey: "id",
+            yKey: "count",
+            color: "#5dade2",
+            xFormatter: (value, item) => item ? item.label : value,
+            rotateLabels: true,
+            tooltipFormatter: (item) => `${item.label}: ${item.count}`,
+            onClick: (item) => {
+              state.level = "days";
+              state.week = item;
+              render();
+            },
+          });
+          return;
+        }
+
+        if (state.level === "days" && state.week) {
+          drawBarChart("#chart-monthly-queries", state.week.days, {
+            xKey: "date",
+            yKey: "count",
+            color: "#5dade2",
+            xFormatter: (value) => formatDayShort.format(new Date(`${value}T00:00:00`)),
+            rotateLabels: true,
+            tooltipFormatter: (item) => `${formatDateOnly(item.date)}: ${item.count}`,
+          });
+          return;
+        }
+
         drawBarChart("#chart-monthly-queries", config.data.monthly_queries, {
           xKey: "month",
           yKey: "count",
           color: "#5dade2",
           xFormatter: (value) => formatMonth.format(new Date(value)),
           tooltipFormatter: (item) => `${formatMonth.format(new Date(item.month))}: ${item.count}`,
-        }),
-      calendar: () =>
+          onClick: (item) => {
+            state.level = "weeks";
+            state.month = monthKeyFromDate(item.month);
+            render();
+          },
+        });
+      },
+      calendar: () => {
+        renderDrillHeader(container, state, {
+          rootLabel: config.labels.calendar || "Calendario",
+          valueLabel: config.labels.queries || "Consultas",
+          onBack: () => {
+            state.level = "months";
+            state.month = null;
+            state.week = null;
+            state.day = null;
+            render();
+          },
+        });
+
+        if (state.level === "hours" && state.day) {
+          drawBarChart("#chart-monthly-queries", hourlyDataForDay(state.day.date), {
+            xKey: "hour",
+            yKey: "count",
+            color: "#3498db",
+            xFormatter: (value) => `${String(value).padStart(2, "0")}:00`,
+            tickValues: selectHourTicks(config.data.hourly_queries),
+            tooltipFormatter: (item) => `${formatDateOnly(state.day.date)} ${String(item.hour).padStart(2, "0")}:00 - ${item.count}`,
+          });
+          return;
+        }
+
         drawCalendarChart("#chart-monthly-queries", config.data.daily_queries, {
           colorRange: ["#ebf5fb", "#85c1e9", "#3498db", "#21618c"],
-          tooltipFormatter: (item) => `${formatDateTimeDateOnly(item.date)}: ${item.count}`,
-        }),
+          tooltipFormatter: (item) => `${formatDateOnly(item.date)}: ${item.count}`,
+          onDayClick: (item) => {
+            state.level = "hours";
+            state.day = item;
+            render();
+          },
+        });
+      },
+    };
+
+    const render = () => {
+      container.innerHTML = "";
+      (renderers[state.view] || renderers.bars)();
+      buttons.forEach((button) => {
+        button.classList.toggle("is-active", button.dataset.monthlyView === state.view);
+      });
     };
 
     const setView = (view) => {
-      container.innerHTML = "";
-      (renderers[view] || renderers.bars)();
-      buttons.forEach((button) => {
-        button.classList.toggle("is-active", button.dataset.monthlyView === view);
-      });
+      state.view = view;
+      state.level = "months";
+      state.month = null;
+      state.week = null;
+      state.day = null;
+      render();
     };
 
     buttons.forEach((button) => {
@@ -123,6 +211,78 @@
     });
 
     setView("bars");
+  }
+
+  function setupAvgTimeDrilldown() {
+    const container = document.querySelector("#chart-monthly-avg-time");
+    if (!container) return;
+
+    const state = { level: "months", month: null, week: null };
+
+    const render = () => {
+      container.innerHTML = "";
+      renderDrillHeader(container, state, {
+        rootLabel: config.labels.months || "Meses",
+        valueLabel: config.labels.averageTime || "Tiempo medio",
+        onBack: () => {
+          if (state.level === "days") {
+            state.level = "weeks";
+            state.week = null;
+          } else {
+            state.level = "months";
+            state.month = null;
+          }
+          render();
+        },
+      });
+
+      if (state.level === "weeks") {
+        const weeklyData = buildWeeklyAverageData(config.data.daily_avg_time, config.data.daily_queries, state.month);
+        drawLineChart("#chart-monthly-avg-time", weeklyData, {
+          xKey: "id",
+          yKey: "avg_time",
+          color: "#f5b041",
+          xFormatter: (value, item) => item ? item.label : value,
+          rotateLabels: true,
+          tooltipFormatter: (item) => `${item.label}: ${item.avg_time} ${config.labels.seconds}`,
+          onClick: (item) => {
+            state.level = "days";
+            state.week = item;
+            render();
+          },
+        });
+        return;
+      }
+
+      if (state.level === "days" && state.week) {
+        drawLineChart("#chart-monthly-avg-time", state.week.days, {
+          xKey: "date",
+          yKey: "avg_time",
+          color: "#f5b041",
+          xFormatter: (value) => formatDayShort.format(new Date(`${value}T00:00:00`)),
+          rotateLabels: true,
+          tooltipFormatter: (item) => `${formatDateOnly(item.date)}: ${item.avg_time} ${config.labels.seconds}`,
+        });
+        return;
+      }
+
+      drawLineChart("#chart-monthly-avg-time", config.data.monthly_avg_time, {
+        xKey: "month",
+        yKey: "avg_time",
+        color: "#f5b041",
+        xFormatter: (value) => formatMonth.format(new Date(value)),
+        tickValues: selectTickValues(config.data.monthly_avg_time, "month", 4),
+        tooltipFormatter: (item) =>
+          `${formatMonth.format(new Date(item.month))}: ${item.avg_time} ${config.labels.seconds}`,
+        onClick: (item) => {
+          state.level = "weeks";
+          state.month = monthKeyFromDate(item.month);
+          render();
+        },
+      });
+    };
+
+    render();
   }
 
   function drawBarChart(selector, data, options) {
@@ -165,7 +325,10 @@
         d3
           .axisBottom(xScale)
           .tickValues(options.tickValues || xValues)
-          .tickFormat((value) => options.xFormatter ? options.xFormatter(value) : value)
+          .tickFormat((value) => {
+            const item = data.find((entry) => entry[options.xKey] === value);
+            return options.xFormatter ? options.xFormatter(value, item) : value;
+          })
       )
       .call((g) => {
         g.select(".domain").remove();
@@ -196,6 +359,12 @@
       .attr("height", (item) => yScale(0) - yScale(Number(item[options.yKey]) || 0))
       .attr("rx", 12)
       .attr("fill", options.color)
+      .attr("cursor", options.onClick ? "pointer" : null)
+      .on("click", function (event, item) {
+        if (options.onClick) {
+          options.onClick(item, event);
+        }
+      })
       .on("mousemove", function (event, item) {
         showTooltip(event, options.tooltipFormatter ? options.tooltipFormatter(item) : `${item[options.yKey]}`);
         d3.select(this).attr("opacity", 0.82);
@@ -213,7 +382,7 @@
 
     const width = container.clientWidth || 640;
     const height = 280;
-    const margin = { top: 18, right: 18, bottom: 56, left: 46 };
+    const margin = { top: 18, right: 18, bottom: options.rotateLabels ? 90 : 56, left: 46 };
     const parsedData = data.map((item) => ({
       ...item,
       __date: new Date(item[options.xKey]),
@@ -257,9 +426,21 @@
         d3
           .axisBottom(xScale)
           .tickValues(options.tickValues || parsedData.map((item) => item[options.xKey]))
-          .tickFormat((value) => options.xFormatter ? options.xFormatter(value) : value)
+          .tickFormat((value) => {
+            const item = parsedData.find((entry) => entry[options.xKey] === value);
+            return options.xFormatter ? options.xFormatter(value, item) : value;
+          })
       )
-      .call((g) => g.select(".domain").remove());
+      .call((g) => {
+        g.select(".domain").remove();
+        if (options.rotateLabels) {
+          g.selectAll("text")
+            .style("text-anchor", "end")
+            .attr("transform", "rotate(-35)")
+            .attr("dx", "-0.55em")
+            .attr("dy", "0.2em");
+        }
+      });
 
     svg
       .append("g")
@@ -287,6 +468,12 @@
       .attr("fill", options.color)
       .attr("stroke", "#fff")
       .attr("stroke-width", 2)
+      .attr("cursor", options.onClick ? "pointer" : null)
+      .on("click", function (event, item) {
+        if (options.onClick) {
+          options.onClick(item, event);
+        }
+      })
       .on("mousemove", function (event, item) {
         showTooltip(event, options.tooltipFormatter ? options.tooltipFormatter(item) : `${item.__value}`);
         d3.select(this).attr("r", 6);
@@ -507,6 +694,116 @@
       .text(String(maxValue));
   }
 
+  function drawUserLocationsMap(selector, data) {
+    const container = document.querySelector(selector);
+    if (!container) return;
+    if (typeof topojson === "undefined") return renderEmptyState(container, config.labels.mapLoadError);
+
+    const byCountryId = new Map(data.map((item) => [String(item.country_id).padStart(3, "0"), item]));
+    const maxValue = d3.max(data, (item) => Number(item.count) || 0) || 1;
+    const colorScale = d3
+      .scaleSequential()
+      .domain([0, maxValue])
+      .interpolator(d3.interpolateYlGnBu);
+
+    d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json")
+      .then((world) => {
+        container.innerHTML = "";
+        const countries = topojson.feature(world, world.objects.countries).features;
+        const width = container.clientWidth || 860;
+        const height = Math.max(360, Math.round(width * 0.52));
+        const projection = d3.geoNaturalEarth1().fitSize([width, height], { type: "Sphere" });
+        const path = d3.geoPath(projection);
+
+        const svg = d3
+          .select(container)
+          .append("svg")
+          .attr("viewBox", `0 0 ${width} ${height}`)
+          .attr("role", "img");
+
+        svg
+          .append("path")
+          .datum({ type: "Sphere" })
+          .attr("class", "stats-map-ocean")
+          .attr("d", path);
+
+        svg
+          .append("g")
+          .selectAll("path")
+          .data(countries)
+          .join("path")
+          .attr("class", "stats-map-country")
+          .attr("d", path)
+          .attr("fill", (feature) => {
+            const item = byCountryId.get(String(feature.id).padStart(3, "0"));
+            return item ? colorScale(item.count) : "rgba(148, 163, 184, 0.28)";
+          })
+          .on("mousemove", function (event, feature) {
+            const item = byCountryId.get(String(feature.id).padStart(3, "0"));
+            if (!item) {
+              return;
+            }
+            showTooltip(event, formatCountryTooltip(item));
+            d3.select(this).attr("opacity", 0.82);
+          })
+          .on("mouseleave", function () {
+            hideTooltip();
+            d3.select(this).attr("opacity", 1);
+          });
+
+        drawMapLegend(svg, width, height, colorScale, maxValue);
+      })
+      .catch(() => renderEmptyState(container, config.labels.mapLoadError));
+  }
+
+  function drawMapLegend(svg, width, height, colorScale, maxValue) {
+    const legendWidth = Math.min(220, width - 36);
+    const legendX = 18;
+    const legendY = height - 34;
+    const gradientId = "stats-user-map-gradient";
+    const defs = svg.append("defs");
+    const gradient = defs.append("linearGradient").attr("id", gradientId);
+
+    d3.range(0, 1.01, 0.1).forEach((value) => {
+      gradient
+        .append("stop")
+        .attr("offset", `${value * 100}%`)
+        .attr("stop-color", colorScale(value * maxValue));
+    });
+
+    const legend = svg.append("g").attr("transform", `translate(${legendX}, ${legendY})`);
+    legend
+      .append("rect")
+      .attr("width", legendWidth)
+      .attr("height", 10)
+      .attr("rx", 5)
+      .attr("fill", `url(#${gradientId})`);
+
+    legend
+      .append("text")
+      .attr("class", "stats-map-legend-label")
+      .attr("x", 0)
+      .attr("y", -5)
+      .text("0");
+
+    legend
+      .append("text")
+      .attr("class", "stats-map-legend-label")
+      .attr("x", legendWidth)
+      .attr("y", -5)
+      .attr("text-anchor", "end")
+      .text(String(maxValue));
+  }
+
+  function formatCountryTooltip(item) {
+    const base = `${item.country_name}: ${item.count} ${config.labels.users || "usuarios"}`;
+    if (!Array.isArray(item.users) || item.users.length === 0) {
+      return base;
+    }
+
+    return `${base}\n${config.labels.userNames || "Usuarios"}: ${item.users.join(", ")}`;
+  }
+
   function drawCalendarChart(selector, data, options) {
     const container = document.querySelector(selector);
     if (!container) return;
@@ -554,6 +851,12 @@
         .attr("class", "stats-calendar-month-label")
         .attr("x", 0)
         .attr("y", 14)
+        .attr("cursor", options.onMonthClick ? "pointer" : null)
+        .on("click", () => {
+          if (options.onMonthClick) {
+            options.onMonthClick(monthKey);
+          }
+        })
         .text(formatMonth.format(monthStart));
 
       monthGroup
@@ -577,6 +880,14 @@
         .attr("x", (item) => 34 + dayIndexMonday(item.__date) * cellSize)
         .attr("y", (item) => 40 + d3.timeMonday.count(d3.timeMonth(item.__date), item.__date) * cellSize)
         .attr("fill", (item) => colorScale(item.__value))
+        .attr("cursor", options.onDayClick || options.onMonthClick ? "pointer" : null)
+        .on("click", (event, item) => {
+          if (options.onDayClick) {
+            options.onDayClick(item, event);
+          } else if (options.onMonthClick) {
+            options.onMonthClick(monthKey, event);
+          }
+        })
         .on("mousemove", function (event, item) {
           showTooltip(event, options.tooltipFormatter ? options.tooltipFormatter(item) : `${item.__value}`);
           d3.select(this).attr("opacity", 0.86);
@@ -592,14 +903,119 @@
         .attr("x", 33)
         .attr("y", 39)
         .attr("width", cellSize * 7 + 2)
-        .attr("height", (lastWeek + 1) * cellSize + 2);
+        .attr("height", (lastWeek + 1) * cellSize + 2)
+        .attr("cursor", options.onMonthClick ? "pointer" : null)
+        .on("click", () => {
+          if (options.onMonthClick) {
+            options.onMonthClick(monthKey);
+          }
+        });
     });
   }
 
-  function renderEmptyState(container) {
+  function renderDrillHeader(container, state, options) {
+    const header = document.createElement("div");
+    header.className = "stats-drill-header";
+
+    const title = document.createElement("div");
+    title.className = "stats-drill-title";
+    title.textContent = buildDrillTitle(state, options);
+    header.appendChild(title);
+
+    if (state.level !== "months") {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "stats-drill-back";
+      button.textContent = config.labels.back || "Volver";
+      button.addEventListener("click", options.onBack);
+      header.appendChild(button);
+    }
+
+    container.appendChild(header);
+  }
+
+  function buildDrillTitle(state, options) {
+    if (state.level === "hours" && state.day) {
+      return `${options.valueLabel} - ${formatDateOnly(state.day.date)}`;
+    }
+
+    if (state.level === "days" && state.week) {
+      return `${options.valueLabel} - ${state.week.label}`;
+    }
+
+    if (state.level === "weeks" && state.month) {
+      return `${options.valueLabel} - ${formatMonth.format(new Date(`${state.month}-01T00:00:00`))}`;
+    }
+
+    return options.rootLabel;
+  }
+
+  function buildWeeklyCountData(dailyData, monthKey) {
+    return buildWeeklyData(dailyData, monthKey, (days, index) => ({
+      id: `${monthKey}-W${index + 1}`,
+      label: weekLabel(days, index),
+      count: d3.sum(days, (item) => Number(item.count) || 0),
+      days,
+    }));
+  }
+
+  function buildWeeklyAverageData(avgData, countData, monthKey) {
+    const countByDate = new Map((countData || []).map((item) => [item.date, Number(item.count) || 0]));
+    const daysWithCounts = (avgData || []).map((item) => ({
+      ...item,
+      count: countByDate.get(item.date) || 0,
+    }));
+
+    return buildWeeklyData(daysWithCounts, monthKey, (days, index) => {
+      const totalCount = d3.sum(days, (item) => item.count);
+      const weightedTime = d3.sum(days, (item) => (Number(item.avg_time) || 0) * item.count);
+
+      return {
+        id: `${monthKey}-W${index + 1}`,
+        label: weekLabel(days, index),
+        avg_time: totalCount ? roundMetric(weightedTime / totalCount) : 0,
+        days,
+      };
+    });
+  }
+
+  function hourlyDataForDay(dateKey) {
+    const dayData = (config.data.daily_hourly_queries || []).find((item) => item.date === dateKey);
+    if (dayData && Array.isArray(dayData.hours)) {
+      return dayData.hours;
+    }
+
+    return d3.range(24).map((hour) => ({ hour, count: 0 }));
+  }
+
+  function buildWeeklyData(dailyData, monthKey, mapper) {
+    const monthDays = (dailyData || [])
+      .filter((item) => item.date && item.date.slice(0, 7) === monthKey)
+      .map((item) => ({ ...item, __date: new Date(`${item.date}T00:00:00`) }));
+
+    const grouped = d3.groups(monthDays, (item) => d3.timeMonday.count(d3.timeMonth(item.__date), item.__date));
+    return grouped.map(([_, days], index) => mapper(days, index));
+  }
+
+  function weekLabel(days, index) {
+    const first = days[0];
+    const last = days[days.length - 1];
+    const range = first && last ? `${formatDayShort.format(first.__date)} - ${formatDayShort.format(last.__date)}` : "";
+    return `${config.labels.week || "Semana"} ${index + 1}${range ? ` (${range})` : ""}`;
+  }
+
+  function monthKeyFromDate(value) {
+    return String(value).slice(0, 7);
+  }
+
+  function roundMetric(value) {
+    return Math.round(value * 100) / 100;
+  }
+
+  function renderEmptyState(container, message) {
     const empty = document.createElement("div");
     empty.className = "stats-empty";
-    empty.textContent = config.labels.noData;
+    empty.textContent = message || config.labels.noData;
     container.appendChild(empty);
   }
 
@@ -644,8 +1060,8 @@
       .map((item) => item.hour);
   }
 
-  function formatDateTimeDateOnly(value) {
-    return new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(new Date(`${value}T00:00:00`));
+  function formatDateOnly(value) {
+    return formatDate.format(new Date(`${value}T00:00:00`));
   }
 
   function dayIndexMonday(dateValue) {

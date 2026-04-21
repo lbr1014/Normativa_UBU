@@ -10,6 +10,7 @@ from flask import render_template, request, redirect, url_for, abort
 from flask_login import login_required, current_user
 from math import ceil
 from . import main_bp
+from ..countries import country_name_for_code, country_numeric_for_code, normalize_country_code
 from ..entities.consulta import Consulta
 from ..entities.user import User
 from ..extensions import db
@@ -139,6 +140,8 @@ def edit_user():
                     return render_template("edit_user.html", form=form, user=current_user)
 
             current_user.email = new_email
+
+        current_user.country_code = normalize_country_code(form.country_code.data)
         
         # === CONTRASEÑA ===
         if form.new_password.data:
@@ -224,7 +227,17 @@ def _safe_created_at(consulta: Consulta) -> datetime:
     return created_at.replace(tzinfo=None) if created_at.tzinfo else created_at
 
 
-def _process_consulta_stats(consulta, monthly_counts, monthly_times, daily_counts, weekday_counts, hourly_counts, user_counter):
+def _process_consulta_stats(
+    consulta,
+    monthly_counts,
+    monthly_times,
+    daily_counts,
+    daily_times,
+    daily_hourly_counts,
+    weekday_counts,
+    hourly_counts,
+    user_counter,
+):
     """
     Procesa y actualiza las estadísticas de una consulta individual.
 
@@ -252,6 +265,8 @@ def _process_consulta_stats(consulta, monthly_counts, monthly_times, daily_count
     day_key = created_at.date().isoformat()
     if day_key in daily_counts:
         daily_counts[day_key] += 1
+        daily_times[day_key].append(float(consulta.tiempo_respuestas or 0))
+        daily_hourly_counts[day_key][created_at.hour] += 1
     
     weekday_counts[created_at.weekday()] += 1
     hourly_counts[created_at.hour] += 1
@@ -282,6 +297,8 @@ def build_usage_stats_payload(consultas, *, include_top_users: bool = False):
     monthly_counts = dict.fromkeys(recent_months, 0)
     monthly_times = defaultdict(list)
     daily_counts = {}
+    daily_times = defaultdict(list)
+    daily_hourly_counts = {}
     weekday_counts = dict.fromkeys(range(7), 0)
     hourly_counts = dict.fromkeys(range(24), 0)
     user_counter = defaultdict(int)
@@ -297,10 +314,21 @@ def build_usage_stats_payload(consultas, *, include_top_users: bool = False):
     current_day = calendar_start
     while current_day <= calendar_end:
         daily_counts[current_day.isoformat()] = 0
+        daily_hourly_counts[current_day.isoformat()] = dict.fromkeys(range(24), 0)
         current_day += timedelta(days=1)
 
     for consulta in consultas:
-        _process_consulta_stats(consulta, monthly_counts, monthly_times, daily_counts, weekday_counts, hourly_counts, user_counter)
+        _process_consulta_stats(
+            consulta,
+            monthly_counts,
+            monthly_times,
+            daily_counts,
+            daily_times,
+            daily_hourly_counts,
+            weekday_counts,
+            hourly_counts,
+            user_counter,
+        )
 
     monthly_queries = [
         {
@@ -339,6 +367,25 @@ def build_usage_stats_payload(consultas, *, include_top_users: bool = False):
             {"date": iso_date, "count": count}
             for iso_date, count in daily_counts.items()
         ],
+        "daily_avg_time": [
+            {
+                "date": iso_date,
+                "avg_time": round(sum(daily_times[iso_date]) / len(daily_times[iso_date]), 2)
+                if daily_times[iso_date]
+                else 0,
+            }
+            for iso_date in daily_counts.keys()
+        ],
+        "daily_hourly_queries": [
+            {
+                "date": iso_date,
+                "hours": [
+                    {"hour": hour, "count": count}
+                    for hour, count in hourly_values.items()
+                ],
+            }
+            for iso_date, hourly_values in daily_hourly_counts.items()
+        ],
         "weekday_queries": [
             {"weekday": weekday, "count": count}
             for weekday, count in weekday_counts.items()
@@ -356,6 +403,42 @@ def build_usage_stats_payload(consultas, *, include_top_users: bool = False):
         ]
 
     return payload
+
+
+def build_user_country_map_payload(users, *, include_user_names: bool = False):
+    """
+    Construye los datos del mapa de usuarios por pais.
+
+    Args:
+        users (list): Usuarios registrados.
+        include_user_names (bool): Incluye nombres solo para administradores.
+
+    Returns:
+        list: Datos agregados por pais para colorear el mapa D3.
+    """
+    countries = {}
+
+    for user in users:
+        code = normalize_country_code(getattr(user, "country_code", None))
+        if code not in countries:
+            countries[code] = {
+                "country_code": code,
+                "country_id": country_numeric_for_code(code),
+                "country_name": country_name_for_code(code),
+                "count": 0,
+            }
+            if include_user_names:
+                countries[code]["users"] = []
+
+        countries[code]["count"] += 1
+        if include_user_names:
+            countries[code]["users"].append(getattr(user, "nombre", ""))
+
+    if include_user_names:
+        for item in countries.values():
+            item["users"] = sorted(name for name in item["users"] if name)
+
+    return sorted(countries.values(), key=lambda item: item["country_name"])
 
 
 @main_bp.get("/stats")
@@ -395,6 +478,10 @@ def stats_page():
     stats_payload = build_usage_stats_payload(
         consultas,
         include_top_users=current_user.is_admin and is_global_scope,
+    )
+    stats_payload["user_locations"] = build_user_country_map_payload(
+        User.query.order_by(User.nombre.asc(), User.email.asc()).all(),
+        include_user_names=current_user.is_admin,
     )
 
     scope_title = (
