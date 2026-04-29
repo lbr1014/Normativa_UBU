@@ -5,9 +5,10 @@ Script para las rutas de consulta RAG, seguimiento de estado y cancelación de c
 
 import asyncio
 
-from flask import Blueprint, abort, current_app, jsonify, render_template, request
+from flask import abort, current_app, jsonify, render_template, request
 from flask_login import current_user, login_required
 
+from . import rag_bp
 from app.main.code.services.async_tasks import executor
 from app.main.code.model.rag_query_state import RAGQueryState
 from app.main.code.extensions import db
@@ -15,8 +16,6 @@ from app.main.code.forms import EmptyForm, RAGQueryForm
 from app.main.code.services.rag.PrototipoRAG import QueryCancelledError, get_rag_llm_model_choices, resolve_rag_llm_model
 from app.main.code.services.rag.service import rag_answer, validate_question
 from app.main.code.inetrnacionalizacion.tarduccion import get_locale, localize_runtime_message, t, translate_for
-
-rag_bp = Blueprint("rag", __name__, url_prefix="/rag")
 
 @rag_bp.get("/")
 @login_required
