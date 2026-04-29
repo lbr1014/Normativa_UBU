@@ -18,7 +18,13 @@ from app.main.code.model.consulta import Consulta
 from app.main.code.inetrnacionalizacion.tarduccion import translate_for
 logger = logging.getLogger(__name__)
 
-from .PrototipoRAG import OllamaModelNotFoundError, OllamaTimeoutError, QueryCancelledError, obtener_mejor_chunk
+from .PrototipoRAG import (
+    OllamaModelNotFoundError,
+    OllamaTimeoutError,
+    QueryCancelledError,
+    get_ollama_execution_device,
+    obtener_mejor_chunk,
+)
 from qdrant_client import models as qmodels
 
 
@@ -283,6 +289,7 @@ async def rag_answer(
         data = message_error(translate_for(lang, "rag.system_error"))
 
     elapsed = time.perf_counter() - start
+    data.setdefault("execution_device", get_ollama_execution_device())
 
     # Guardado en BBDD
     try_persist(question, data, elapsed, user_id=user_id)

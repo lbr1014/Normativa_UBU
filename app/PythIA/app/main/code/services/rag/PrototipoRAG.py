@@ -210,6 +210,10 @@ def _ollama_execution_backend() -> str:
     return f"CPU (num_gpu=0, source={settings.OLLAMA_NUM_GPU_SOURCE})"
 
 
+def get_ollama_execution_device() -> str:
+    return "GPU" if settings.OLLAMA_NUM_GPU != 0 else "CPU"
+
+
 def resolve_rag_llm_model(model: str | None = None) -> str:
     """
     Resuelve el modelo LLM que se usara para una consulta RAG.
@@ -1602,6 +1606,7 @@ async def obtener_mejor_chunk(
             "chunk": "",
             "retrieved": [],
             "model": model_name,
+            "execution_device": get_ollama_execution_device(),
             "applied_filters": {
                 "numero_expediente": numero_expediente,
                 "tipo_documento": tipo_documento,
@@ -1667,6 +1672,7 @@ async def obtener_mejor_chunk(
         "segment_index": best.get("segment_index", -1),
         "chunk": best.get("chunk", ""),
         "retrieved": retrieved,
+        "execution_device": get_ollama_execution_device(),
         "applied_filters": {
             "numero_expediente": numero_expediente,
             "tipo_documento": tipo_documento,

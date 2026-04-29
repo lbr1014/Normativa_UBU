@@ -42,6 +42,7 @@ class Consulta(db.Model):
     respuesta = db.Column(db.Text, nullable=False)
     fragmentos = db.Column(JSON, nullable=False, default=list)
     tiempo_respuestas = db.Column(db.Float, nullable=False)
+    execution_device = db.Column(db.String(10), nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, index=True)
 
     def __init__(self, **kwargs):
@@ -88,6 +89,7 @@ class Consulta(db.Model):
             respuesta=str(data.get("answer", "")),
             fragmentos=fragmentos,
             tiempo_respuestas=float(elapsed),
+            execution_device=str(data.get("execution_device") or "").upper() or None,
         )
         db.session.add(consulta)
         db.session.flush()
