@@ -51,6 +51,12 @@
       {"label": t("nav.home"), "url": url_for('main.pag_principal')},
       {"label": t("rag.page_title")}
     ] %}
+  {% elif request.endpoint == 'rag.model_comparison_page' %}
+    {% set breadcrumb_items = [
+      {"label": t("nav.home"), "url": url_for('main.pag_principal')},
+      {"label": t("rag.page_title"), "url": url_for('rag.rag_page')},
+      {"label": t("model_stats.page_title")}
+    ] %}
   {% elif request.endpoint == 'auth.login' %}
     {% set breadcrumb_items = [{"label": t("auth.login_title")}] %}
   {% elif request.endpoint == 'auth.singup' %}

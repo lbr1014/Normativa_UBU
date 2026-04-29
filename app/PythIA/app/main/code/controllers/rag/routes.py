@@ -4,6 +4,8 @@ Script para las rutas de consulta RAG, seguimiento de estado y cancelación de c
 """
 
 import asyncio
+import re
+from collections import defaultdict
 
 from flask import abort, current_app, jsonify, render_template, request
 from flask_login import current_user, login_required
@@ -29,6 +31,151 @@ def rag_page():
     form = RAGQueryForm()
     configure_model_choices(form)
     return render_template("rag.html", form=form)
+
+
+@rag_bp.get("/modelos")
+@login_required
+def model_comparison_page():
+    """
+    Muestra comparativas de uso y rendimiento por modelo RAG.
+    Los administradores ven el uso global y los usuarios normales ven sus propias
+    consultas terminadas.
+    
+    Returns:
+        Respuesta HTML con la comparación de modelos y estadísticas agregadas.
+    """
+    payload = build_model_comparison_payload()
+    return render_template("model_comparison.html", model_stats_payload=payload)
+
+
+def build_model_comparison_payload() -> dict:
+    """
+    Construye los datos agregados para comparar modelos LLM.
+    Usa RAGQueryState porque conserva el modelo seleccionado. Si el
+    resultado no contiene contadores reales de tokens, usa una estimacion basada
+    en el texto de entrada y salida para poder comparar consultas historicas.
+
+    Returns:
+        dict: Payload con comparación de modelos y estadísticas agregadas.
+    """
+    base_query = RAGQueryState.query.filter(RAGQueryState.status == "done")
+    if not getattr(current_user, "is_admin", False):
+        base_query = base_query.filter(RAGQueryState.user_id == int(current_user.id))
+
+    jobs = base_query.order_by(RAGQueryState.finished_at.asc(), RAGQueryState.created_at.asc()).all()
+    models = defaultdict(
+        lambda: {
+            "model": "",
+            "uses": 0,
+            "users": set(),
+            "tokens": 0,
+            "response_times": [],
+            "cpu": 0,
+            "gpu": 0,
+            "unknown_device": 0,
+        }
+    )
+
+    for job in jobs:
+        result = job.result_payload or {}
+        model_name = (job.model_name or result.get("model") or resolve_rag_llm_model()).strip()
+        row = models[model_name]
+        row["model"] = model_name
+        row["uses"] += 1
+        row["users"].add(int(job.user_id))
+        row["tokens"] += extract_token_count(job, result)
+        row["response_times"].append(extract_response_time(job, result))
+
+        device = str(result.get("execution_device") or "").upper()
+        if "GPU" in device:
+            row["gpu"] += 1
+        elif "CPU" in device:
+            row["cpu"] += 1
+        else:
+            row["unknown_device"] += 1
+
+    comparison = []
+    total_uses = 0
+    total_tokens = 0
+    all_times = []
+    for row in models.values():
+        response_times = [value for value in row["response_times"] if value is not None]
+        avg_time = round(sum(response_times) / len(response_times), 2) if response_times else 0
+        item = {
+            "model": row["model"],
+            "uses": row["uses"],
+            "users": len(row["users"]),
+            "tokens": int(row["tokens"]),
+            "avg_time": avg_time,
+            "cpu": row["cpu"],
+            "gpu": row["gpu"],
+            "unknown_device": row["unknown_device"],
+        }
+        comparison.append(item)
+        total_uses += item["uses"]
+        total_tokens += item["tokens"]
+        all_times.extend(response_times)
+
+    comparison.sort(key=lambda item: (-item["uses"], item["model"]))
+    return {
+        "summary": {
+            "models": len(comparison),
+            "total_uses": total_uses,
+            "total_tokens": total_tokens,
+            "avg_time": round(sum(all_times) / len(all_times), 2) if all_times else 0,
+        },
+        "models": comparison,
+        "scope": "global" if getattr(current_user, "is_admin", False) else "user",
+    }
+
+
+def extract_response_time(job: RAGQueryState, result: dict) -> float | None:
+    """
+    Extrae el tiempo de respuesta en segundos desde el payload ("elapsed_s") o las marcas del job.
+    
+    Args:
+        job (RAGQueryState): El estado de la consulta RAG.
+        result (dict): El resultado de la consulta que puede contener un campo "elapsed_s".
+    
+    Returns:
+        float | None: El tiempo de respuesta en segundos, o None si no se puede determinar.
+    """
+    elapsed = result.get("elapsed_s")
+    if isinstance(elapsed, (int, float)):
+        return float(elapsed)
+
+    if job.started_at and job.finished_at:
+        return max(0.0, (job.finished_at - job.started_at).total_seconds())
+    if job.created_at and job.finished_at:
+        return max(0.0, (job.finished_at - job.created_at).total_seconds())
+    return None
+
+
+def extract_token_count(job: RAGQueryState, result: dict) -> int:
+    """
+    Extrae tokens reales si existen o calcula una estimacion sencilla.
+    
+    Args:
+        job (RAGQueryState): El estado de la consulta RAG. 
+        result (dict): El resultado de la consulta que puede contener campos de conteo de tokens.
+    
+    Returns:
+        int: El número de tokens usados, o una estimación basada en el texto si no se dispone de contadores reales.
+    """
+    for key in ("total_tokens", "tokens", "eval_count"):
+        value = result.get(key)
+        if isinstance(value, (int, float)) and value >= 0:
+            return int(value)
+
+    usage = result.get("usage") or {}
+    if isinstance(usage, dict):
+        total = usage.get("total_tokens")
+        if isinstance(total, (int, float)) and total >= 0:
+            return int(total)
+
+    text = f"{job.question or ''} {result.get('answer') or ''}"
+    words = re.findall(r"\w+|[^\w\s]", text, flags=re.UNICODE)
+    return int(round(len(words) * 1.33)) if words else 0
 
 def configure_model_choices(form: RAGQueryForm) -> None:
     """

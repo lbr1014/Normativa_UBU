@@ -113,6 +113,10 @@
   border-radius: 22px;
 }
 
+.rag-model-stats-link{
+  white-space: nowrap;
+}
+
 .rag-result,
 .rag-debug{
   border-top: 1px solid rgba(var(--app-primary-rgb), .12);

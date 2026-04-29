@@ -11,8 +11,15 @@
 <div class="py-4 py-md-5">
       <section class="rag-card app-surface">
         <div class="mb-4">
-          <h2 class="rag-title mt-3 mb-2">{{ t("rag.title") }}</h2>
-          <p class="rag-subtitle mb-0">{{ t("rag.subtitle") }}</p>
+          <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-3">
+            <div>
+              <h2 class="rag-title mt-3 mb-2">{{ t("rag.title") }}</h2>
+              <p class="rag-subtitle mb-0">{{ t("rag.subtitle") }}</p>
+            </div>
+            <a class="btn btn-outline-light btn-header rag-model-stats-link" href="{{ url_for('rag.model_comparison_page') }}">
+              {{ t("rag.model_comparison") }}
+            </a>
+          </div>
         </div>
 
         <form id="rag-form" method="post" class="rag-form" novalidate>

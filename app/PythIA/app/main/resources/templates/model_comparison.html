@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t("model_stats.page_title") }}{% endblock %}
+
+{% block styles %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/stats.css') }}">
+{% endblock %}
+
+{% block content %}
+  <section class="py-4 py-lg-5">
+    <div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-end gap-3 mb-4">
+      <div>
+        <h1 class="display-6 mb-2">{{ t("model_stats.title") }}</h1>
+        <p class="text-secondary mb-0">
+          {% if model_stats_payload.scope == "global" %}
+            {{ t("model_stats.subtitle_global") }}
+          {% else %}
+            {{ t("model_stats.subtitle_user") }}
+          {% endif %}
+        </p>
+      </div>
+      <a class="btn btn-outline-light btn-header" href="{{ url_for('rag.rag_page') }}">
+        {{ t("model_stats.back_to_rag") }}
+      </a>
+    </div>
+
+    {% if not model_stats_payload.models %}
+      <div class="alert alert-info shadow-sm">{{ t("model_stats.no_data") }}</div>
+    {% else %}
+      <div class="row g-3 mb-4">
+        <div class="col-12 col-sm-6 col-xl-3">
+          <article class="card stats-summary-card border-0 shadow-sm h-100">
+            <div class="card-body">
+              <span class="stats-summary-label">{{ t("model_stats.models") }}</span>
+              <strong class="stats-summary-value">{{ model_stats_payload.summary.models }}</strong>
+            </div>
+          </article>
+        </div>
+        <div class="col-12 col-sm-6 col-xl-3">
+          <article class="card stats-summary-card border-0 shadow-sm h-100">
+            <div class="card-body">
+              <span class="stats-summary-label">{{ t("model_stats.total_uses") }}</span>
+              <strong class="stats-summary-value">{{ model_stats_payload.summary.total_uses }}</strong>
+            </div>
+          </article>
+        </div>
+        <div class="col-12 col-sm-6 col-xl-3">
+          <article class="card stats-summary-card border-0 shadow-sm h-100">
+            <div class="card-body">
+              <span class="stats-summary-label">{{ t("model_stats.total_tokens") }}</span>
+              <strong class="stats-summary-value">{{ model_stats_payload.summary.total_tokens }}</strong>
+            </div>
+          </article>
+        </div>
+        <div class="col-12 col-sm-6 col-xl-3">
+          <article class="card stats-summary-card border-0 shadow-sm h-100">
+            <div class="card-body">
+              <span class="stats-summary-label">{{ t("model_stats.avg_time") }}</span>
+              <strong class="stats-summary-value">{{ model_stats_payload.summary.avg_time }} {{ t("stats.metric_seconds") }}</strong>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <div class="row g-4">
+        <div class="col-12">
+          <article class="card border-0 shadow-sm stats-chart-card h-100">
+            <div class="card-body">
+              <h2 class="h5 mb-1">{{ t("model_stats.chart_uses") }}</h2>
+              <p class="text-secondary small mb-3">{{ t("model_stats.chart_uses_help") }}</p>
+              <div id="chart-model-uses" class="stats-chart stats-chart-compact"></div>
+            </div>
+          </article>
+        </div>
+        <div class="col-12">
+          <article class="card border-0 shadow-sm stats-chart-card h-100">
+            <div class="card-body">
+              <h2 class="h5 mb-1">{{ t("model_stats.chart_tokens") }}</h2>
+              <p class="text-secondary small mb-3">{{ t("model_stats.chart_tokens_help") }}</p>
+              <div id="chart-model-tokens" class="stats-chart stats-chart-compact"></div>
+            </div>
+          </article>
+        </div>
+        <div class="col-12">
+          <article class="card border-0 shadow-sm stats-chart-card h-100">
+            <div class="card-body">
+              <h2 class="h5 mb-1">{{ t("model_stats.chart_avg_time") }}</h2>
+              <p class="text-secondary small mb-3">{{ t("model_stats.chart_avg_time_help") }}</p>
+              <div id="chart-model-time" class="stats-chart stats-chart-compact"></div>
+            </div>
+          </article>
+        </div>
+        <div class="col-12">
+          <article class="card border-0 shadow-sm stats-chart-card h-100">
+            <div class="card-body">
+              <h2 class="h5 mb-1">{{ t("model_stats.chart_device") }}</h2>
+              <p class="text-secondary small mb-3">{{ t("model_stats.chart_device_help") }}</p>
+              <div id="chart-model-device" class="stats-chart"></div>
+            </div>
+          </article>
+        </div>
+      </div>
+    {% endif %}
+  </section>
+{% endblock %}
+
+{% block scripts %}
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <script>
+    window.PYTHIA_MODEL_STATS = {
+      data: {{ model_stats_payload|tojson }},
+      labels: {
+        noData: {{ t("stats.metric_no_data")|tojson }},
+        uses: {{ t("model_stats.total_uses")|tojson }},
+        users: {{ t("model_stats.users")|tojson }},
+        tokens: {{ t("model_stats.total_tokens")|tojson }},
+        avgTime: {{ t("model_stats.avg_time")|tojson }},
+        seconds: {{ t("stats.metric_seconds")|tojson }},
+        cpu: "CPU",
+        gpu: "GPU",
+        unknown: {{ t("model_stats.unknown_device")|tojson }}
+      }
+    };
+  </script>
+  <script src="{{ url_for('static', filename='js/model_comparison.js') }}"></script>
+{% endblock %}
