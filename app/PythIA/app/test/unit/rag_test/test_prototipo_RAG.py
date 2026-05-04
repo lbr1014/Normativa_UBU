@@ -490,9 +490,10 @@ class PrototipoRAGUnitTest(unittest.TestCase):
             path.write_bytes(b"abc")
             self.assertEqual(self.m.pdf_sha256(path), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
 
-        filename_filter = self.m._qdrant_filter_by_filename("a.pdf")
+        self.assertIsNone(self.m.build_qdrant_metadata_filter())
+        filename_filter = self.m.build_qdrant_metadata_filter(filename="a.pdf")
         self.assertEqual(filename_filter.must[0].key, "metadata.filename")
-        hash_filter = self.m._qdrant_filter_by_filename_and_hash("a.pdf", "hash")
+        hash_filter = self.m.build_qdrant_metadata_filter(filename="a.pdf", sha256="hash")
         self.assertEqual(hash_filter.must[1].key, "metadata.sha256")
 
         self.m.qdrant.scroll_result = ([object()], None)
@@ -576,14 +577,27 @@ class PrototipoRAGUnitTest(unittest.TestCase):
         both = self.m.build_metadata_filter("EXP", "tecnico")
         self.assertEqual([condition.key for condition in both.must], ["metadata.numero_expediente", "metadata.tipo_documento"])
 
-        with patch.object(self.m.VectorBaseDocument, "search", return_value=["doc"]) as mock_search:
-            result = self.m.recuperacion_chunk("pregunta", k=3, numero_expediente="EXP")
-        self.assertEqual(result, ["doc"])
-        self.assertEqual(mock_search.call_args.kwargs["limit"], 3)
+        record = SimpleNamespace(id=uuid4(), payload={"content": "txt", "metadata": {"filename": "doc.pdf"}}, score=0.4)
+        self.m.qdrant.query_result = SimpleNamespace(points=[record])
+        result = self.m.recuperacion_chunk("pregunta", k=3, numero_expediente="EXP")
+        self.assertEqual(result[0].content, "txt")
+        self.assertEqual(result[0].metadata["filename"], "doc.pdf")
 
-        point = SimpleNamespace(id=uuid4(), payload={"content": "txt"}, score=0.5)
-        self.m.qdrant.query_result = SimpleNamespace(points=[point])
+        point = SimpleNamespace(id=uuid4(), payload={"content": "txt"}, score=0.51)
+        low_score = SimpleNamespace(id=uuid4(), payload={"content": "low"}, score=0.5)
+        self.m.qdrant.query_result = SimpleNamespace(points=[point, low_score])
         self.assertEqual(self.m.recuperacion_chunk_con_scores("pregunta"), [point])
+        self.assertEqual(self.m.normalize_retrieval_k(1), 5)
+        self.assertEqual(self.m.normalize_retrieval_k(80), 80)
+
+        self.m.qdrant.query_points = MagicMock(return_value=SimpleNamespace(points=[point]))
+        self.m.recuperacion_chunk_con_scores("pregunta", k=1)
+        self.assertEqual(self.m.qdrant.query_points.call_args.kwargs["limit"], 5)
+
+        self.m.qdrant.query_points = MagicMock(return_value=SimpleNamespace(points=[point]))
+        self.m.recuperacion_chunk_con_scores("pregunta", k=80)
+        self.assertEqual(self.m.qdrant.query_points.call_args.kwargs["limit"], 80)
+
         self.m.qdrant.query_points = MagicMock(side_effect=RuntimeError("qdrant down"))
         self.assertEqual(self.m.recuperacion_chunk_con_scores("pregunta"), [])
 
@@ -670,6 +684,22 @@ class PrototipoRAGUnitTest(unittest.TestCase):
         ):
             with self.assertRaises(self.m.QueryCancelledError):
                 asyncio.run(self.m.ask_ollama("prompt", model="m", should_cancel=cancel_on_stream_line))
+
+    def test_ask_rag_llm_applies_generation_timeout(self):
+        original_timeout = self.m.settings.OLLAMA_GENERATION_TIMEOUT_SECONDS
+
+        async def slow_ask_ollama(*_args, **_kwargs):
+            await asyncio.sleep(10)
+            return "late"
+
+        try:
+            self.m.settings.OLLAMA_GENERATION_TIMEOUT_SECONDS = 0.01
+            with patch.object(self.m, "ask_ollama", side_effect=slow_ask_ollama):
+                with self.assertRaises(self.m.OllamaTimeoutError) as ctx:
+                    asyncio.run(self.m.ask_rag_llm("pregunta", ["contexto"], model="m"))
+            self.assertIn("tiempo máximo de generación", str(ctx.exception))
+        finally:
+            self.m.settings.OLLAMA_GENERATION_TIMEOUT_SECONDS = original_timeout
 
     def test_ensure_ollama_model_ready_opens_client_and_delegates(self):
         _AsyncClient.created = []
