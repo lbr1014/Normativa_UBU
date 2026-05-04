@@ -42,6 +42,13 @@ class RAGRoutesIntegrationTest(BaseAppTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"modelo-a", response.data)
 
+    def test_default_query_page_renders_guided_form(self):
+        response = self.client.get("/rag/consultas-guiadas")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"rag-default-form", response.data)
+        self.assertIn(b"name=\"expediente\"", response.data)
+
     def test_model_comparison_payload_aggregates_admin_and_fallback_values(self):
         from app.main.code.controllers.rag import routes as rag_routes
 
@@ -118,6 +125,50 @@ class RAGRoutesIntegrationTest(BaseAppTestCase):
         job = db.session.get(RAGQueryState, job_id)
         self.assertEqual(job.user_id, self.user.id)
         self.assertEqual(job.status, "queued")
+        mock_submit.assert_called_once()
+
+    @patch("app.main.code.controllers.rag.routes.executor.submit")
+    def test_rag_ask_builds_guided_question_on_server(self, mock_submit):
+        self.create_document(numero_expediente="EXP-55")
+
+        response = self.client.post(
+            "/rag/ask",
+            data={
+                "question": "",
+                "expediente": "EXP-55",
+                "doc_type": "tecnico",
+                "question_kind": "amounts",
+                "model": "fake-model",
+            },
+        )
+
+        self.assertEqual(response.status_code, 202)
+        job = db.session.get(RAGQueryState, response.get_json()["job_id"])
+        self.assertIn("expediente EXP-55", job.question)
+        self.assertIn("pliego tecnico", job.question)
+        self.assertIn("cantidades economicas", job.question)
+        self.assertEqual(job.model_name, "fake-model")
+        mock_submit.assert_called_once()
+
+    @patch("app.main.code.controllers.rag.routes.executor.submit")
+    def test_rag_ask_builds_summary_guided_question_and_ignores_locked_fields(self, mock_submit):
+        self.create_document(numero_expediente="EXP-77")
+
+        response = self.client.post(
+            "/rag/ask",
+            data={
+                "question": "",
+                "expediente": "EXP-77",
+                "summary": "y",
+                "model": "fake-model",
+            },
+        )
+
+        self.assertEqual(response.status_code, 202)
+        job = db.session.get(RAGQueryState, response.get_json()["job_id"])
+        self.assertIn("expediente EXP-77", job.question)
+        self.assertIn("resumen general y detallado", job.question)
+        self.assertNotIn("pliego tecnico", job.question)
         mock_submit.assert_called_once()
 
     def test_rag_ask_rejects_invalid_form(self):
