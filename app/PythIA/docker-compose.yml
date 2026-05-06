@@ -54,7 +54,9 @@ services:
       retries: 30
 
   web:
-    build: .
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
     init: true
     container_name: flask_web
     gpus: all
@@ -112,7 +114,9 @@ services:
     restart: unless-stopped
 
   test:
-    build: .
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
     container_name: flask_tests
     working_dir: /app
     command: sh /app/app/test/run_tests.sh
