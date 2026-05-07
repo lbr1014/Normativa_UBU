@@ -506,9 +506,136 @@ Como objetivo principal del \myhref{https://github.com/lbr1014/TFG_RAG/milestone
 	\item Incluir correcciones en el código de los prototipos.
 \end{itemize}
 
-Para realizar el \eng{sprint} se estimaron 26 horas de trabajo.
+Para realizar el \eng{sprint} se estimaron 26 horas de trabajo. Al final se invirtieron más de 30 horas ya que corregir los fallos de la conversión a \file{Markdown} costó más de lo previsto. A pesar de que se ha mejorado el funcionamiento solventando problemas por \eng{timeout} o páginas no convertidas correctamente, aún presenta algún problema que se solventará en futuros \eng{sprints}. Por ejemplo, no captura bien los títulos y a veces se para en las conversiones largas.
+
+El \eng{burndown} de este \eng{sprint} se ilustra en la figura~\ref{fig:Burndown/Sprint22}.
+\imagenflotante{Burndown/Sprint22}{\eng{Burndown chart} del \eng{sprint} 22.}
+
 
 \subsection{\eng{Sprint} 23 (26/03/2026 -- 09/04/2026)}
+Como objetivo principal del \myhref{https://github.com/lbr1014/TFG_RAG/milestone/23?closed=1}{Sprint 23} se fijó hacer que la conversión a \file{Markdown} se haga con la GPU en lugar de hacerse con la CPU como hasta ahora. Se ha considerado especialmente importante para reducir el tiempo dedicado a la conversión a \file{Markdown} de los \file{PDF} usados como contexto. Además, se decidió implementar gráficas de uso de la aplicación para los usuarios. Estas gráficas deben mostrar datos distintos a los usuarios normales, que solo deben ver su uso de la aplicación, y a los administradores, que deben poder ver el uso de la aplicación de cualquier usuario.  Para llevar a cabo estos objetivos se plantearon las siguientes tareas:
+
+\begin{itemize}
+	\tightlist
+	\item Hacer que la conversión a \file{Markdown} use la GPU.
+	\item Incluir gráficas en la \eng{web}.
+	\begin{itemize}
+	\tightlist
+		\item Diseñar gráficas relevantes para el cliente.
+		\item Estudiar el uso de \file{D3} para generar gráficas
+	\end{itemize}
+	\item Incluir manejo de errores.
+	\begin{itemize}
+	\tightlist
+		\item Hacer \eng{templates} para el manejo de errores.
+	\end{itemize}
+	\item Cambiar los metadatos guardados para el \eng{chunk}.
+	\item Usar los metadatos de los \eng{chunks} mejorar el RAG.
+	\item Arreglar los \eng{test}.
+\end{itemize}
+
+Para realizar el \eng{sprint} se estimaron 40 horas de trabajo. Al finalizar el sprint se completaron todas las tareas más o menos en el plazo estimado. Como aspecto destacable cabe mencionar que a pesar de ejecutar la conversión a \file{Markdown} con la GPU sigue siendo muy lenta. Esto conlleva que todavía se paran las conversiones de los PDF más largos. Este problema se solucionará en \eng{sprints} posteriores.
+
+El \eng{burndown} de este \eng{sprint} se ilustra en la figura~\ref{fig:Burndown/Sprint23}.
+\imagenflotante{Burndown/Sprint23}{\eng{Burndown chart} del \eng{sprint} 23.}
+
+\subsection{\eng{Sprint} 24 (09/04/2026 -- 16/04/2026)}
+Como objetivo principal del \myhref{https://github.com/lbr1014/TFG_RAG/milestone/24?closed=1}{Sprint 24} se fijó completar la documentación del código de la aplicación para que sea más entendible lo que hace cada \eng{script} y cada método. Además, se decidió resolver las sugerencias de SonarCloud para que el código sea de mayor calidad, garantizando su calidad. Respecto al propio RAG se decidió permitir que use distintos modelos LLM para responder según cual seleccione el usuario. Para llevar a cabo estos objetivos se plantearon las siguientes tareas:
+
+\begin{itemize}
+\tightlist
+	\item Resolver las \eng{issues} de SonarCloud.
+	\item Documentar el código de la aplicación.
+	\item Incluir modelos adicionales en la aplicación.
+\end{itemize}
+
+Para realizar el \eng{sprint} se estimaron 18 horas de trabajo. Al finalizar el \eng{sprint} si que se finalizaron todas las tareas, pero no se cumplió la estimación temporal. Tanto la documentación como la resolución de las \eng{issues} de SonarCloud llevaron mucho más tiempo del estimado. Finalmente se invirtieron unas 25 horas de trabajo. En la documentación se invirtieron 2 horas más de lo previsto y en resolver las \eng{issues} 5 horas más.  
+
+El \eng{burndown} de este \eng{sprint} se ilustra en la figura~\ref{fig:Burndown/Sprint24}.
+\imagenflotante{Burndown/Sprint24}{\eng{Burndown chart} del \eng{sprint} 24.}
+
+\subsection{\eng{Sprint} 25 (16/04/2026 -- 30/04/2026)}
+Como objetivo principal del \myhref{https://github.com/lbr1014/TFG_RAG/milestone/25?closed=1}{Sprint 25} se decidió incluir un formulario para las interacciones con el modelo que permita seleccionar pliegos concretos y hacer preguntas más específicas, así como resúmenes. Esto va a permitir optimizar las respuestas del modelo a dichas peguntas decidiendo mejor el número de \eng{chunks} recuperados. Además se decidió que incluir gráficas de comparativa de modelos aportaría una ayuda al usuario para elegir el modelo que le responda a las preguntas. También, se decidió mejorar las gráficas de uso de los usuarios haciéndolas interactivas. Para llevar a cabo estos objetivos se plantearon las siguientes tareas:
+
+\begin{itemize}
+\tightlist
+	\item Incluir un formulario para las interacciones con el modelo.
+	\begin{itemize}
+	\tightlist
+			\item Diseñar el \eng{template} para el formulario de interacción con el modelo.
+		\item Realizar \eng{prompts} específicos para las preguntas del formulario.
+	\end{itemize}
+	\item Realizar gráficas para comparar los modelos.
+	\begin{itemize}
+	\tightlist
+		\item Diseñar gráficas.
+	\end{itemize}
+	\item Nuevo campo en consultas.
+\end{itemize}
+
+Para realizar el \eng{sprint} se estimaron 24 horas de trabajo. Al finalizar el \eng{sprint} se finalizaron todas las tareas, sin embargo, la parte de las consultas por defecto con el sistema implicó más cambios de los pensados ampliando el tiempo que costó realizarlo. Además, del diseño de \eng{primpts} específicos se
+decidió cambiar la forma de recuperar los \eng{chunks}. Dependiendo de la pregunta se pasa un número máximo de \eng{chunks} recuperados distintos. Para todas las consultas se ha hecho que se recuperen un mínimo de 5 \eng{chunks} hasta el máximo indicado para ese tipo de pregunta, pero solo recuperará aquellos con una similitud mayor del 0,5 para evitar introducir ruido al modelo. 
+
+El \eng{burndown} de este \eng{sprint} se ilustra en la figura~\ref{fig:Burndown/Sprint25}.
+\imagenflotante{Burndown/Sprint25}{\eng{Burndown chart} del \eng{sprint} 25.}
+
+\subsection{\eng{Sprint} 26 (30/04/2026 -- 07/05/2026)}
+Como objetivo principal del \myhref{https://github.com/lbr1014/TFG_RAG/milestone/26?closed=1}{Sprint 26} se decidió explicar algunos de los apartados que faltan de los anexos y la memoria. Concretamente se va a explicar el manual del programador, y se va a comenzar con el manual del usuario. También, se va a seguir redactand la viabilidad y los aspectos importantes durante el desarrollo. Para llevar a cabo estos objetivos se plantearon las siguientes tareas:
+
+\begin{itemize}
+\tightlist
+	\item Redactar la documentación técnica del programador.
+	\begin{itemize}
+	\tightlist
+		\item Explicar las pruebas del sistema.
+		\item Explicar la forma de ejecutar el sistema en los anexos.
+		\item Redactar el manual del programador.
+	\end{itemize}
+	\item Completar la viabilidad del proyecto.
+	\item Documentación de usuario.
+	\begin{itemize}
+	\tightlist
+		\item Redactar los requisitos de usuario.
+		\item Empezar a explicar el manual de usuarios.
+	\end{itemize}
+	\item Explicar aspectos importantes del desarrollo del proyecto.
+\end{itemize}
+
+Para realizar el \eng{sprint} se estimaron 32 horas de trabajo. Tras finalizar el \eng{sprint} se explicarón todos los apartados en el tiempo estimado.
+
+%El \eng{burndown} de este \eng{sprint} se ilustra en la figura~\ref{fig:Burndown/Sprint26}.
+%\imagenflotante{Burndown/Sprint26}{\eng{Burndown chart} del \eng{sprint} 26.}
+
+\subsection{\eng{Sprint} 27 (07/05/2026 -- 14/05/2026)}
+%Como objetivo principal del \myhref{https://github.com/lbr1014/TFG_RAG/milestone/27?closed=1}{Sprint 27}
+
+%Para llevar a cabo estos objetivos se plantearon las siguientes tareas:
+
+
+%Para realizar el \eng{sprint} se estimaron  horas de trabajo
+
+%El \eng{burndown} de este \eng{sprint} se ilustra en la figura~\ref{fig:Burndown/Sprint27}.
+%\imagenflotante{Burndown/Sprint27}{\eng{Burndown chart} del \eng{sprint} 27.}
+
+\subsection{\eng{Sprint} 28 (14/05/2026 -- 21/05/2026)}
+%Como objetivo principal del \myhref{https://github.com/lbr1014/TFG_RAG/milestone/28?closed=1}{Sprint 28}
+
+%Para realizar el \eng{sprint} se estimaron horas de trabajo
+
+%El \eng{burndown} de este \eng{sprint} se ilustra en la figura~\ref{fig:Burndown/Sprint28}.
+%\imagenflotante{Burndown/Sprint28}{\eng{Burndown chart} del \eng{sprint} 28.}
+
+\subsection{\eng{Sprint} 29 (21/05/2026 -- 28/05/2026)}
+%Como objetivo principal del \myhref{https://github.com/lbr1014/TFG_RAG/milestone/29?closed=1}{Sprint 29}
+
+%Para llevar a cabo estos objetivos se plantearon las siguientes tareas:
+
+
+%Para realizar el \eng{sprint} se estimaron horas de trabajo
+
+%El \eng{burndown} de este \eng{sprint} se ilustra en la figura~\ref{fig:Burndown/Sprint29}.
+%\imagenflotante{Burndown/Sprint29}{\eng{Burndown chart} del \eng{sprint} 29.}
+
 
 \section{Estudio de viabilidad}
 El estudio de viabilidad es un análisis detallado que se realiza antes de iniciar un proyecto. Sirve para determinar la rentabilidad de ese proyecto, es decir, si se pude hacer realidad. Para ello se analiza si es económicamente rentable (ver sección~\hyperref[viabilidad_economica]{A.3.1}) y legalmente viable (ver sección~\hyperref[viabilidad_legal]{A.3.2}). 
