@@ -4,8 +4,9 @@
 \usepackage{pdflscape}
 \usepackage{textcomp}
 \usepackage{xparse}
-\usepackage{svg}
 \usepackage{dirtree}
+\usepackage[most]{tcolorbox}
+\tcbuselibrary{breakable}
 
 %Cabeceras
 \copypagestyle{capitulo-en-cab}{headings}
@@ -108,13 +109,6 @@
 	\end{figure}
 }
 
-\newcommand{\imagendiagramsvg}[3]{
-	\begin{figure}
-		\centering
-		\includesvg[width=#3\textwidth]{#1}
-		\caption{#2}\label{fig:#1}
-	\end{figure}
-}
 
 
 % El comando \figura nos permite insertar figuras comodamente, y utilizando
@@ -202,7 +196,7 @@
 \begin{landscape}
   \begin{table}
    \begin{center}
-    \rowcolors {2}{gray!35}{}
+S    \rowcolors {2}{gray!35}{}
     \begin{tabular}{#2}
      \toprule
      #4
