@@ -490,4 +490,39 @@ El proyecto incorpora configuración Docker para facilitar el despliegue y la ej
 
 \section{Compilación, instalación y ejecución del proyecto}
 
+El proyecto ha sido diseñado para ejecutarse principalmente mediante contenedores Docker, lo que permite reproducir el entorno completo de forma homogénea independientemente del sistema operativo utilizado. La aplicación integra múltiples servicios que gracias a la utilización de Docker Compose se pueden desplegar de manera coordinada.
+
+Antes de ejecutar el sistema es necesario tener instalados Docker, Docker Compose, Git, Python (este último solo para ejecutarlo sin usar Docker). Debido al uso de modelos LLM y de OCR se recomienda que la aplicación se despliegue en una máquina que tenga procesador multinúcleo con al menos 16GB de memeoria RAM y espacio suficiente para cargar los modelos y almacenar los documentos. Es recomendable que tenga GPU para acelerar los procesos.
+
+El primer paso para la ejecución es clonar el repositorio desde GitHub. 
+\begin{tcolorbox}[
+	colback=blue!4, 
+	colframe=blue!40, 
+	title=Terminal,
+	fonttitle=\bfseries,
+	breakable 
+	]
+	{\footnotesize
+		\noindent
+		\texttt{git clone https://github.com/lbr1014/TFG\_RAG.git}\\
+	}
+\end{tcolorbox}
+
+Posteriormente se debe acceder al directorio del proyecto:
+\begin{tcolorbox}[
+	colback=blue!4, 
+	colframe=blue!40, 
+	title=Terminal,
+	fonttitle=\bfseries,
+	breakable 
+	]
+	{\footnotesize
+		\noindent
+		\texttt{cd TFG\_RAG}\\
+	}
+\end{tcolorbox}
+
+
+
+
 \section{Pruebas del sistema}
