@@ -73,6 +73,57 @@ function initChunksModal() {
 }
 
 /* =========================
+   MODAL RESPUESTA HISTORIAL
+   ========================= */
+
+function initHistoryAnswerModal() {
+  const answerModal = document.getElementById("answerModal")
+  if (!answerModal) return
+
+  const answerModalInstance = window.bootstrap
+    ? window.bootstrap.Modal.getOrCreateInstance(answerModal)
+    : null
+
+  function renderAnswerFromCard(card) {
+    const consultaId = card?.getAttribute("data-consulta-id")
+    const question = card?.getAttribute("data-question") || ""
+    const source = document.getElementById(`answer-content-${consultaId}`)
+    const body = document.getElementById("answer-modal-body")
+    const questionNode = document.getElementById("answer-modal-question")
+
+    if (questionNode) questionNode.textContent = question
+    if (!source || !body) return
+
+    let answer = ""
+    try {
+      answer = JSON.parse(source.textContent || "\"\"")
+    } catch {
+      answer = source.textContent || ""
+    }
+
+    if (window.pythiaRenderMarkdown) {
+      window.pythiaRenderMarkdown(body, answer)
+    } else {
+      body.textContent = answer
+    }
+  }
+
+  document.querySelectorAll(".history-card-answer-trigger").forEach((trigger) => {
+    trigger.addEventListener("click", function () {
+      renderAnswerFromCard(trigger)
+      answerModalInstance?.show()
+    })
+  })
+
+  answerModal.addEventListener("hidden.bs.modal", function () {
+    const body = document.getElementById("answer-modal-body")
+    const questionNode = document.getElementById("answer-modal-question")
+    if (body) body.innerHTML = ""
+    if (questionNode) questionNode.textContent = ""
+  })
+}
+
+/* =========================
    BORRADO
    ========================= */
 
@@ -194,12 +245,24 @@ function initThemeSelector() {
   });
 }
 
+function initBootstrapTooltips() {
+  if (!window.bootstrap?.Tooltip) return
+
+  document.querySelectorAll('[data-bs-toggle="tooltip"], [data-bs-tooltip="tooltip"]').forEach((element) => {
+    window.bootstrap.Tooltip.getOrCreateInstance(element)
+  })
+}
+
 initLightEffect();
 
 initChunksModal();
+
+initHistoryAnswerModal();
 
 initDeleteModal();
 
 initAdminUserSelection();
 
 initThemeSelector();
+
+initBootstrapTooltips();

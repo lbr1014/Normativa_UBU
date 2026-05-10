@@ -211,6 +211,32 @@ body {
   margin: 0 auto;
 }
 
+.tooltip {
+  --bs-tooltip-max-width: 280px;
+  --bs-tooltip-padding-x: 0.75rem;
+  --bs-tooltip-padding-y: 0.5rem;
+  --bs-tooltip-bg: #f8fbff;
+  --bs-tooltip-color: #0f172a;
+  --bs-tooltip-opacity: 1;
+  --bs-tooltip-border-radius: 0.65rem;
+  filter: drop-shadow(0 10px 22px rgba(2, 6, 23, 0.24));
+}
+
+.tooltip .tooltip-inner {
+  border: 1px solid rgba(219, 234, 254, 0.44);
+  font-weight: 700;
+}
+
+body[data-theme="light"] .tooltip {
+  --bs-tooltip-bg: #1f2a44;
+  --bs-tooltip-color: #ffffff;
+  filter: drop-shadow(0 10px 22px rgba(83, 101, 143, 0.28));
+}
+
+body[data-theme="light"] .tooltip .tooltip-inner {
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
 h1,
 h2,
 h3,

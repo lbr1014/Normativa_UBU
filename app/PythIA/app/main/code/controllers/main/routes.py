@@ -28,6 +28,12 @@ from ...model.rag_query_state import RAGQueryState
 from ...model.user import User
 from . import main_bp
 
+HISTORY_ENDPOINT = "main.historial"
+HISTORY_SORT_DATE_DESC = "date_desc"
+HISTORY_SORT_DATE_ASC = "date_asc"
+HISTORY_SORT_TIME_DESC = "time_desc"
+HISTORY_SORT_TIME_ASC = "time_asc"
+
 
 def paginate_consultas(base_query, per_page=10) -> tuple:
     """
@@ -66,6 +72,155 @@ def paginate_consultas(base_query, per_page=10) -> tuple:
     )
 
     return items, page, total_pages, total_consultas
+
+
+def _history_filters() -> dict[str, str]:
+    """
+    Lee los filtros activos del historial.
+    
+    Returns:
+        dict: Diccionario con los filtros y el orden aplicados.
+    """
+    allowed_sort_values = {
+        HISTORY_SORT_DATE_DESC,
+        HISTORY_SORT_DATE_ASC,
+        HISTORY_SORT_TIME_DESC,
+        HISTORY_SORT_TIME_ASC,
+    }
+    sort_value = (request.args.get("sort") or HISTORY_SORT_DATE_DESC).strip()
+    if sort_value not in allowed_sort_values:
+        sort_value = HISTORY_SORT_DATE_DESC
+
+    return {
+        "user_id": (request.args.get("user_id") or "").strip(),
+        "date": (request.args.get("date") or "").strip(),
+        "model": (request.args.get("model") or "").strip(),
+        "device": (request.args.get("device") or "").strip().upper(),
+        "sort": sort_value,
+    }
+
+
+def _apply_history_filters(query, filters: dict[str, str]) -> object:
+    """
+    Aplica filtros de historial sobre la query de consultas.
+    
+    Args:
+        query: Query SQLAlchemy de consultas a filtrar.
+        filters: Diccionario con los filtros a aplicar: user_id, date, model y device.
+        
+    Returns:
+        Query: Query SQLAlchemy con los filtros aplicados.
+    """
+    if current_user.is_admin and filters["user_id"].isdigit():
+        query = query.filter(Consulta.user_id == int(filters["user_id"]))
+
+    if filters["date"]:
+        try:
+            selected_date = date.fromisoformat(filters["date"])
+        except ValueError:
+            selected_date = None
+        if selected_date:
+            start = datetime.combine(selected_date, datetime.min.time())
+            end = start + timedelta(days=1)
+            query = query.filter(Consulta.created_at >= start, Consulta.created_at < end)
+
+    if filters["device"] in {"CPU", "GPU"}:
+        query = query.filter(func.upper(Consulta.execution_device) == filters["device"])
+
+    if filters["model"]:
+        model_exists = (
+            db.session.query(RAGQueryState.id)
+            .filter(
+                RAGQueryState.user_id == Consulta.user_id,
+                RAGQueryState.question == Consulta.pregunta,
+                RAGQueryState.status == "done",
+                RAGQueryState.model_name == filters["model"],
+            )
+            .exists()
+        )
+        query = query.filter(model_exists)
+
+    return query
+
+
+def _apply_history_sort(query, sort_value: str):
+    """
+    Aplica el orden activo del historial.
+    """
+    sort_options = {
+        HISTORY_SORT_DATE_ASC: Consulta.created_at.asc(),
+        HISTORY_SORT_TIME_DESC: Consulta.tiempo_respuestas.desc(),
+        HISTORY_SORT_TIME_ASC: Consulta.tiempo_respuestas.asc(),
+    }
+    return query.order_by(
+        sort_options.get(sort_value, Consulta.created_at.desc())
+    )
+
+
+def _history_filter_options() -> tuple[list, list[str]]:
+    """
+    Devuelve usuarios y modelos disponibles para los filtros.
+    
+    Returns:
+        tuple: Lista de usuarios (solo para admin) y lista de modelos distintos usados en consultas.
+    """
+    users = (
+        User.query.order_by(User.nombre.asc(), User.email.asc()).all()
+        if current_user.is_admin
+        else []
+    )
+    model_query = RAGQueryState.query.filter(RAGQueryState.status == "done")
+    if not current_user.is_admin:
+        model_query = model_query.filter(RAGQueryState.user_id == int(current_user.id))
+    models = [
+        item[0]
+        for item in (
+            model_query.with_entities(RAGQueryState.model_name)
+            .filter(RAGQueryState.model_name.isnot(None))
+            .distinct()
+            .order_by(RAGQueryState.model_name.asc())
+            .all()
+        )
+        if item[0]
+    ]
+    return users, models
+
+
+def build_model_by_consulta(consultas: list) -> dict[int, str]:
+    """
+    Obtiene el modelo asociado a cada consulta visible en la pagina.
+    """
+    if not consultas:
+        return {}
+
+    user_ids = {int(consulta.user_id) for consulta in consultas}
+    questions = {consulta.pregunta for consulta in consultas}
+    jobs = (
+        RAGQueryState.query
+        .filter(
+            RAGQueryState.status == "done",
+            RAGQueryState.user_id.in_(user_ids),
+            RAGQueryState.question.in_(questions),
+            RAGQueryState.model_name.isnot(None),
+        )
+        .order_by(RAGQueryState.finished_at.desc(), RAGQueryState.created_at.desc())
+        .all()
+    )
+
+    model_by_key = {}
+    for job in jobs:
+        key = (int(job.user_id), job.question)
+        if key not in model_by_key and job.model_name:
+            model_by_key[key] = job.model_name
+
+    return {
+        int(consulta.id): model_by_key.get(
+            (int(consulta.user_id), consulta.pregunta),
+            "-",
+        )
+        for consulta in consultas
+    }
+
 
 @main_bp.route("/")
 def inicio() -> str:
@@ -111,7 +266,7 @@ def pag_principal() -> str:
     )
 
 
-def build_activity_streak(user, consultas) -> int:
+def build_activity_streak(user: User, consultas: list) -> int:
     """
     Calcula la racha de días consecutivos con actividad reciente.
     Usa días con consultas y el último inicio de sesión del usuario. Si el usuario
@@ -144,7 +299,7 @@ def build_activity_streak(user, consultas) -> int:
     return streak
 
 
-def build_home_dashboard_metrics(user, consultas) -> dict:
+def build_home_dashboard_metrics(user: User, consultas: list) -> dict:
     """
     Construye las métricas resumidas que se muestran en la página principal.
     
@@ -185,7 +340,7 @@ def build_home_dashboard_metrics(user, consultas) -> dict:
     }
 
 
-def build_home_month_calendar(consultas) -> dict:
+def build_home_month_calendar(consultas: list) -> dict:
     """
     Construye el calendario del mes actual para la tarjeta principal.
     
@@ -258,7 +413,7 @@ def build_home_month_calendar(consultas) -> dict:
     }
 
 
-def build_home_query_donut(user, user_total_queries: int) -> dict:
+def build_home_query_donut(user: User, user_total_queries: int) -> dict:
     """
     Construye el reparto del anillo de consultas de la página principal.
     
@@ -323,7 +478,7 @@ def build_home_query_donut(user, user_total_queries: int) -> dict:
     }
 
 
-def display_name_for_donut(user) -> str:
+def display_name_for_donut(user: User) -> str:
     """
     Devuelve una etiqueta breve para la leyenda del anillo.
     
@@ -381,6 +536,7 @@ def edit_user() -> str:
                  
     return render_template("edit_user.html", form=form, user=current_user)
 
+
 @main_bp.get("/history")
 @login_required
 def historial() -> str:
@@ -393,21 +549,31 @@ def historial() -> str:
     Returns:
         str: HTML renderizado del historial de consultas paginado.
     """
-    q = Consulta.query.order_by(Consulta.created_at.desc())
+    filters = _history_filters()
+    q = _apply_history_sort(
+        _apply_history_filters(Consulta.query, filters),
+        filters["sort"],
+    )
 
     consultas, page, total_pages, total_consultas = paginate_consultas(
         q, per_page=10
     )   
     
     meta_by_consulta = build_meta_by_consulta(consultas)
+    model_by_consulta = build_model_by_consulta(consultas)
+    history_users, history_models = _history_filter_options()
     
     return render_template(
         "history.html", 
         consultas=consultas,
         meta_by_consulta=meta_by_consulta,
+        model_by_consulta=model_by_consulta,
         page=page,
         total_pages=total_pages,
-        total_consultas=total_consultas
+        total_consultas=total_consultas,
+        filters=filters,
+        history_users=history_users,
+        history_models=history_models,
     )
 
 
@@ -458,15 +624,15 @@ def _safe_created_at(consulta: Consulta) -> datetime:
 
 
 def _process_consulta_stats(
-    consulta,
-    monthly_counts,
-    monthly_times,
-    daily_counts,
-    daily_times,
-    daily_hourly_counts,
-    weekday_counts,
-    hourly_counts,
-    user_counter,
+    consulta: Consulta,
+    monthly_counts: dict,
+    monthly_times: defaultdict,
+    daily_counts: dict,
+    daily_times: defaultdict,
+    daily_hourly_counts: dict,
+    weekday_counts: dict,
+    hourly_counts: dict,
+    user_counter: defaultdict,
 ) -> None:
     """
     Procesa y actualiza las estadísticas de una consulta individual.
@@ -506,7 +672,7 @@ def _process_consulta_stats(
         user_counter[user_name] += 1
 
 
-def build_usage_stats_payload(consultas, *, include_top_users: bool = False) -> dict:
+def build_usage_stats_payload(consultas: list[Consulta], *, include_top_users: bool = False) -> dict:
     """
     Construye un payload completo de estadísticas de uso de consultas.
 
@@ -515,7 +681,7 @@ def build_usage_stats_payload(consultas, *, include_top_users: bool = False) -> 
     semanales y horarios. Opcionalmente incluye los 8 usuarios más activos.
 
     Args:
-        consultas (list): Lista de entidades Consulta a procesar.
+        consultas (list[Consulta]): Lista de entidades Consulta a procesar.
         include_top_users (bool, optional): Incluir los 8 usuarios más activos. Defaults to False.
 
     Returns:
@@ -636,7 +802,7 @@ def build_usage_stats_payload(consultas, *, include_top_users: bool = False) -> 
     return payload
 
 
-def build_user_comparison_payload(user_counter)-> dict:
+def build_user_comparison_payload(user_counter: dict[str, int]) -> dict:
     """
     Construye la payload de comparación de usuarios con estadísticas de uso.
     Calcula la media, mediana y varianza del número de consultas por usuario
@@ -671,14 +837,14 @@ def build_user_comparison_payload(user_counter)-> dict:
     }
 
 
-def build_selected_user_comparison_payload(consultas, users, selected_user_ids=None) -> dict:
+def build_selected_user_comparison_payload(consultas: list[Consulta], users: list[User], selected_user_ids=None) -> dict:
     """
     Construye la comparacion de usuarios que el administrador quiere ver.
     
     Args:
-        consultas (list): Lista de consultas a analizar.
-        users (list): Lista de usuarios registrados.
-        selected_user_ids (list, optional): Lista de IDs de usuarios seleccionados para comparación. Si no se proporciona, se ordenan por número de consultas y se seleccionan todos.
+        consultas (list[Consulta]): Lista de consultas a analizar.
+        users (list[User]): Lista de usuarios registrados.
+        selected_user_ids (list[int], optional): Lista de IDs de usuarios seleccionados para comparación. Si no se proporciona, se ordenan por número de consultas y se seleccionan todos.
     
     Returns:
         dict: Payload con comparación de usuarios seleccionados y sus estadísticas de uso.
@@ -714,12 +880,12 @@ def build_selected_user_comparison_payload(consultas, users, selected_user_ids=N
     return payload
 
 
-def build_user_country_map_payload(users, *, include_user_names: bool = False) -> list:
+def build_user_country_map_payload(users: list[User], *, include_user_names: bool = False) -> list:
     """
     Construye los datos del mapa de usuarios por pais.
 
     Args:
-        users (list): Usuarios registrados.
+        users (list[User]): Usuarios registrados.
         include_user_names (bool): Incluye nombres solo para administradores.
 
     Returns:
@@ -826,7 +992,7 @@ def stats_page() -> str:
         selected_comparison_user_ids=stats_payload.get("user_comparison", {}).get("selected_user_ids", []),
     )
     
-def best_pid_for_consulta(consulta) -> str:
+def best_pid_for_consulta(consulta: Consulta) -> str:
     """
     Obtiene el ID de punto Qdrant del mejor fragmento/chunk de una consulta.
 
@@ -853,7 +1019,7 @@ def best_pid_for_consulta(consulta) -> str:
     chunk = getattr(best_cc, "chunk", None)
     return getattr(chunk, "qdrant_point_id", "") or ""
     
-def build_meta_by_consulta(consultas) -> dict:
+def build_meta_by_consulta(consultas: list[Consulta]) -> dict:
     """
     Construye un diccionario de metadatos indexado por ID de consulta.
 
@@ -924,4 +1090,33 @@ def delete_consulta(consulta_id: int) -> Response:
     db.session.delete(consulta)
     db.session.commit()
 
-    return redirect(request.referrer or url_for("main.historial"))
+    return redirect(request.referrer or url_for(HISTORY_ENDPOINT))
+
+
+@main_bp.post("/history/delete")
+@login_required
+def bulk_delete_consultas() -> Response:
+    """
+    Elimina varias consultas seleccionadas desde el historial.
+    """
+    form = EmptyForm()
+    if not form.validate_on_submit():
+        abort(400)
+
+    selected_ids = request.form.getlist("selected_consulta_ids", type=int)
+    if not selected_ids:
+        return redirect(request.referrer or url_for(HISTORY_ENDPOINT))
+
+    query = Consulta.query.filter(Consulta.id.in_(selected_ids))
+    if not current_user.is_admin:
+        query = query.filter(Consulta.user_id == int(current_user.id))
+
+    consultas = query.all()
+    if len(consultas) != len(set(selected_ids)):
+        abort(403)
+
+    for consulta in consultas:
+        db.session.delete(consulta)
+    db.session.commit()
+
+    return redirect(request.referrer or url_for(HISTORY_ENDPOINT))
