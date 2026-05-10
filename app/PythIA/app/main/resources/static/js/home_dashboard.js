@@ -49,8 +49,8 @@
       .domain([0, Math.max(1, maxCount / 2), Math.max(1, maxCount)])
       .range(
         isLightTheme
-          ? ["#eef3fa", "#c9d6e8", "#53658f"]
-          : ["rgba(255,255,255,0.12)", "#85c1e9", "#21618c"]
+          ? ["#eef3fa", "#f9a8d4", "#db2777"]
+          : ["rgba(255,255,255,0.12)", "#f472b6", "#be185d"]
       );
 
     const svg = d3

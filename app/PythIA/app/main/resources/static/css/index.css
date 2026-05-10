@@ -40,6 +40,13 @@
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
 }
 
+body[data-theme="light"].landing-page .hero-badge {
+  background: #53658f;
+  border-color: #53658f;
+  color: #ffffff;
+  box-shadow: 0 10px 26px rgba(83, 101, 143, 0.24);
+}
+
 .hero-title {
   font-size: clamp(2rem, 5vw, 4rem);
   line-height: 1.08;
