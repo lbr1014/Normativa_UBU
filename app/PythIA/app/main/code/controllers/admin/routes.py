@@ -3,35 +3,56 @@ Autora: Lydia Blanco Ruiz
 Script para las rutas de administración, incluyendo gestión de usuarios, documentos y procesos en segundo plano con estado y cancelación.
 """
 
-from datetime import datetime
 import os
-from pathlib import Path
+import smtplib
 import subprocess
 import sys
+from datetime import datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from flask import Response, abort, current_app, flash, jsonify, redirect, render_template, request, send_file, url_for
+from flask import (
+    Response,
+    abort,
+    current_app,
+    flash,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    send_file,
+    url_for,
+)
+from flask.typing import ResponseReturnValue
 from flask_login import current_user, login_required
+from sqlalchemy.exc import SQLAlchemyError
 
-from . import admin_bp
 from app.main.code.countries import normalize_country_code
 from app.main.code.decorators import admin_required
-from ...services.documentos import DocumentosService, JobCancelledError
+from app.main.code.extensions import db
+from app.main.code.forms import AdminCreateUserForm, EmptyForm, PdfUploadForm
+from app.main.code.inetrnacionalizacion.tarduccion import (
+    get_locale,
+    localize_runtime_message,
+    t,
+    translate_for,
+)
+from app.main.code.model.job_state import JobStateMixin
+from app.main.code.services.async_tasks import executor, markdown_executor
+from app.main.code.services.markdown_conversion_state import (
+    send_markdown_finished_email,
+)
+from app.main.code.services.vector_update_state import send_update_finished_email
+from app.main.code.services.web_scraping_state import send_scraping_finished_email
+
 from ...model.documento import Documento
 from ...model.markdown_conversion_state import MarkdownConversionState
 from ...model.user import User
 from ...model.vector_update_state import VectorUpdateState
 from ...model.web_scraping_state import WebScrapingSate
-from app.main.code.extensions import db
-from app.main.code.forms import AdminCreateUserForm, EmptyForm, PdfUploadForm
-from app.main.code.services.markdown_conversion_state import send_markdown_finished_email
+from ...services.documentos import DocumentosService, JobCancelledError
 from ...services.rag.PrototipoRAG import index_pliegos_dir, qdrant_delete_by_filename
-from app.main.code.services.vector_update_state import send_update_finished_email
-from app.main.code.services.web_scraping_state import send_scraping_finished_email
-from app.main.code.services.async_tasks import executor, markdown_executor
-from app.main.code.inetrnacionalizacion.tarduccion import get_locale, localize_runtime_message, t, translate_for
-from app.main.code.model.job_state import JobStateMixin
-
+from . import admin_bp
 
 USERS = "admin.users"
 DOCUMENTS = "admin.documents_list_page"
@@ -40,6 +61,15 @@ MARKDOWN_CANCELLED = "markdown.cancelled"
 SCRAPING_CANCELLED = "scraping.cancelled"
 MARKDOWN_JOB_MESSAGE_MAX_LENGTH = 255
 MADRID_TZ = ZoneInfo("Europe/Madrid")
+ADMIN_RECOVERABLE_ERRORS = (
+    FileNotFoundError,
+    OSError,
+    RuntimeError,
+    SQLAlchemyError,
+    subprocess.SubprocessError,
+    ValueError,
+)
+MAIL_RECOVERABLE_ERRORS = (OSError, RuntimeError, smtplib.SMTPException)
 
 
 def _fit_job_message(message: str | None, max_length: int = MARKDOWN_JOB_MESSAGE_MAX_LENGTH) -> str | None:
@@ -83,7 +113,7 @@ def _set_job_message(job, message: str | None) -> None:
         job.message = _fit_job_message(message)
 
 
-def _set_job_progress(job, current: int | float, total: int) -> None:
+def _set_job_progress(job, current: float, total: int) -> None:
     """
     Calcula y guarda el progreso porcentual de un job.
 
@@ -217,13 +247,19 @@ def _send_email_safe(send_fn, log_message: str, **kwargs) -> None:
     """
     try:
         send_fn(**kwargs)
-    except Exception:
+    except MAIL_RECOVERABLE_ERRORS:
         current_app.logger.exception(log_message)
 
 
-def _validate_post_action(*, json_response: bool = False):
+def _validate_post_action(*, json_response: bool = False) -> ResponseReturnValue | None:
     """
     Valida el CSRF de acciones POST sin campos propios.
+    
+    Args:
+        json_response: Indica si la respuesta de error debe ser JSON en lugar de HTML.
+    
+    Returns:
+        None o una respuesta JSON de error si la validacion falla.
     """
     form = EmptyForm()
     if form.validate_on_submit():
@@ -233,9 +269,15 @@ def _validate_post_action(*, json_response: bool = False):
     abort(400)
 
 
-def _render_users_page(form=None):
+def _render_users_page(form=None) -> ResponseReturnValue:
     """
     Renderiza la gestion de usuarios con formulario de alta y listado.
+    
+    Args:
+        form: Instancia del formulario de creacion de usuario, opcionalmente con errores.
+        
+    Returns:
+        La pagina HTML con el listado de usuarios y el formulario.
     """
     users = User.query.order_by(User.id.asc()).all()
     return render_template("users.html", users=users, form=form or AdminCreateUserForm())
@@ -244,8 +286,9 @@ def _render_users_page(form=None):
 @admin_bp.route("/users")
 @login_required
 @admin_required
-def users():
-    """Muestra el listado de usuarios administrables.
+def users() -> ResponseReturnValue:
+    """
+    Muestra el listado de usuarios administrables.
 
     Returns:
         La pagina HTML con todos los usuarios ordenados por identificador.
@@ -256,8 +299,9 @@ def users():
 @admin_bp.post("/users/<int:user_id>")
 @login_required
 @admin_required
-def change_type(user_id):
-    """Alterna el rol de administrador de un usuario.
+def change_type(user_id) -> ResponseReturnValue:
+    """
+    Alterna el rol de administrador de un usuario.
 
     Args:
         user_id: Identificador del usuario cuyo rol se modifica.
@@ -280,7 +324,7 @@ def change_type(user_id):
 @admin_bp.post("/users/<int:user_id>/delete")
 @login_required
 @admin_required
-def delete_user(user_id):
+def delete_user(user_id) -> ResponseReturnValue:
     """
     Elimina un usuario distinto del administrador actual.
 
@@ -306,7 +350,7 @@ def delete_user(user_id):
 @admin_bp.post("/users/add")
 @login_required
 @admin_required
-def create_user():
+def create_user() -> ResponseReturnValue:
     """
     Crea un usuario nuevo desde el formulario de administracion.
 
@@ -392,7 +436,7 @@ def convert_pdf_to_markdown(pdf_path: Path, on_page_start=None) -> str:
 
 @admin_bp.post("/documents/upload")
 @admin_required
-def upload_documents():
+def upload_documents() -> ResponseReturnValue:
     """
     Guarda los documentos subidos desde la interfaz de administracion.
 
@@ -417,7 +461,7 @@ def upload_documents():
 @admin_bp.post("/documents/markdown/convert")
 @login_required
 @admin_required
-def convert_documents_to_markdown():
+def convert_documents_to_markdown() -> ResponseReturnValue:
     """
     Crea un job para convertir documentos pendientes a Markdown.
 
@@ -448,7 +492,7 @@ def convert_documents_to_markdown():
 @admin_bp.post("/documents/markdown/cancel/<int:job_id>")
 @login_required
 @admin_required
-def cancel_markdown_conversion(job_id: int):
+def cancel_markdown_conversion(job_id: int) -> ResponseReturnValue:
     """
     Solicita la cancelacion de un job de conversion a Markdown.
 
@@ -480,7 +524,7 @@ def cancel_markdown_conversion(job_id: int):
 @admin_bp.get("/documents/markdown/status/<int:job_id>")
 @login_required
 @admin_required
-def markdown_conversion_status(job_id: int):
+def markdown_conversion_status(job_id: int) -> ResponseReturnValue:
     """
     Devuelve el estado actual de un job de conversion a Markdown.
 
@@ -777,7 +821,7 @@ def markdown_async(app, job_id: int, user_email: str, docs_url: str, lang: str =
             job = MarkdownConversionState.query.get(job_id)
             if job:
                 _cancel_markdown_job(job, lang)
-        except Exception as exc:
+        except ADMIN_RECOVERABLE_ERRORS as exc:
             _handle_markdown_exception(app, job_id, user_email, docs_url, lang, exc)
         finally:
             db.session.remove()
@@ -786,7 +830,7 @@ def markdown_async(app, job_id: int, user_email: str, docs_url: str, lang: str =
 @admin_bp.post("/vector-db/update")
 @login_required
 @admin_required
-def update_vector_db():
+def update_vector_db() -> ResponseReturnValue:
     """
     Crea un job para actualizar la base de datos vectorial.
 
@@ -817,7 +861,7 @@ def update_vector_db():
 @admin_bp.post("/vector-db/cancel/<int:job_id>")
 @login_required
 @admin_required
-def cancel_vector_db(job_id: int):
+def cancel_vector_db(job_id: int) -> ResponseReturnValue:
     """
     Solicita la cancelacion de un job de indexacion vectorial.
 
@@ -945,7 +989,7 @@ def documentos_async(app, job_id: int, user_email: str, docs_url: str, lang: str
             if job:
                 _mark_job_cancelled(job)
                 db.session.commit()
-        except Exception as exc:
+        except ADMIN_RECOVERABLE_ERRORS as exc:
             db.session.rollback()
             try:
                 job = VectorUpdateState.query.get(job_id)
@@ -972,7 +1016,7 @@ def documentos_async(app, job_id: int, user_email: str, docs_url: str, lang: str
 
 @admin_bp.get("/vector-db/status/<int:job_id>")
 @admin_required
-def vector_db_status(job_id: int):
+def vector_db_status(job_id: int) -> ResponseReturnValue:
     """
     Devuelve el estado actual de un job de indexacion vectorial.
 
@@ -1000,7 +1044,7 @@ def vector_db_status(job_id: int):
 @admin_bp.get("/documents/list")
 @login_required
 @admin_required
-def documents_list_page():
+def documents_list_page() -> ResponseReturnValue:
     """
     Muestra la pagina de administracion de documentos.
 
@@ -1034,7 +1078,7 @@ def documents_list_page():
 @admin_bp.post("/documents/<int:doc_id>/delete")
 @login_required
 @admin_required
-def delete_document(doc_id: int):
+def delete_document(doc_id: int) -> ResponseReturnValue:
     """
     Elimina un documento y sus datos asociados.
 
@@ -1047,7 +1091,7 @@ def delete_document(doc_id: int):
     _validate_post_action()
     try:
         documentos_service().delete_document(doc_id)
-    except Exception:
+    except (OSError, SQLAlchemyError, RuntimeError):
         current_app.logger.exception("Error borrando documento")
         abort(500)
 
@@ -1057,7 +1101,7 @@ def delete_document(doc_id: int):
 @admin_bp.get("/documents/<int:doc_id>/download")
 @login_required
 @admin_required
-def download_document(doc_id: int):
+def download_document(doc_id: int) -> ResponseReturnValue:
     """
     Descarga un documento PDF o su version Markdown.
 
@@ -1087,7 +1131,7 @@ def download_document(doc_id: int):
 @admin_bp.get("/documents/<int:doc_id>/view")
 @login_required
 @admin_required
-def view_document(doc_id: int):
+def view_document(doc_id: int) -> ResponseReturnValue:
     """
     Muestra en navegador un documento PDF o Markdown.
 
@@ -1115,7 +1159,7 @@ def view_document(doc_id: int):
 @admin_bp.post("/documents/web_scraping")
 @login_required
 @admin_required
-def web_scraping_documents():
+def web_scraping_documents() -> ResponseReturnValue:
     """
     Crea un job para lanzar el proceso de web scraping.
 
@@ -1146,7 +1190,7 @@ def web_scraping_documents():
 @admin_bp.post("/documents/web_scraping/cancel/<int:job_id>")
 @login_required
 @admin_required
-def cancel_web_scraping(job_id: int):
+def cancel_web_scraping(job_id: int) -> ResponseReturnValue:
     """
     Solicita la cancelacion de un job de web scraping.
 
@@ -1177,7 +1221,7 @@ def cancel_web_scraping(job_id: int):
 
 @admin_bp.get("/documents/web_scraping/status/<int:job_id>")
 @admin_required
-def web_scraping_status(job_id: int):
+def web_scraping_status(job_id: int) -> ResponseReturnValue:
     """
     Devuelve el estado actual de un job de web scraping.
 
@@ -1461,7 +1505,7 @@ def scraping_async(app, job_id: int, user_email: str, docs_url: str, lang: str =
             if job:
                 _mark_job_cancelled(job, message=_scraping_cancel_message(lang))
                 db.session.commit()
-        except Exception as exc:
+        except ADMIN_RECOVERABLE_ERRORS as exc:
             _handle_scraping_exception(app, job_id, user_email, docs_url, lang, exc)
         finally:
             db.session.remove()
