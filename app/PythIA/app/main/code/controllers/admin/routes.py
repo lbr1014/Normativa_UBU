@@ -61,6 +61,9 @@ from . import admin_bp
 
 USERS = "admin.users"
 DOCUMENTS = "admin.documents_list_page"
+DOC_TYPE_UNKNOWN = "unknown"
+DOC_MARKDOWN_YES = "yes"
+DOC_MARKDOWN_NO = "no"
 JOBS_ALREADY_FINISHED = "jobs.already_finished"
 MARKDOWN_CANCELLED = "markdown.cancelled"
 SCRAPING_CANCELLED = "scraping.cancelled"
@@ -509,6 +512,88 @@ def documents_page_url() -> str:
         La URL completa a la pagina de administracion de documentos.
     """
     return f"{request.host_url.rstrip('/')}{url_for('admin.documents_list_page')}"
+
+
+def _document_filters() -> dict[str, str]:
+    """
+    Lee los filtros activos de la administracion de documentos.
+    
+    Returns:
+        Un diccionario con los valores de los filtros de nombre, tipo, estado y markdown.
+    """
+    return {
+        "name": (request.args.get("name") or "").strip(),
+        "type": (request.args.get("type") or "").strip(),
+        "status": (request.args.get("status") or "").strip(),
+        "markdown": (request.args.get("markdown") or "").strip(),
+    }
+
+
+def _apply_document_filters(query, filters: dict[str, str]) -> Any:
+    """
+    Aplica filtros sobre la query de documentos.
+    
+    Args:
+        query: Consulta SQLAlchemy base sobre la que aplicar los filtros.
+        filters: Diccionario con los filtros activos (nombre, tipo, estado, markdown).
+        
+    Returns:
+        La consulta SQLAlchemy con los filtros aplicados.
+    """
+    if filters["name"]:
+        query = query.filter(Documento.nombre.ilike(f"%{filters['name']}%"))
+
+    if filters["type"] == DOC_TYPE_UNKNOWN:
+        query = query.filter(Documento.tipo_documento.is_(None))
+    elif filters["type"]:
+        query = query.filter(Documento.tipo_documento == filters["type"])
+
+    if filters["status"]:
+        query = query.filter(Documento.status == filters["status"])
+
+    if filters["markdown"] == DOC_MARKDOWN_YES:
+        query = query.filter(
+            Documento.markdown_content.isnot(None),
+            Documento.markdown_content != "",
+        )
+    elif filters["markdown"] == DOC_MARKDOWN_NO:
+        query = query.filter(
+            (Documento.markdown_content.is_(None))
+            | (Documento.markdown_content == "")
+        )
+
+    return query
+
+
+def _document_filter_options() -> tuple[list[str], list[str]]:
+    """
+    Devuelve tipos y estados disponibles para los filtros.
+    
+    Returns:
+        Una tupla con la lista de tipos de documento y la lista de estados disponibles.
+    """
+    type_values = [
+        item[0]
+        for item in (
+            Documento.query.with_entities(Documento.tipo_documento)
+            .filter(Documento.tipo_documento.isnot(None))
+            .distinct()
+            .order_by(Documento.tipo_documento.asc())
+            .all()
+        )
+        if item[0]
+    ]
+    status_values = [
+        item[0]
+        for item in (
+            Documento.query.with_entities(Documento.status)
+            .distinct()
+            .order_by(Documento.status.asc())
+            .all()
+        )
+        if item[0]
+    ]
+    return type_values, status_values
 
 
 def convert_pdf_to_markdown(pdf_path: Path, on_page_start=None) -> str:
@@ -1151,21 +1236,54 @@ def documents_list_page() -> ResponseReturnValue:
     svc.sync_from_folder()
     svc.purge_missing_files()
 
-    pagination = svc.list_documents_paginated(page, per_page)
+    filters = _document_filters()
+    if any(filters.values()):
+        query = _apply_document_filters(Documento.query, filters).order_by(
+            Documento.modified_at.desc()
+        )
+        pagination = query.paginate(page=page, per_page=per_page, error_out=False)
+    else:
+        pagination = svc.list_documents_paginated(page, per_page)
     docs = pagination.items
     markdown_status = svc.get_markdown_status_map(docs)
     pending_markdown = svc.count_pending_markdown()
+    doc_type_options, doc_status_options = _document_filter_options()
 
     return render_template(
         "admin_documents.html",
         docs=docs,
         markdown_status=markdown_status,
         pending_markdown=pending_markdown,
+        filters=filters,
+        doc_type_options=doc_type_options,
+        doc_status_options=doc_status_options,
         page=pagination.page,
         total_pages=pagination.pages or 1,
         total_docs=pagination.total,
         upload_form=PdfUploadForm(),
     )
+
+
+@admin_bp.post("/documents/bulk-delete")
+@login_required
+@admin_required
+def bulk_delete_documents() -> ResponseReturnValue:
+    """
+    Elimina varios documentos seleccionados.
+    """
+    _validate_post_action()
+    selected_ids = request.form.getlist("selected_doc_ids", type=int)
+    if not selected_ids:
+        return redirect(request.referrer or url_for(DOCUMENTS))
+
+    try:
+        for doc_id in set(selected_ids):
+            documentos_service().delete_document(doc_id)
+    except (OSError, SQLAlchemyError, RuntimeError):
+        current_app.logger.exception("Error borrando documentos")
+        abort(500)
+
+    return redirect(request.referrer or url_for(DOCUMENTS))
 
 
 @admin_bp.post("/documents/<int:doc_id>/delete")

@@ -8,6 +8,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const vectorForm = document.getElementById("vectorForm");
   const markdownForm = document.getElementById("markdownForm");
   const uploadForm = document.getElementById("uploadForm");
+  const uploadInput = document.getElementById("files");
+  const uploadSummary = document.getElementById("upload-file-summary");
 
   let activeJob = null;
 
@@ -37,6 +39,20 @@ document.addEventListener("DOMContentLoaded", () => {
     return data;
   }
 
+  function updateUploadSummary() {
+    if (!uploadInput || !uploadSummary) return;
+
+    const files = Array.from(uploadInput.files || []);
+    if (files.length === 0) {
+      uploadSummary.textContent = tr("docs.no_files_selected");
+      return;
+    }
+
+    uploadSummary.textContent = files.length === 1
+      ? files[0].name
+      : tr("docs.files_selected", { count: files.length });
+  }
+
   function toggleButtons(disabled) {
     [uploadForm, vectorForm, markdownForm, scrapingForm].forEach((form) => {
       form?.querySelectorAll("button").forEach((button) => {
@@ -45,6 +61,9 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     });
   }
+
+  uploadInput?.addEventListener("change", updateUploadSummary);
+  updateUploadSummary();
 
   function showProgressBox() {
     if (!progressBox) return;

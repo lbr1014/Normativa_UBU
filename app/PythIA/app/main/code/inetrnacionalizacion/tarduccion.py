@@ -280,6 +280,8 @@ def get_client_translations() -> dict[str, str]:
         "scraping.status_error",
         "process.cancel_error",
         "process.resume_tracking",
+        "docs.no_files_selected",
+        "docs.files_selected",
     ]
     return {key: t(key) for key in keys}
 

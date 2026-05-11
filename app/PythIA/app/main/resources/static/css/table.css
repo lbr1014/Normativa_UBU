@@ -1255,6 +1255,16 @@ body[data-theme="light"] .app-table tbody tr:hover > * {
     width: auto;
   }
 
+  #bulk-documents-form .admin-users-bulk-actions {
+    align-items: center;
+    flex-direction: row;
+    justify-content: flex-end;
+  }
+
+  #bulk-documents-form .admin-users-bulk-button {
+    width: auto;
+  }
+
   .history-bulk-bar {
     align-items: center;
     flex-direction: row;
