@@ -84,7 +84,7 @@ class MainRoutesIntegrationTest(BaseAppTestCase):
         self.assertEqual(response.status_code, 302)
         db.session.refresh(user)
         self.assertIsNotNone(user.profile_image)
-        self.assertTrue(user.profile_image.startswith("uploads/profiles/user-"))
+        self.assertTrue(user.profile_image.startswith("user-"))
         self.assertTrue(user.profile_image.endswith(".png"))
         upload_dir = current_app.config["PROFILE_UPLOAD_FOLDER"]
         saved_filename = Path(user.profile_image).name
