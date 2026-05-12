@@ -124,7 +124,13 @@ def create_app():
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     app.config["DOCS_DIR"] = os.environ.get("DOCS_DIR", "pliegos")
     app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("MAX_CONTENT_LENGTH", str(50 * 1024 * 1024)))
-    app.config["PROFILE_UPLOAD_FOLDER"] = (Path(app.static_folder) / "uploads" / "profiles")
+    
+    data_dir = project_root / "data"
+    app.config["DATA_DIR"] = data_dir
+    app.config["DOCS_DIR"] = data_dir / "pliegos"
+    app.config["PROFILE_UPLOAD_FOLDER"] = data_dir / "profiles"
+    
+    app.config["PROFILE_UPLOAD_FOLDER"].mkdir(parents=True, exist_ok=True)
 
     # Flask Mail
     app.config["MAIL_SERVER"] = os.environ.get("MAIL_SERVER", "")

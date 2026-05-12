@@ -19,6 +19,7 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_from_directory,
     session,
     url_for,
 )
@@ -532,12 +533,14 @@ def _profile_image_url(user: User) -> str | None:
     """
     if not getattr(user, "profile_image", None):
         return None
-    return url_for("static", filename=user.profile_image.replace("\\", "/"))
 
+    filename = Path(user.profile_image).name
+
+    return url_for("main.profile_image", filename=filename)
 
 def _delete_profile_image(filename: str | None) -> None:
     """
-    Elimina una foto de perfil guardada dentro de la carpeta estatica.
+    Elimina una foto de perfil guardada dentro de la carpeta data/profiles.
     
     Args:
         filename (str | None): Ruta relativa a la foto de perfil a eliminar.
@@ -545,13 +548,11 @@ def _delete_profile_image(filename: str | None) -> None:
     if not filename:
         return
 
-    static_root = Path(current_app.static_folder).resolve()
-    target = (static_root / filename).resolve()
-    upload_root = (static_root / PROFILE_UPLOAD_SUBDIR).resolve()
+    upload_dir = current_app.config["PROFILE_UPLOAD_FOLDER"]
+    target = upload_dir / Path(filename).name
 
-    if upload_root in target.parents and target.exists():
+    if target.exists():
         target.unlink()
-
 
 def _save_profile_image(file_storage) -> str | None:
     """
@@ -576,7 +577,7 @@ def _save_profile_image(file_storage) -> str | None:
     saved_name = f"user-{current_user.id}-{uuid.uuid4().hex}.{extension}"
     destination = upload_dir / saved_name
     file_storage.save(destination)
-    return str(PROFILE_UPLOAD_SUBDIR / saved_name).replace("\\", "/")
+    return saved_name
 
 
 def _render_edit_user(form: EditUserForm) -> str:
@@ -626,6 +627,20 @@ def _update_profile_image(form: EditUserForm) -> None:
 
     _delete_profile_image(current_user.profile_image)
     current_user.profile_image = uploaded_profile_image
+    
+@main_bp.get("/profile_image/<path:filename>")
+@login_required
+def profile_image(filename: str):
+    """
+    Sirve imágenes de perfil almacenadas en data/profiles.
+    """
+
+    upload_dir = current_app.config["PROFILE_UPLOAD_FOLDER"]
+
+    return send_from_directory(
+        upload_dir,
+        filename,
+    )
 
 
 def _update_profile_password(form: EditUserForm) -> None:
