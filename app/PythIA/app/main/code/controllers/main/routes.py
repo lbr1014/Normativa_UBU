@@ -15,9 +15,11 @@ from flask import (
     Response,
     abort,
     current_app,
+    flash,
     redirect,
     render_template,
     request,
+    session,
     url_for,
 )
 from flask_login import current_user, login_required, logout_user
@@ -569,7 +571,7 @@ def _save_profile_image(file_storage) -> str | None:
     if extension not in PROFILE_IMAGE_EXTENSIONS:
         return None
 
-    upload_dir = Path(current_app.static_folder) / PROFILE_UPLOAD_SUBDIR
+    upload_dir = current_app.config["PROFILE_UPLOAD_FOLDER"]
     upload_dir.mkdir(parents=True, exist_ok=True)
     saved_name = f"user-{current_user.id}-{uuid.uuid4().hex}.{extension}"
     destination = upload_dir / saved_name
@@ -628,7 +630,7 @@ def _update_profile_image(form: EditUserForm) -> None:
 
 def _update_profile_password(form: EditUserForm) -> None:
     """
-    Actualiza la contrasena solo cuando se ha indicado una nueva.
+    Actualiza la contraseña solo cuando se ha indicado una nueva.
     """
     if form.new_password.data:
         current_user.set_password(form.new_password.data)
@@ -642,30 +644,47 @@ def _apply_edit_user_form(form: EditUserForm) -> bool:
     if not _update_profile_email(form):
         return False
 
-    _update_profile_image(form)
     current_user.country_code = normalize_country_code(form.country_code.data)
     _update_profile_password(form)
+    current_user.theme_mode = form.theme_mode.data
+    current_user.language = form.language.data
+    current_user.preferred_model = form.preferred_model.data
+    session["lang"] = form.language.data
+        
+    _update_profile_image(form)
+
     db.session.commit()
     return True
 
 @main_bp.get("/edit_user")
 @main_bp.post("/edit_user")
 @login_required
-def edit_user() -> str:
+def edit_user() -> str | Response:
     """
-    Gestiona la ediciÃ³n del perfil de usuario.
+    Gestiona la edición del perfil de usuario.
 
-    En GET: presenta el formulario de ediciÃ³n con los datos actuales del usuario.
-    En POST: valida y guarda cambios en nombre, email y contraseÃ±a.
+    En GET: presenta el formulario de edición con los datos actuales del usuario.
+    En POST: valida y guarda cambios en nombre, email y contraseña.
     Valida unicidad del email antes de actualizar.
 
     Returns:
-        str: HTML renderizado del formulario de ediciÃ³n de usuario.
+        str | Response: HTML renderizado del formulario de edición de usuario.
     """
-    form = EditUserForm(obj=current_user) if request.method == "GET" else EditUserForm()
+    
+    if request.method == "GET":
+        form = EditUserForm(obj=current_user)
+        form.theme_mode.data = current_user.theme_mode
+        form.preferred_model.data = current_user.preferred_model
+        form.language.data = current_user.language
+    else:
+        form = EditUserForm()
 
-    if form.validate_on_submit() and not _apply_edit_user_form(form):
-        return _render_edit_user(form)
+    if form.validate_on_submit():
+        if not _apply_edit_user_form(form):
+            return _render_edit_user(form)
+
+        flash(t("user.profile_updated"), "success")
+        return redirect(url_for("main.edit_user"))
 
     return _render_edit_user(form)
 

@@ -17,9 +17,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-dev \
     poppler-utils \
     curl \
- && rm -rf /var/lib/apt/lists/*
-
-RUN useradd --create-home --shell /usr/sbin/nologin appuser
+ && rm -rf /var/lib/apt/lists/* \
+ && mkdir -p /app/instance/uploads/profiles \
+ && useradd --create-home --shell /usr/sbin/nologin appuser
 
 # Copiamos primero requirements para aprovechar cache
 COPY docker/requirements_docker.txt /app/requirements_docker.txt
@@ -36,6 +36,8 @@ RUN --mount=type=bind,source=app/main,target=/tmp/build/app/main \
  && chmod +x /app/docker/entrypoint.sh \
  && mkdir -p /data /home/appuser/.cache/huggingface \
  && chown -R appuser:appuser /app /data /home/appuser/.cache
+
+RUN chmod -R 777 /app/instance/uploads
 
 # Puerto Flask/Gunicorn
 EXPOSE 5000

@@ -569,6 +569,47 @@ body[data-theme="light"] .main-header .last-login {
   background: var(--app-header-btn-outline-bg);
 }
 
+.app-btn-cancel{
+  border-radius: 14px;
+  font-weight: 700;
+  min-height: 52px;
+
+  background: rgba(148, 163, 184, 0.14);
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  color: var(--app-text);
+
+  transition:
+    background-color .18s ease,
+    border-color .18s ease,
+    transform .18s ease,
+    box-shadow .18s ease;
+}
+
+.app-btn-cancel:hover,
+.app-btn-cancel:focus{
+  background: rgba(148, 163, 184, 0.22);
+  border-color: rgba(148, 163, 184, 0.38);
+  color: var(--app-heading);
+
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
+}
+
+body[data-theme="light"] .app-btn-cancel{
+  background: rgba(83, 101, 143, 0.08);
+  border-color: rgba(83, 101, 143, 0.22);
+  color: #1a2233;
+}
+
+body[data-theme="light"] .app-btn-cancel:hover,
+body[data-theme="light"] .app-btn-cancel:focus{
+  background: rgba(83, 101, 143, 0.14);
+  border-color: rgba(83, 101, 143, 0.34);
+  color: #111827;
+
+  box-shadow: 0 10px 24px rgba(83, 101, 143, 0.14);
+}
+
 body[data-theme="light"] .app-main-shell .btn-outline-light {
   --bs-btn-color: #ffffff;
   --bs-btn-bg: #53658f;
@@ -1050,6 +1091,21 @@ body[data-theme="light"] .app-main-shell .btn-outline-light {
 
 .profile-actions .btn-danger {
   margin-left: auto;
+}
+
+.profile-preferences{
+  margin-top: 1.5rem;
+  padding: 1.4rem;
+  border-radius: var(--app-radius-md);
+  border: var(--app-inset-border);
+  background: var(--app-inset-bg);
+}
+
+.profile-section-title{
+  margin-bottom: 1rem;
+  font-size: 1.15rem;
+  font-weight: 850;
+  color: var(--app-heading);
 }
 
 .invalid-feedback.d-block {

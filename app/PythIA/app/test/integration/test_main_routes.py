@@ -4,12 +4,15 @@ Script con pruebas de integración de las rutas de la aplicación.
 """
 
 from io import BytesIO
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from flask import current_app
+
+from app.main.code.extensions import db
+from app.main.code.model.consulta import Consulta
 from app.test.support import BaseAppTestCase
 
-from app.main.code.model.consulta import Consulta
-from app.main.code.extensions import db
 
 class MainRoutesIntegrationTest(BaseAppTestCase):
     def test_inicio_renders_public_home(self):
@@ -80,8 +83,79 @@ class MainRoutesIntegrationTest(BaseAppTestCase):
 
         self.assertEqual(response.status_code, 200)
         db.session.refresh(user)
+        self.assertIsNotNone(user.profile_image)
         self.assertTrue(user.profile_image.startswith("uploads/profiles/user-"))
         self.assertTrue(user.profile_image.endswith(".png"))
+        upload_dir = current_app.config["PROFILE_UPLOAD_FOLDER"]
+        saved_filename = Path(user.profile_image).name
+        saved_file = upload_dir / saved_filename
+        self.assertTrue(saved_file.exists())
+
+    def test_edit_user_updates_preferences(self):
+        user = self.create_user(email="prefs@example.com")
+
+        self.login(user.email)
+
+        response = self.client.post(
+            "/edit_user",
+            data={
+                "nombre": "Prefs",
+                "email": user.email,
+                "country_code": "ES",
+                "new_password": "",
+                "theme_mode": "light",
+                "language": "en",
+                "preferred_model": "qwen3:4b-instruct-q4_K_M",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        db.session.refresh(user)
+
+        self.assertEqual(user.theme_mode, "light")
+        self.assertEqual(user.language, "en")
+        self.assertEqual(
+            user.preferred_model,
+            "qwen3:4b-instruct-q4_K_M",
+        )
+
+    def test_edit_user_updates_session_language(self):
+        user = self.create_user(email="lang@example.com")
+
+        self.login(user.email)
+
+        self.client.post(
+            "/edit_user",
+            data={
+                "nombre": "Idioma",
+                "email": user.email,
+                "country_code": "ES",
+                "new_password": "",
+                "language": "en",
+            },
+        )
+
+        with self.client.session_transaction() as session:
+            self.assertEqual(session["lang"], "en")
+
+    def test_new_user_has_default_preferences(self):
+        user = self.create_user(email="defaults@example.com")
+
+        self.assertEqual(user.theme_mode, "system")
+        self.assertEqual(user.language, "es")
+        
+    def test_rag_form_uses_user_preferred_model(self):
+        user = self.create_user(
+            email="model@example.com",
+            preferred_model="qwen3:4b-instruct-q4_K_M",
+        )
+
+        self.login(user.email)
+
+        response = self.client.get("/rag/")
+
+        self.assertEqual(response.status_code, 200)
 
     def test_user_can_delete_own_account(self):
         user = self.create_user(email="delete-account@example.com")

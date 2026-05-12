@@ -41,6 +41,53 @@ function initLightEffect(selector = ".luz") {
   }, { passive: true });
 }
 
+function getInitialTheme() {
+  const bodyTheme = document.body.dataset.theme;
+
+  if (bodyTheme && bodyTheme !== "system") {
+    return bodyTheme;
+  }
+
+  const storedTheme = localStorage.getItem("pythia_theme");
+
+  if (storedTheme) {
+    return storedTheme;
+  }
+
+  return getSystemTheme();
+}
+
+function applyTheme(theme) {
+  let resolvedTheme = theme;
+
+  if (theme === "system") {
+    resolvedTheme = getSystemTheme();
+  }
+
+  document.body.setAttribute("data-theme", resolvedTheme);
+  document.documentElement.setAttribute(
+    "data-bs-theme",
+    resolvedTheme
+  );
+}
+
+function syncProfilePreferences() {
+  if (!window.profilePreferences) return;
+
+  const { theme } = window.profilePreferences;
+
+  if (theme) {
+    localStorage.setItem("pythia_theme", theme);
+
+    document.body.setAttribute("data-theme", theme);
+    document.documentElement.setAttribute("data-bs-theme", theme);
+  }
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  syncProfilePreferences();
+});
+
 /* =========================
    MODAL CHUNKS
    ========================= */
@@ -205,43 +252,59 @@ function initAdminUserSelection() {
 function initThemeSelector() {
   const body = document.body;
   const root = document.documentElement;
+
   if (!body) return;
 
   const storageKey = "pythia_theme";
   const buttons = document.querySelectorAll(".theme-option");
-  const mediaQuery = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+  const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
   function getSystemTheme() {
-    return mediaQuery?.matches ? "dark" : "light";
+    return mediaQuery.matches ? "dark" : "light";
+  }
+
+  function resolveTheme(theme) {
+    return theme === "system"
+      ? getSystemTheme()
+      : theme;
   }
 
   function applyTheme(theme) {
-    const resolvedTheme = theme === "light" ? "light" : "dark";
+    const resolvedTheme = resolveTheme(theme);
+
     body.setAttribute("data-theme", resolvedTheme);
+
     root.setAttribute("data-bs-theme", resolvedTheme);
 
     buttons.forEach((button) => {
-      const isActive = button.dataset.themeValue === resolvedTheme;
+      const isActive = button.dataset.themeValue === theme;
       button.classList.toggle("active", isActive);
       button.setAttribute("aria-pressed", isActive ? "true" : "false");
     });
   }
 
-  const savedTheme = localStorage.getItem(storageKey);
-  const initialTheme = savedTheme || getSystemTheme() || body.getAttribute("data-theme") || "dark";
+  const serverTheme = body.dataset.theme;
+  const storedTheme = localStorage.getItem(storageKey);
+
+  const initialTheme = serverTheme && serverTheme !== "system" ? serverTheme : storedTheme || "system";
+
   applyTheme(initialTheme);
 
   buttons.forEach((button) => {
     button.addEventListener("click", function () {
-      const resolvedTheme = button.dataset.themeValue === "light" ? "light" : "dark";
-      localStorage.setItem(storageKey, resolvedTheme);
-      applyTheme(resolvedTheme);
+      const theme = button.dataset.themeValue;
+      localStorage.setItem(storageKey, theme);
+      applyTheme(theme);
     });
   });
 
-  mediaQuery?.addEventListener?.("change", function (event) {
-    if (localStorage.getItem(storageKey)) return;
-    applyTheme(event.matches ? "dark" : "light");
+  mediaQuery.addEventListener("change", function () {
+    const currentTheme =
+      localStorage.getItem(storageKey);
+
+    if (currentTheme === "system") {
+      applyTheme("system");
+    }
   });
 }
 

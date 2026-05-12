@@ -6,6 +6,7 @@ Script con helpers de internacionalizaci처n, incluyendo la funci처n de traducci�
 import re
 
 from flask import g, has_request_context, redirect, request, session, url_for
+from flask_login import current_user
 
 from .en import TRANSLATIONS_EN
 from .es import TRANSLATIONS_ES
@@ -39,13 +40,20 @@ def normalize_language(lang) -> str:
 
 def get_locale() -> str:
     """
-    Obtiene el idioma activo de la petici처n actual.
+    Obtiene el idioma activo desde la petici처n del usuario o desde el perfil de usuario.
 
     Returns:
         C처digo de idioma activo o idioma por defecto si no hay petici처n.
     """
-    if has_request_context():
-        return normalize_language(session.get("lang"))
+    if not has_request_context():
+        return DEFAULT_LANGUAGE
+
+    if session.get("lang"):
+        return normalize_language(session["lang"])
+
+    if current_user.is_authenticated:
+        return normalize_language(current_user.language)
+
     return DEFAULT_LANGUAGE
 
 

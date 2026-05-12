@@ -87,14 +87,14 @@ services:
       - HF_HOME=/home/appuser/.cache/huggingface
       - GUNICORN_CMD_ARGS=--access-logfile - --error-logfile - --capture-output --log-level debug
       - OLLAMA_NUM_GPU=${OLLAMA_NUM_GPU}
-
-
     restart: unless-stopped
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
       - ./data:/data
       - hf_cache:/home/appuser/.cache/huggingface
+      -  ./app:/app/app
+      - ./migrations:/app/migrations
 
   nginx:
     image: nginx:1.27-alpine

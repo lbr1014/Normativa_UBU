@@ -4,6 +4,7 @@ Script para crear y configurar la aplicación Flask principal, incluyendo extens
 """
 
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
 from flask import Flask, flash, jsonify, redirect, request, url_for
@@ -99,7 +100,11 @@ def create_app():
         La aplicacion Flask ya configurada con extensiones, blueprints y
         manejadores globales.
     """
-    load_dotenv("secret.env")
+    project_root = Path(__file__).resolve().parents[3]
+
+    load_dotenv(project_root / ".env", override=True)
+    load_dotenv(project_root / "secret.env", override=True)
+    
     main_dir = os.path.dirname(os.path.dirname(__file__))
     app = Flask(
         __name__,
@@ -119,6 +124,7 @@ def create_app():
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
     app.config["DOCS_DIR"] = os.environ.get("DOCS_DIR", "pliegos")
     app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("MAX_CONTENT_LENGTH", str(50 * 1024 * 1024)))
+    app.config["PROFILE_UPLOAD_FOLDER"] = (Path(app.static_folder) / "uploads" / "profiles")
 
     # Flask Mail
     app.config["MAIL_SERVER"] = os.environ.get("MAIL_SERVER", "")

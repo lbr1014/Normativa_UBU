@@ -101,9 +101,34 @@
           </div>
         </div>
 
+        <div class="profile-preferences app-surface">
+          <h2 class="profile-section-title">
+            {{ t("user.preferences") }}
+          </h2>
+
+          <div class="profile-form-grid">
+
+            <div>
+              {{ form.theme_mode.label(class="form-label") }}
+              {{ form.theme_mode(class_="form-select form-select-lg") }}
+            </div>
+
+            <div>
+              {{ form.preferred_model.label(class="form-label") }}
+              {{ form.preferred_model(class_="form-select form-select-lg") }}
+            </div>
+
+            <div>
+              {{ form.language.label(class="form-label") }}
+              {{ form.language(class_="form-select form-select-lg") }}
+            </div>
+
+          </div>
+        </div>
+
         <div class="profile-actions">
           {{ form.submit(class_="btn btn-primary btn-lg") }}
-          <a href="{{ url_for('main.pag_principal') }}" class="btn btn-light btn-lg">{{ t("common.cancel") }}</a>
+          <a href="{{ url_for('main.pag_principal') }}" class="btn btn-secondary btn-lg app-btn-cancel">{{ t("common.cancel") }}</a>
           <button type="button"
                   class="btn btn-danger btn-lg"
                   data-bs-toggle="modal"
@@ -120,6 +145,14 @@
       </form>
     </div>
   </section>
+
+  <script>
+  window.profilePreferences = {
+    theme: "{{ current_user.theme_mode }}",
+    language: "{{ current_user.language }}",
+    model: "{{ current_user.preferred_model }}"
+  };
+</script>
 
   {% include "components/modal_delete.html" %}
 {% endblock %}

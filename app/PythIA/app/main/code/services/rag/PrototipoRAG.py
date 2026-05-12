@@ -1976,8 +1976,8 @@ def index_pdf(
                 for page in reader.pages:
                     parts.append(page.extract_text() or "")
                 full_text = "\n".join(parts)
-        except (OSError, PdfReadError, PdfStreamError, RuntimeError, TypeError, ValueError) as e:
-            logger.error("Error leyendo %s: %s", pdf_path.name, e)
+        except (OSError, PdfReadError, PdfStreamError, RuntimeError, TypeError, ValueError):
+            logger.exception("Error leyendo %s", pdf_path.name)
             return []
 
         if not full_text.strip():
@@ -1988,8 +1988,8 @@ def index_pdf(
         try:
             with timed_block(f"chunking {pdf_path.name}"):
                 chunks = chunk_text(full_text)
-        except (RuntimeError, TypeError, ValueError) as e:
-            logger.error("Error haciendo chunks en %s: %s", pdf_path.name, e)
+        except (RuntimeError, TypeError, ValueError):
+            logger.exception("Error haciendo chunks en %s", pdf_path.name)
             return []
 
         if not chunks:

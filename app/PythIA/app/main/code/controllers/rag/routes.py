@@ -209,10 +209,15 @@ def configure_model_choices(form: RAGQueryForm) -> None:
     Carga en el formulario los modelos LLM disponibles para Ollama.
     """
     form.model.choices = get_rag_llm_model_choices()
-    form.model.default = resolve_rag_llm_model()
-    if not form.model.data:
-        form.model.data = form.model.default
+    preferred_model = resolve_rag_llm_model()
 
+    if current_user.is_authenticated and current_user.preferred_model:
+        preferred_model = current_user.preferred_model
+
+    form.model.default = preferred_model
+
+    if not form.model.data:
+        form.model.data = preferred_model
 
 def configure_default_query_form(form: RAGDefaultQueryForm) -> None:
     """

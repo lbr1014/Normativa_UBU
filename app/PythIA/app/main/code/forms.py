@@ -29,6 +29,7 @@ from wtforms.validators import (
 from .countries import COUNTRY_CHOICES, DEFAULT_COUNTRY_CODE, country_choices
 from .error_handling import PasswordSecurity
 from .inetrnacionalizacion.tarduccion import get_locale, localize_form, t
+from .services.rag.PrototipoRAG import get_rag_llm_model_choices
 
 # Constantes para claves de traducción de campos comunes
 """str: Clave de traducción para el campo email."""
@@ -79,6 +80,7 @@ class LocalizedFlaskForm(FlaskForm):
     i18n_fields: ClassVar[dict[str, str]] = {}
     i18n_placeholders: ClassVar[dict[str, str]] = {}
     i18n_validator_messages: ClassVar[dict[str, dict[str, str]]] = {}
+    i18n_choices: ClassVar[dict[str, list[tuple[str, str]]]] = {}
 
     def __init__(self, *args, **kwargs):
         """
@@ -95,6 +97,12 @@ class LocalizedFlaskForm(FlaskForm):
         localize_form(self)
         if hasattr(self, "country_code"):
             self.country_code.choices = country_choices(get_locale())
+        if hasattr(self, "i18n_choices"):
+            for field_name, choices in self.i18n_choices.items():
+                field = getattr(self, field_name, None)
+
+                if field is not None:
+                    field.choices = [(value, t(label_key)) for value, label_key in choices]
 
 
 class EmptyForm(FlaskForm):
@@ -297,6 +305,9 @@ class EditUserForm(LocalizedFlaskForm):
         "country_code": COUNTRY,
         "profile_image": "user.profile_image",
         "new_password": "auth.new_password",
+        "theme_mode": "user.theme_mode",
+        "language": "user.language",
+        "preferred_model": "user.preferred_model",
         "submit": "common.save_changes",
     }
     i18n_placeholders: ClassVar[dict[str, str]] = {
@@ -314,14 +325,36 @@ class EditUserForm(LocalizedFlaskForm):
             "Length": MIN_LENGTH_PASSWRD,
             "PasswordSecurity": VALIDATE_PASSWRD_SECURITY,
         },
+        "profile_image": {
+            "FileAllowed": "validation.allowed_image_formats",
+        },
+    }
+    i18n_choices: ClassVar[dict[str, list[tuple[str, str]]]] = {
+       "theme_mode": [
+            ("light", "user.theme.light"),
+            ("dark", "user.theme.dark"),
+            ("system", "user.theme.system"),
+        ],
+        "language": [
+            ("es", "user.language.es"),
+            ("en", "user.language.en"),
+        ],
     }
 
     nombre = StringField("Nombre", validators=[Optional(), Length(min=2, max=50)])
     email = StringField("Email", validators=[Optional(), Email(), Length(max=255)])
     country_code = SelectField("Pais", choices=COUNTRY_CHOICES, default=DEFAULT_COUNTRY_CODE, validators=[Optional()])
-    profile_image = FileField("Foto de perfil", validators=[FileAllowed(["jpg", "jpeg", "png", "webp"], "Solo se admiten imagenes JPG, PNG o WEBP.")])
+    profile_image = FileField("Foto de perfil", validators=[FileAllowed(["jpg", "jpeg", "png", "webp"], "validation.allowed_image_formats")])
     new_password = PasswordField("Nueva contraseña", validators=[Optional(), Length(min=8), PasswordSecurity()])
+    theme_mode = SelectField("Modo", choices=[], default="system", validators=[Optional()])
+    preferred_model = SelectField("Modelo de lenguaje", choices=[], default="llama3.1:8b-instruct-q4_K_M", validators=[Optional()], validate_choice=False)
+    language = SelectField("Idioma", choices=[], default="es", validators=[Optional()])
     submit = SubmitField("Guardar cambios")
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.preferred_model.choices = get_rag_llm_model_choices()
 
 
 class RAGQueryForm(LocalizedFlaskForm):

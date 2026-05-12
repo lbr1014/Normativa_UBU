@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/luz.css') }}">
     {% block styles %}{% endblock %}
 </head>
-<body class="{% block body_class %}{% endblock %}" data-theme="dark">
+<body  data-theme="{{current_user.theme_mode if current_user.is_authenticated else 'system'}}">
 {% include "components/app_header.html" %}
 
   {% set breadcrumb_items = [] %}

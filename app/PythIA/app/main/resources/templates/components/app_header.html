@@ -11,26 +11,24 @@
   <div class="container-fluid px-3 px-lg-4">
     <nav class="navbar navbar-expand-lg app-navbar py-2{% if show_authenticated_header %} app-navbar-auth{% endif %}">
       {% if show_authenticated_header %}
-        <a class="navbar-brand app-brand app-user-brand me-0" href="{{ url_for('main.pag_principal') }}">
-          <div class="user-info">
-            <div class="user-summary">
-              <p class="welcome mb-0">{{ t("nav.hello", name=current_user.nombre) }}</p>
-              {% if current_user.is_admin %}
-                <span class="app-badge admin">{{ t("nav.admin") }}</span>
-              {% else %}
-                <span class="app-badge user">{{ t("nav.user") }}</span>
-              {% endif %}
-            </div>
-            <p class="last-login mb-0">
-              {{ t("nav.last_login") }}
-              {% if current_user.last_login %}
-                {{ current_user.last_login.strftime("%d/%m/%Y %H:%M:%S") }}
-              {% else %}
-                -
-              {% endif %}
-            </p>
+        <div class="user-info">
+          <div class="user-summary">
+            <p class="welcome mb-0">{{ t("nav.hello", name=current_user.nombre) }}</p>
+            {% if current_user.is_admin %}
+              <span class="app-badge admin">{{ t("nav.admin") }}</span>
+            {% else %}
+              <span class="app-badge user">{{ t("nav.user") }}</span>
+            {% endif %}
           </div>
-        </a>
+          <p class="last-login mb-0">
+            {{ t("nav.last_login") }}
+            {% if current_user.last_login %}
+              {{ current_user.last_login.strftime("%d/%m/%Y %H:%M:%S") }}
+            {% else %}
+              -
+            {% endif %}
+          </p>
+        </div>
         <div class="app-header-wordmark" aria-label="PythIA">
           <img src="{{ url_for('static', filename='img/PythIA_letras.png') }}" alt="PythIA" class="logo-header logo-header-letters">
         </div>

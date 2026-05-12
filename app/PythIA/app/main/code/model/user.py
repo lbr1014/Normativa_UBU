@@ -27,6 +27,9 @@ class User(db.Model, UserMixin):
         profile_image: Ruta relativa a la imagen de perfil del usuario, si existe.
         password_hash: Contraseña cifrada.
         last_login: Fecha y hora del último inicio de sesión.
+        theme_mode: Modo de tema preferido por el usuario.
+        preferred_model: Modelo de lenguaje preferido por el usuario.
+        language: Idioma preferido por el usuario.
         is_admin: Indica si el usuario tiene permisos de administración.
     """
 
@@ -40,10 +43,14 @@ class User(db.Model, UserMixin):
     password_hash = db.Column(db.String(255), nullable=False)
     last_login = db.Column(db.DateTime(timezone=True), nullable=True)
     is_admin = db.Column(db.Boolean, nullable=False, default=False)
+    theme_mode = db.Column(db.String(20), nullable=False, default="system", server_default="system")  
+    preferred_model = db.Column(db.String(50), nullable=False, default="llama3.1:8b-instruct-q4_K_M", server_default="llama3.1:8b-instruct-q4_K_M")
+    language = db.Column(db.String(20), nullable=False, default="es", server_default="es")
 
     def __init__(self, **kwargs) -> None:
         """
         Inicializa el usuario con Espana como pais por defecto.
+        
         Args:
             **kwargs: Valores iniciales del modelo SQLAlchemy.
         """
