@@ -36,7 +36,7 @@
     </div>
 
     <div class="rag-folder mt-4">
-      <ul class="nav nav-tabs rag-folder-tabs" id="ragModeTabs" role="tablist">
+      <ul class="nav nav-tabs rag-folder-tabs" id="ragModeTabs">
         <li class="nav-item">
           <button class="nav-link active" id="rag-chat-tab" data-bs-toggle="tab" data-bs-target="#rag-chat-pane" type="button" role="tab" aria-controls="rag-chat-pane" aria-selected="true">
             {{ t("rag.mode_chat") }}
@@ -68,7 +68,10 @@
 {% block scripts %}
   {{ super() }}
   <script src="{{ url_for('static', filename='js/answer_renderer.js') }}"></script>
-  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"
+          integrity="sha512-vc58qvvBdrDR4etbxMdlTt4GBQk1qjvyORR2nrsPsFPyrs+/u5c3+1Ct6upOgdZoIl7eq6k3a1UPDSNAQi/32A=="
+          crossorigin="anonymous"
+          referrerpolicy="no-referrer"></script>
   <script>
   const sharedModelSelector = document.getElementById("rag-model-selector");
 

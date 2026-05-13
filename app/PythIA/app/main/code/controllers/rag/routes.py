@@ -139,7 +139,7 @@ def build_model_usage_index_payload(months: int = 12) -> dict:
 
 @rag_bp.get("/consultas-guiadas")
 @login_required
-def default_query_page() -> str:
+def default_query_page() -> ResponseReturnValue:
     """
     Muestra un formulario guiado para construir consultas frecuentes sobre pliegos.
 
@@ -153,7 +153,7 @@ def default_query_page() -> str:
 
 @rag_bp.get("/modelos")
 @login_required
-def model_comparison_page() -> str:
+def model_comparison_page() -> ResponseReturnValue:
     """
     Muestra comparativas de uso y rendimiento por modelo RAG.
     Los administradores ven el uso global y los usuarios normales ven sus propias
