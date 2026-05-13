@@ -83,6 +83,7 @@ def _install_rag_stub() -> None:
     module.qdrant_delete_by_filename = lambda filename: None
     module.index_pliegos_dir = lambda path: {}
     module.index_pdf = lambda *args, **kwargs: []
+    module.index_markdown = lambda *args, **kwargs: []
     module.obtener_mejor_chunk = obtener_mejor_chunk
     sys.modules["app.main.code.services.rag.PrototipoRAG"] = module
 
