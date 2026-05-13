@@ -757,23 +757,28 @@ Los costes totales del proyecto vienen desglosados en la tabla~\ref{tabla:coste}
 
 El desarrollo del proyecto PythIA tiene una viabilidad legal favorable, ya que las tecnologías empleadas, la recopilación de datos y el despliegue del sistema pueden realizarse respetando la normativa vigente. No obstante, debido a que el sistema utiliza técnicas de \eng{Web Scraping}, almacenamiento documental, autenticación de usuarios y modelos de inteligencia artificial, es necesario considerar distintos aspectos legales relacionados con la protección de datos (ver sección~\hyperref[subsec:proctdatos]{A.4.1}), la propiedad intelectual (ver sección~\hyperref[subsec:propiedad]{A.4.2}), el uso ético de la información pública (ver sección~\hyperref[subsec:webScraping]{A.4.3}), la licencias de \eng{software} (ver sección~\hyperref[subsec:IA]{A.4.4}) y la seguridad informática (ver sección~\hyperref[subsec:seg]{A.4.5}).
 
-\subsection{Protección de datos personales}\label{subsec:proctdatos}
+\textbf{Protección de datos personales}\label{subsec:proctdatos}
 
 La aplicación permite la gestión de usuarios mediante registro, autenticación e historial de consultas. Por ello, el sistema debe cumplir el Reglamento General de Protección de Datos (RGPD)~\cite{legal:procdatos} de la Unión Europea y la legislación española complementaria (LOPDGDD)~\cite{legal:procdatoses}. Concretamente el proyecto debe respetar el principio de minimización de datos, el almacenamiento seguro de contraseñas utilizando \file{hash}, la confidencialidad de las consultas realizadas por los usuarios, la protección de las variables sensibles mediante ficheros de entorno, el uso de conexiones cifradas mediante \file{HTTPS} y certificados \file{SSL/TLS}.
+
+La aplicación cumple estos requisitos debido a que únicamente almacena los datos estrictamente necesarios para el funcionamiento del sistema, como el correo electrónico, el nombre de usuario y las credenciales cifradas. Además, la contraseña no se almacenan en texto plano, sino utilizando funciones hash seguras proporcionadas por Werkzeug. Las claves privadas y secretos de la aplicación se gestionan mediante variables de entorno y archivos externos no incluidos en el repositorio público, reduciendo el riesgo de exposición accidental de información sensible.
+
+Por otra parte, el despliegue de la aplicación utiliza \file{HTTPS} y certificados \file{SSL/TLS}, lo que garantiza el cifrado de las comunicaciones entre el cliente y el servidor. Esto evita ataques de interceptación de tráfico y protege tanto las credenciales de los usuarios como las consultas realizadas al sistema RAG.
  
-\subsection{Propiedad intelectual y derechos de autor}\label{subsec:propiedad}
+\textbf{Propiedad intelectual y derechos de autor}\label{subsec:propiedad}
 
 El código fuente desarrollado en el proyecto está protegido por la legislación de propiedad intelectual. Se conservan los derechos sobre el \eng{software} desarrollado, salvo por las condiciones establecidas por la universidad para los Trabajos Fin de Grado, cuya normativa se basa en el Real Decreto Legislativo 1/1996, por el que se aprueba la Ley de Propiedad Intelectual~\cite{legal:propintelect}.
 
-Además, el proyecto utiliza múltiples bibliotecas y herramientas de terceros, como Flasl, Docker, Qdrant, Playwright, Selenium y Ollama. Todas estas herramientas emplean licencias \eng{open source} compatibles con el desarrollo académico y de investigación (ver tabla~\ref{tabla:licencias}). Por ello, el proyecto es legalmente viable siempre que se mantengan las atribuciones correspondientes, se respeten las condiciones de redistribución de cada licencia y no se eliminen los avisos de \eng{copyright} de los terceros.
+Además, el proyecto utiliza múltiples bibliotecas y herramientas de terceros, como Flask, Docker, Qdrant, Playwright, Selenium y Ollama. Todas estas herramientas emplean licencias de \eng{software} libre y \eng{open source} compatibles con el desarrollo académico y de investigación (ver tabla~\ref{tabla:licencias}). Estas licencias permiten el uso, modificación y redistribución del software siempre que se mantengan las condiciones establecidas por cada autor.
 
-\begin{table}[p]
-	\centering
-	\begin{tabularx}{\linewidth}{ p{0.2\columnwidth} p{0.2\columnwidth} p{0.52\columnwidth} }
-		\toprule
-		\textbf{Herramienta} & \textbf{Licencia} & \textbf{Características} \\
-		\toprule
-		Flask & BSD-3-Clause & \eng{Framework web} ligero en Python utilizado para desarrollar la aplicación web del sistema PythIA \\
+
+\tablaMultipaginaColor
+	{Licencias de las herramientas de la aplicación.}
+	{|L{0.2\columnwidth}|L{0.2\columnwidth}|L{0.6\columnwidth}|}
+	{3}
+	{licencias}
+	{\textbf{Herramienta} & \textbf{Licencia} & \textbf{Uso en el sistema}}
+	{		Flask & BSD-3-Clause & \eng{Framework web} ligero en Python utilizado para desarrollar la aplicación web del sistema PythIA \\
 		Jinja2 & BSD-3-Clause & Motor de plantillas utilizado por Flask para generar HTML dinámico\\
 		Werkzeug & BSD-3-Clause & Biblioteca WSGI utilizada por Flask para routing, peticiones HTTP y utilidades web\\
 		Flask-Loging & MT & Gestión de autenticación, sesiones y control de usuarios autenticados.\\
@@ -799,24 +804,35 @@ Además, el proyecto utiliza múltiples bibliotecas y herramientas de terceros, 
 	Markdownify & MIT & Conversión automática de HTML a Markdown\\
 	PyMuPDF & AGPL-3.0 & Biblioteca para lectura y procesamiento de documentos PDF \\
 	pytest & MIT & Framework de testing utilizado para pruebas unitarias y funcionales \\
-	SonarQube / SonarCloud Scanner & LGPL v3 & Herramienta de análisis estático y calidad del código \\
-		\bottomrule
-	\end{tabularx}
-	\caption{Licencias de las herramientas de la aplicación.}
-	\label{tabla:licencias}
-\end{table}
+	SonarQube / SonarCloud Scanner & LGPL v3 & Herramienta de análisis estático y calidad del código \\}
 
-\subsection{Legalidad del \eng{Web Scraping}}\label{subsec:webScraping}
+La aplicación cumple estos requisitos debido a que todas las dependencias utilizadas se han obtenido desde sus repositorios oficiales y se utilizan respetando las condiciones de sus licencias. Además, el proyecto no redistribuye versiones modificadas de las herramientas utilizadas ni elimina las referencias de autoría originales.
 
-El proyecto incorpora técnicas de \eng{Web Scraping} para recopilar licitaciones públicas desde la Plataforma de \contsec{}~\cite{legal:contratosSecPub}. La información extraída es pública y accesible libremente, por lo que su utilización tiene encaje legal siempre que no se vulneren mecanismos de autenticación o acceso restringido, no se produzca una sobrecarga intencionada de los servidores, se respeten las condiciones de uso del protal y se utilice la información con fines académicos y de investigación. 
+El uso de \eng{software open source} aporta además ventajas importantes al proyecto, como la transparencia del código, la ausencia de costes de licencia y la facilidad para reproducir el entorno de desarrollo y despliegue.
 
-Según el \file{robots.txt}~\cite{legal:robots}
+\textbf{Legalidad del \eng{Web Scraping}}\label{subsec:webScraping}
 
-\subsection{Uso de modelos de Inteligencia Artificial}\label{subsec:IA}
+El proyecto incorpora técnicas de \eng{Web Scraping} para recopilar licitaciones públicas desde la Plataforma de \contsec{}~\cite{legal:contratosSecPub}. La información extraída es documentación pública accesible libremente por cualquier ciudadano, por lo que su utilización con fines académicos y de investigación resulta compatible con la normativa vigente.
+
+La aplicación cumple con los requisitos legales del \eng{Web Scraping} debido a que no accede a no accede a información privada, no evade mecanismos de autenticación ni vulnera restricciones de acceso. Además, el sistema solo realiza consultas automatizadas sobre información pública ya accesible manualmente desde la \eng{web} oficial.
+
+También se ha tenido en cuenta el archivo \file{robots.txt}~\cite{legal:robots} de la Plataforma \contsec{}. Este archivo forma parte del estándar Robots Exclusion Protocol y permite a los administradores de una página web indicar qué rutas pueden o no ser rastreadas por \eng{bots} automátizados. Aunque este protocolo no tiene carácter legal vinculante, su cumplimiento se considera una buena práctica ética en el ámbito del \eng{Web Scraping}.
+
+En el caso de la Plataforma de \contsec{}, el archivo \myhref{https://contrataciondelestado.es/robots.txt}{robots.txtx} restringe el uso de \eng{bots} automatizados para rastrear el contenido del sitio \eng{web}. Sin embargo, este mecanismo no constituye una medida de protección técnica ni un sistema de autenticación, sino una directriz ética orientada principalmente a motores de búsqueda y sistemas automáticos de indexación. Por lo cual, la aplicación desarrollada cumple con estas restricciones debido a que el sistema únicamente accede a información pública accesible manualmente desde el navegador por cualquier usuario. Además, el \eng{scraper} implementado en el proyecto evita realizar peticiones masivas agresivas, incorpora esperas entre solicitudes y limita la frecuencia de acceso para no sobrecargar los servidores del portal público. Esto permite que el comportamiento automatizado sea equivalente al de un usuario humano navegando por la página.
+
+\textbf{Uso de modelos de Inteligencia Artificial}\label{subsec:IA}
 
 El sistema usa modelos LLM y sistemas RAG para generar respuestas contextualizadas. Actualmente, la regulación europea sobre inteligencia artificial se encuentra definida por el Reglamento Europeo de Inteligencia Artificial (AI Act)~\cite{legal:IA}, el cual clasifica los sistemas IA según su nivel de riesgo. Dado que el sistema tiene fines académicos, no toma decisiones automatizadas con efectos legales, no realiza perfilado sensible de usuarios y funciona como sistemas de apoyo documental, puede considerarse un sistema de riesgo limitado. 
 
-\subsection{Seguridad Informática}\label{subsec:seg}
+Asimismo, el proyecto mantiene transparencia respecto al uso de inteligencia artificial, ya que el usuario conoce que las respuestas son generadas por un sistema basado en modelos de lenguaje y recuperación semántica. También se permite consultar las fuentes documentales utilizadas para construir la respuesta, aumentando la explicabilidad del sistema.
 
-El despliegue del sistema utilizando \file{Docker, Gunicorn, Nginx y HTTPS} permite cumplir buenas prácticas de seguridad. Además, el uso de variables de entorno para secretos, separación entre servicios, control de acceso mediante autenticación y certificados \file{SSL/TLS} reduce el riesgo relacionado con accesos no autorizados o filtraciones de información, cumpliendo asi con el Esquema Nacional de Seguridad (ENS)~\cite{legal:ENS}. 
+Por otro lado, el despliegue local de los modelos de lenguaje mediante Ollama permite reducir la dependencia de servicios externos y limita la transferencia de información a terceros, mejorando así la privacidad y el control sobre los datos procesados.
+
+\textbf{Seguridad Informática}\label{subsec:seg}
+
+La aplicación implementa diversas medidas destinadas a garantizar la seguridad del sistema y de la información almacenada, cumpliendo así con el Esquema Nacional de Seguridad (ENS)~\cite{legal:ENS}. Entre ellas destacan el uso de \file{HTTPS}, la autenticación de usuarios, la separación de secretos mediante variables de entorno, el despliegue mediante Docker, el aislamiento de servicios y el uso de certificados \file{SSL/TLS}.
+
+La aplicación cumple estos requisitos debido a que emplea una arquitectura cliente-servidor multicapa donde los distintos componentes se encuentran separados y encapsulados en contenedores Docker independientes. Además, el uso de Gunicorn y Nginx permite mejorar la seguridad y estabilidad del despliegue en producción.
+
+Por otro lado, el sistema limita el acceso a determinadas funcionalidades mediante roles de usuario, evitando que usuarios no autorizados puedan gestionar documentos o modificar configuraciones críticas del sistema. También se utilizan mecanismos de validación de formularios y protección CSRF proporcionados por Flask-WTF para reducir vulnerabilidades comunes en aplicaciones web.
 
