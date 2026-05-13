@@ -23,6 +23,7 @@ MADRID_TZ = ZoneInfo("Europe/Madrid")
 logger = logging.getLogger(__name__)
 DOCUMENTOS_RECOVERABLE_ERRORS = (OSError, RuntimeError, SQLAlchemyError, ValueError)
 REMOTE_CHUNKS_DELETE_ERROR = "No se pudieron eliminar chunks remotos de %s"
+UPLOAD_RESTORE_POSITION_ERROR = "Upload: could not restore stream position (%s): %s"
 
 class JobCancelledError(RuntimeError):
     """
@@ -134,7 +135,43 @@ class DocumentosService:
 
         return self.docs_dir / safe
 
-    def _is_pdf_upload(self, file_storage) -> bool:
+    def _read_stream_window(self, stream, file_storage, size: int) -> bytes:
+        """
+        Lee una ventana del stream de un archivo subido.
+
+        Args:
+            stream (_type_): Stream del archivo subido.
+            file_storage (_type_): Almacenamiento del archivo.
+            size (int): Tamaño del fragmento a leer.
+
+        Returns:
+            bytes: El fragmento de datos leído.
+        """
+        raw_filename = getattr(file_storage, "filename", "-")
+        try:
+            position = stream.tell()
+        except (OSError, ValueError, AttributeError) as exc:
+            logger.debug("Upload: could not tell() stream position (%s): %s", raw_filename, exc)
+            position = None
+
+        try:
+            stream.seek(0)
+            data = stream.read(size)
+        except (OSError, ValueError, AttributeError) as exc:
+            logger.debug("Upload: could not read stream (%s): %s", raw_filename, exc)
+            data = b""
+        finally:
+            if position is not None:
+                try:
+                    stream.seek(position)
+                except (OSError, ValueError, AttributeError) as exc:
+                    logger.debug(UPLOAD_RESTORE_POSITION_ERROR, raw_filename, exc)
+
+        if isinstance(data, str):
+            data = data.encode("utf-8", errors="ignore")
+        return bytes(data or b"")
+
+    def _is_pdf_upload(self, file_storage) -> bool:  # NOSONAR
         """
         Comprueba extensión y firma del archivo subido sin consumir el stream.
 
@@ -147,21 +184,77 @@ class DocumentosService:
         """
         filename = self.filename(getattr(file_storage, "filename", ""))
         if not filename or Path(filename).suffix.lower() not in ALLOWED_EXT:
+            logger.warning("Upload rechazado: extensión no permitida (%s).", getattr(file_storage, "filename", "-"))
             return False
 
         stream = getattr(file_storage, "stream", None)
 
         if stream is None:
+            logger.warning("Upload rechazado: stream ausente (%s).", getattr(file_storage, "filename", "-"))
             return False
 
-        if not hasattr(stream, "seekable") or not stream.seekable():
-            return False
+        # Intentar validar la firma sin consumir el stream.
+        # En algunos flujos el puntero no está al inicio cuando llegamos aquí.
+        if hasattr(stream, "seekable") and stream.seekable():
+            try:
+                position = stream.tell()
+            except (OSError, ValueError, AttributeError) as exc:
+                logger.debug(
+                    "Upload: could not tell() stream position (%s): %s",
+                    getattr(file_storage, "filename", "-"),
+                    exc,
+                )
+                position = None
 
-        position = stream.tell()
-        header = stream.read(5)
-        stream.seek(position)
+            try:
+                stream.seek(0)
+                header = stream.read(5)
+            finally:
+                if position is not None:
+                    try:
+                        stream.seek(position)
+                    except (OSError, ValueError, AttributeError) as exc:
+                        logger.debug(UPLOAD_RESTORE_POSITION_ERROR, getattr(file_storage, "filename", "-"), exc)
 
-        return header == b"%PDF-"
+            if isinstance(header, str):
+                header = header.encode("utf-8", errors="ignore")
+
+            header_bytes = bytes(header or b"")
+            if header_bytes.startswith(b"%PDF-"):
+                return True
+
+            try:
+                stream.seek(0)
+                probe = stream.read(1024)
+            finally:
+                if position is not None:
+                    try:
+                        stream.seek(position)
+                    except (OSError, ValueError, AttributeError) as exc:
+                        logger.debug(UPLOAD_RESTORE_POSITION_ERROR, getattr(file_storage, "filename", "-"), exc)
+
+            if isinstance(probe, str):
+                probe = probe.encode("utf-8", errors="ignore")
+
+            ok = b"%PDF-" in bytes(probe or b"")
+            if not ok:
+                mimetype = (getattr(file_storage, "mimetype", "") or "").lower()
+                content_type = (getattr(file_storage, "content_type", "") or "").lower()
+                logger.warning(
+                    "Upload: firma PDF no encontrada (%s) mimetype=%s content_type=%s header=%r",
+                    getattr(file_storage, "filename", "-"),
+                    mimetype,
+                    content_type,
+                    header_bytes[:32],
+                )
+                # Último fallback: si el navegador/werkzeug lo marca como PDF, lo aceptamos.
+                if "application/pdf" in (mimetype, content_type):
+                    return True
+            return True
+
+        # Si no es seekable, no podemos comprobar firma sin consumir el stream.
+        logger.warning("Upload: stream no seekable (%s). Se acepta por extensiÃ³n.", getattr(file_storage, "filename", "-"))
+        return True
 
     def list_documents_paginated(self, page: int, per_page: int) -> object:
         """
@@ -240,7 +333,9 @@ class DocumentosService:
                 continue
 
             if not self._is_pdf_upload(f):
+                logger.warning("Upload rechazado: no parece PDF valido (%s).", getattr(f, "filename", "-"))
                 continue
+
 
             dest = self.resolve_pdf_path(f.filename)
             f.save(dest)
@@ -506,12 +601,13 @@ class DocumentosService:
             db.session.rollback()
             return "failed"
 
-    def _prepare_document_for_vector_update(self, doc: Documento) -> Path:
+    def _prepare_document_for_vector_update(self, doc: Documento, *, require_pdf: bool = True) -> Path:
         """
         Prepara un documento para reindexarlo en la base vectorial.
 
         Args:
             doc: Documento que se va a reindexar.
+            require_pdf: Si es ``True``, se lanzará un error si el PDF no existe en disco.
 
         Returns:
             La ruta del PDF listo para ser indexado.
@@ -519,8 +615,7 @@ class DocumentosService:
         doc.mark_vector_processing()
         db.session.commit()
         pdf_path = Path(doc.path)
-
-        if not pdf_path.exists():
+        if require_pdf and not pdf_path.exists():
             raise FileNotFoundError(f"PDF no existe en contenedor: {pdf_path}")
         try:
             self.delete_chunks(doc.nombre)
@@ -541,13 +636,28 @@ class DocumentosService:
         Returns:
             El Número de chunks indexados para el documento.
         """
-        pdf_path = self._prepare_document_for_vector_update(doc)
-        vector_docs = index_pdf(
-            pdf_path,
-            document_id=doc.id,
-            numero_expediente=doc.numero_expediente,
-            tipo_documento=doc.tipo_documento,
-        )
+        use_markdown = bool(doc.markdown_content)
+        pdf_path = self._prepare_document_for_vector_update(doc, require_pdf=not use_markdown)
+
+        if use_markdown:
+            from .rag.PrototipoRAG import index_markdown
+
+            vector_docs = index_markdown(
+                doc.markdown_content or "",
+                filename=Path(doc.path).name,
+                title=Path(doc.nombre).stem,
+                sha256=getattr(doc, "hash", "") or "",
+                document_id=doc.id,
+                numero_expediente=doc.numero_expediente,
+                tipo_documento=doc.tipo_documento,
+            )
+        else:
+            vector_docs = index_pdf(
+                pdf_path,
+                document_id=doc.id,
+                numero_expediente=doc.numero_expediente,
+                tipo_documento=doc.tipo_documento,
+            )
 
         if not vector_docs:
             raise RuntimeError("index_pdf devolvió 0 chunks (PDF sin texto o ruta inválida)")

@@ -67,8 +67,6 @@ def _get_required_env(var_name: str) -> str:
     if value:
         return value
     if _is_test_env():
-        # Defaults solo para tests/CI: evita que create_app reviente cuando el
-        # pipeline no inyecta secretos reales.
         return "test-secret"
     raise RuntimeError(f"{var_name} no está definida. Revisa tu .env o variables de entorno.")
 
@@ -109,6 +107,49 @@ def _build_database_url_from_env() -> str | None:
     return f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}"
 
 
+def _configure_max_content_length(app: Flask) -> None:
+    """
+    Configura la longitud máxima del contenido para la aplicación Flask.
+
+    Args:
+        app (Flask): La aplicación Flask a configurar.
+    """
+    max_len_raw = os.environ.get("MAX_CONTENT_LENGTH")
+    default_len = 250 * 1024 * 1024
+    if max_len_raw is None:
+        max_len = default_len
+    else:
+        try:
+            max_len = int(max_len_raw)
+        except ValueError:
+            max_len = default_len
+    app.config["MAX_CONTENT_LENGTH"] = None if max_len <= 0 else max_len
+
+
+def _configure_data_dirs(app: Flask, *, project_root: Path) -> None:
+    """
+    Configura los directorios de datos para la aplicación Flask.
+
+    Args:
+        app (Flask): La aplicación Flask a configurar.
+        project_root (Path): La ruta raíz del proyecto.
+    """
+    data_dir = Path(os.environ.get("DATA_DIR") or (project_root / "data"))
+    app.config["DATA_DIR"] = data_dir
+
+    docs_dir_env = os.environ.get("DOCS_DIR")
+    docs_dir = Path(docs_dir_env) if docs_dir_env else (data_dir / "pliegos")
+    if not docs_dir.is_absolute():
+        docs_dir = data_dir / docs_dir
+    app.config["DOCS_DIR"] = docs_dir
+
+    profile_dir_env = os.environ.get("PROFILE_UPLOAD_FOLDER")
+    profile_dir = Path(profile_dir_env) if profile_dir_env else (data_dir / "profiles")
+    if not profile_dir.is_absolute():
+        profile_dir = data_dir / profile_dir
+    app.config["PROFILE_UPLOAD_FOLDER"] = profile_dir
+
+
 def create_app():
     """
     Crea y configura la instancia principal de Flask.
@@ -142,32 +183,16 @@ def create_app():
 
     app.config["SQLALCHEMY_DATABASE_URI"] = db_url
     app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-    app.config["DOCS_DIR"] = os.environ.get("DOCS_DIR", "pliegos")
-    app.config["MAX_CONTENT_LENGTH"] = int(os.environ.get("MAX_CONTENT_LENGTH", str(50 * 1024 * 1024)))
-    
-    # Directorios de datos: permitir override por entorno (Docker/producción).
-    data_dir = Path(os.environ.get("DATA_DIR") or (project_root / "data"))
-    app.config["DATA_DIR"] = data_dir
 
-    # Si DOCS_DIR no es absoluto, lo consideramos relativo a DATA_DIR.
-    docs_dir_env = os.environ.get("DOCS_DIR")
-    docs_dir = Path(docs_dir_env) if docs_dir_env else (data_dir / "pliegos")
-    if not docs_dir.is_absolute():
-        docs_dir = data_dir / docs_dir
-    app.config["DOCS_DIR"] = docs_dir
+    _configure_max_content_length(app)
+    _configure_data_dirs(app, project_root=project_root)
 
-    profile_dir_env = os.environ.get("PROFILE_UPLOAD_FOLDER")
-    profile_dir = Path(profile_dir_env) if profile_dir_env else (data_dir / "profiles")
-    if not profile_dir.is_absolute():
-        profile_dir = data_dir / profile_dir
-    app.config["PROFILE_UPLOAD_FOLDER"] = profile_dir
+    data_dir = app.config["DATA_DIR"]
 
     try:
         app.config["PROFILE_UPLOAD_FOLDER"].mkdir(parents=True, exist_ok=True)
     except (PermissionError, FileNotFoundError):
-        # En algunos entornos (CI) PROFILE_UPLOAD_FOLDER suele apuntar a /data/...
-        # pero el runner no permite escribir ahí. Hacemos fallback a DATA_DIR.
-        fallback_profile_dir = (data_dir / "profiles").resolve()
+        fallback_profile_dir = (Path(data_dir) / "profiles").resolve()
         app.config["PROFILE_UPLOAD_FOLDER"] = fallback_profile_dir
         fallback_profile_dir.mkdir(parents=True, exist_ok=True)
 

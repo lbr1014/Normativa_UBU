@@ -1,5 +1,6 @@
 document.addEventListener("DOMContentLoaded", () => {
   const progressBox = document.getElementById("scraping-progress");
+  const progressEl = progressBox?.querySelector("progress") || progressBox?.querySelector(".progress");
   const bar = progressBox?.querySelector(".progress-bar");
   const text = progressBox?.querySelector(".progress-text");
   const cancelButton = document.getElementById("cancel-job-button");
@@ -54,11 +55,19 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function toggleButtons(disabled) {
-    [uploadForm, vectorForm, markdownForm, scrapingForm].forEach((form) => {
+    // Permite subir PDF aunque haya un job activo, pero deshabilita los botones que inician procesos para evitar conflictos.
+    [vectorForm, markdownForm, scrapingForm].forEach((form) => {
       form?.querySelectorAll("button").forEach((button) => {
         if (button === cancelButton) return;
         button.disabled = disabled;
       });
+    });
+
+    // En el panel de subida, deshabilitamos solo los botones que disparan procesos
+    uploadForm?.querySelectorAll("button").forEach((button) => {
+      if (button === cancelButton) return;
+      const isProcessButton = button.form && ["scrapingForm", "markdownForm", "vectorForm"].includes(button.form.id);
+      if (isProcessButton) button.disabled = disabled;
     });
   }
 
@@ -69,6 +78,29 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!progressBox) return;
     progressBox.classList.remove("d-none");
     progressBox.style.display = "block";
+  }
+
+  function showToast(title, message, variant = "success") {
+    const container = document.getElementById("pythia-toast-container");
+    if (!container || !window.bootstrap?.Toast) return;
+
+    const toastEl = document.createElement("div");
+    toastEl.className = `toast align-items-center text-bg-${variant} border-0`;
+    toastEl.role = "status";
+    toastEl.ariaLive = "polite";
+    toastEl.ariaAtomic = "true";
+    toastEl.innerHTML = `
+      <div class="d-flex">
+        <div class="toast-body">
+          <strong class="me-2">${title}</strong>${message || ""}
+        </div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>`;
+
+    container.appendChild(toastEl);
+    const toast = new window.bootstrap.Toast(toastEl, { delay: 4500 });
+    toastEl.addEventListener("hidden.bs.toast", () => toastEl.remove());
+    toast.show();
   }
 
   function setCancelVisible(visible) {
@@ -95,31 +127,51 @@ document.addEventListener("DOMContentLoaded", () => {
     showProgressBox();
     if (text) text.textContent = message;
     if (bar) {
-      bar.style.animation = "none";
+      bar.classList.add("is-indeterminate");
+      bar.classList.add("progress-bar-striped", "progress-bar-animated");
       bar.style.width = "0%";
-      bar.value = 0;
     }
+    if (progressEl instanceof HTMLProgressElement) progressEl.value = 0;
+    if (progressEl) progressEl.setAttribute("aria-valuenow", "0");
     toggleButtons(true);
   }
 
   function setUIProgress(percent, message) {
-    if (!progressBox || !bar) return;
+    if (!progressBox) return;
     showProgressBox();
     const boundedPercent = Math.max(0, Math.min(100, percent));
-    bar.style.animation = "none";
-    bar.style.width = `${boundedPercent}%`;
-    bar.value = boundedPercent;
+    if (bar) {
+      bar.classList.remove("is-indeterminate");
+      bar.classList.remove("progress-bar-animated");
+      bar.style.width = `${boundedPercent}%`;
+    }
+    if (progressEl instanceof HTMLProgressElement) progressEl.value = boundedPercent;
+    if (progressEl) progressEl.setAttribute("aria-valuenow", String(boundedPercent));
+    if (text) text.textContent = message;
+  }
+
+  function setUIIndeterminate(message) {
+    showProgressBox();
+    if (bar) {
+      bar.classList.add("is-indeterminate");
+      bar.classList.add("progress-bar-striped", "progress-bar-animated");
+      bar.style.width = "0%";
+    }
+    if (progressEl instanceof HTMLProgressElement) progressEl.value = 0;
+    if (progressEl) progressEl.setAttribute("aria-valuenow", "0");
     if (text) text.textContent = message;
   }
 
   function setUIDone(message) {
     setUIProgress(100, message);
+    showToast(tr("jobs.done_generic"), message || tr("jobs.done_generic"), "success");
     setActiveJob(null, null);
     window.setTimeout(() => window.location.reload(), 600);
   }
 
   function setUICancelled(message) {
     setUIProgress(0, message);
+    showToast(tr("jobs.cancelled_generic"), message || tr("jobs.cancelled_generic"), "secondary");
     setActiveJob(null, null);
     toggleButtons(false);
   }
@@ -127,11 +179,11 @@ document.addEventListener("DOMContentLoaded", () => {
   function setUIFailed(message) {
     showProgressBox();
     if (bar) {
-      bar.style.animation = "none";
       bar.style.width = "100%";
-      bar.value = 100;
     }
+    if (progressEl) progressEl.setAttribute("aria-valuenow", "100");
     if (text) text.textContent = message;
+    showToast(tr("jobs.failed_generic"), message || tr("jobs.failed_generic"), "danger");
     setActiveJob(null, null);
     toggleButtons(false);
   }
@@ -168,14 +220,16 @@ document.addEventListener("DOMContentLoaded", () => {
       try {
         const data = await fetchJson(statusUrl);
         const status = data.status;
-        const progress = Number(data.progress ?? 0);
+        const hasProgress = data.progress !== null && data.progress !== undefined;
+        const progress = hasProgress ? Number(data.progress) : 0;
         const currentDoc = data.current_doc;
 
         if (status === "running" || status === "queued") {
           const message = currentDoc
             ? tr("vector.updating_doc", { progress, name: currentDoc })
             : tr("vector.updating", { progress });
-          setUIProgress(progress, message);
+          if (hasProgress) setUIProgress(progress, message);
+          else setUIIndeterminate(message);
           await new Promise((resolve) => window.setTimeout(resolve, 1000));
           continue;
         }
@@ -235,11 +289,13 @@ document.addEventListener("DOMContentLoaded", () => {
       try {
         const data = await fetchJson(statusUrl);
         const status = data.status;
-        const progress = Number(data.progress ?? 0);
+        const hasProgress = data.progress !== null && data.progress !== undefined;
+        const progress = hasProgress ? Number(data.progress) : 0;
         const message = data.message || tr("markdown.converting_doc", { name: progress + "%" });
 
         if (status === "running" || status === "queued") {
-          setUIProgress(progress, message);
+          if (hasProgress) setUIProgress(progress, message);
+          else setUIIndeterminate(message);
           await new Promise((resolve) => window.setTimeout(resolve, 1000));
           continue;
         }
@@ -299,11 +355,13 @@ document.addEventListener("DOMContentLoaded", () => {
       try {
         const data = await fetchJson(statusUrl);
         const status = data.status;
-        const progress = Number(data.progress ?? 0);
+        const hasProgress = data.progress !== null && data.progress !== undefined;
+        const progress = hasProgress ? Number(data.progress) : 0;
         const message = data.message || tr("scraping.starting_ui");
 
         if (status === "running" || status === "queued") {
-          setUIProgress(progress, message);
+          if (hasProgress) setUIProgress(progress, message);
+          else setUIIndeterminate(message);
           await new Promise((resolve) => window.setTimeout(resolve, 1000));
           continue;
         }

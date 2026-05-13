@@ -623,12 +623,18 @@ def upload_documents() -> ResponseReturnValue:
     """
     form = PdfUploadForm()
     if not form.validate_on_submit():
-        flash(t("errors.bad_request_message"), "warning")
+        errors = []
+        for field_errors in (form.errors or {}).values():
+            errors.extend(field_errors or [])
+        flash(errors[0] if errors else t("errors.bad_request_message"), "warning")
         return redirect(url_for(DOCUMENTS))
 
     files = form.files.data
     if not files:
         return redirect(url_for(DOCUMENTS))
+
+    if not isinstance(files, (list, tuple)):
+        files = [files]
 
     saved = documentos_service().save_uploads(files)
     if saved == 0:
@@ -1479,7 +1485,7 @@ def _build_scraping_context() -> tuple[Path, Path, Path, Path, Path, dict[str, s
     """
     base_pliegos = pliegos_dir()
     root = Path(current_app.root_path)
-    scraper_dir = root / "web_scraping"
+    scraper_dir = root / "services" / "web_scraping"
     script_1 = scraper_dir / "PliegosPlaywrightAsincrono.py"
     script_2 = scraper_dir / "DescargarPliegos.py"
     env = os.environ.copy()

@@ -405,6 +405,7 @@ TRANSLATIONS_ES = {
     "jobs.already_finished": "El proceso ya ha terminado.",
     "jobs.queued_short": "En cola",
     "jobs.cancelled_generic": "Proceso cancelado.",
+    "jobs.done_generic": "Proceso finalizado.",
     "jobs.failed_generic": "El proceso ha fallado.",
     "markdown.cancelling": "Cancelando conversión a Markdown...",
     "markdown.cancelled": "Conversión a Markdown cancelada.",

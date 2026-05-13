@@ -14,8 +14,11 @@
 
 .progress-bar {
   height: 100%;
-  width: 40%;
   background-color: #3498db;
+}
+
+.progress-bar.is-indeterminate {
+  width: 40%;
   animation: loading 1.2s infinite linear;
 }
 

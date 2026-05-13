@@ -65,12 +65,12 @@ if _ollama_num_gpu not in (None, ""):
     DEFAULT_NUM_GPU = int(_ollama_num_gpu)
     OLLAMA_NUM_GPU_SOURCE = "env"
 else:
-    # Por defecto pedimos a Ollama que use GPU si es posible.
-    # No lo inferimos de torch.cuda: Ollama puede estar en otra máquina/container.
+    # Por defecto se pide a Ollama que use GPU si es posible.
     DEFAULT_NUM_GPU = -1
     OLLAMA_NUM_GPU_SOURCE = "auto-ollama"
 PDF_RENDER_DPI = int(os.getenv("PDF_RENDER_DPI", "200"))
 OCR_MAX_IMAGE_SIDE = int(os.getenv("OCR_MAX_IMAGE_SIDE", "1600"))
+OCR_CONCURRENCY = int(os.getenv("OCR_CONCURRENCY", "2"))
 OCR_RETRY_MAX_IMAGE_SIDES = [
     int(value.strip())
     for value in os.getenv("OCR_RETRY_MAX_IMAGE_SIDES", "1600,1280,1024,896,768").split(",")
@@ -718,7 +718,7 @@ async def process_pdf_async(pdf_path: Path, on_page_start=None, model_name: str 
     )
 
     total_pages = get_pdf_page_count(pdf_path)
-    page_markdowns = []
+    page_markdowns: list[str | None] = [None for _ in range(total_pages)]
     tmp_dir = Path(tempfile.mkdtemp(prefix="nanonets_ocr_"))
     timeout = httpx.Timeout(
         connect=OLLAMA_CONNECT_TIMEOUT_SECONDS,
@@ -729,36 +729,40 @@ async def process_pdf_async(pdf_path: Path, on_page_start=None, model_name: str 
 
     try:
         async with httpx.AsyncClient(base_url=OLLAMA_BASE_URL, timeout=timeout) as client:
-            for page_number in range(1, total_pages + 1):
-                if on_page_start is not None:
-                    on_page_start(page_number, total_pages)
-                logger.info("Página %s/%s", page_number, total_pages)
-                img_path = pdf_page_to_image(pdf_path, page_number, tmp_dir)
-                try:
+            semaphore = asyncio.Semaphore(max(1, int(OCR_CONCURRENCY or 1)))
+
+            async def process_page(page_number: int) -> None:
+                async with semaphore:
+                    if on_page_start is not None:
+                        on_page_start(page_number, total_pages)
+                    logger.info("Página %s/%s", page_number, total_pages)
+                    img_path = await asyncio.to_thread(pdf_page_to_image, pdf_path, page_number, tmp_dir)
                     try:
-                        page_markdowns.append(
-                            await ocr_page_with_nanonets_async(
+                        try:
+                            md = await ocr_page_with_nanonets_async(
                                 client,
                                 img_path,
                                 page_number,
                                 total_pages,
                                 model_name=resolved_model,
                             )
-                        )
-                    except OllamaOCRException as exc:
-                        if OCR_PAGE_FAILURE_MODE == "raise":
-                            raise
-                        logger.warning("OCR omitido en página %s/%s: %s", page_number, total_pages, exc)
-                        page_markdowns.append(_page_failure_markdown(page_number, total_pages, exc))
-                finally:
-                    try:
-                        img_path.unlink(missing_ok=True)
-                    except OSError:
-                        pass
+                        except OllamaOCRException as exc:
+                            if OCR_PAGE_FAILURE_MODE == "raise":
+                                raise
+                            logger.warning("OCR omitido en página %s/%s: %s", page_number, total_pages, exc)
+                            md = _page_failure_markdown(page_number, total_pages, exc)
+                        page_markdowns[page_number - 1] = md
+                    finally:
+                        try:
+                            img_path.unlink(missing_ok=True)
+                        except OSError:
+                            pass
+
+            await asyncio.gather(*(process_page(i) for i in range(1, total_pages + 1)))
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
-    full_md = "\n\n".join(page_markdowns)
+    full_md = "\n\n".join([chunk for chunk in page_markdowns if chunk])
     full_md = clean_index_dots(full_md)
     full_md = normalize_headings(full_md)
 

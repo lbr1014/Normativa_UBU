@@ -277,7 +277,7 @@ def get_ollama_execution_device() -> str:
     return "GPU_REQ"
 
 
-async def get_ollama_effective_execution_device(
+async def get_ollama_effective_execution_device(  # NOSONAR
     *,
     model_name: str,
     should_cancel=None,
@@ -300,34 +300,41 @@ async def get_ollama_effective_execution_device(
         write=settings.OLLAMA_WRITE_TIMEOUT_SECONDS,
         pool=settings.OLLAMA_POOL_TIMEOUT_SECONDS,
     )
-    try:
+
+    def _normalize_model(value: str | None) -> str:
+        return (value or "").strip().lower()
+
+    async def _fetch_ps_payload() -> dict:
         async with httpx.AsyncClient(base_url=OLLAMA_BASE_URL, timeout=timeout) as client:
             resp = await client.get("/api/ps")
             resp.raise_for_status()
-            payload = resp.json() if resp.content else {}
-    except Exception:
+            return resp.json() if resp.content else {}
+
+    def _infer_device_from_ps(payload: dict, *, target_model: str) -> str | None:
+        models = payload.get("models")
+        if not isinstance(models, list):
+            return None
+
+        for item in models:
+            if not isinstance(item, dict):
+                continue
+            name = _normalize_model(str(item.get("name") or item.get("model") or ""))
+            if name != target_model:
+                continue
+            try:
+                size_vram = int(item.get("size_vram") or 0)
+            except (TypeError, ValueError):
+                size_vram = 0
+            return "GPU" if size_vram > 0 else "CPU"
+        return None
+
+    try:
+        payload = await _fetch_ps_payload()
+    except (httpx.HTTPError, ValueError, TypeError):
         return fallback
 
-    models = payload.get("models") if isinstance(payload, dict) else None
-    if not isinstance(models, list):
-        return fallback
-
-    normalized_target = (model_name or "").strip().lower()
-    for item in models:
-        if not isinstance(item, dict):
-            continue
-        name = str(item.get("name") or item.get("model") or "").strip().lower()
-        if not name:
-            continue
-        if name != normalized_target:
-            continue
-        try:
-            size_vram = int(item.get("size_vram") or 0)
-        except (TypeError, ValueError):
-            size_vram = 0
-        return "GPU" if size_vram > 0 else "CPU"
-
-    return fallback
+    device = _infer_device_from_ps(payload, target_model=_normalize_model(model_name))
+    return device or fallback
 
 
 def resolve_rag_llm_model(model: str | None = None) -> str:
@@ -2098,6 +2105,89 @@ def index_pdf(
                 )
             VectorBaseDocument.save_many(docs)
             logger.info("Guardados %d chunks en Qdrant", len(docs))
+        return docs
+
+
+def index_markdown(
+    markdown_content: str,
+    *,
+    filename: str,
+    document_id: int | None = None,
+    numero_expediente: str | None = None,
+    tipo_documento: str | None = None,
+    sha256: str | None = None,
+    title: str | None = None,
+) -> list[VectorBaseDocument]:
+    """
+    Indexa contenido Markdown ya persistido (sin releer el PDF).
+
+    Se reutiliza el mismo chunking/embeddings que `index_pdf`, pero tomando como
+    fuente el texto Markdown del documento.
+    
+    Args:
+        markdown_content: El contenido del documento en formato Markdown que se va a indexar.
+        filename: El nombre del archivo original del documento, que se incluirá en los metadatos de cada chunk. Es un campo obligatorio para mantener la trazabilidad.
+        document_id: (Opcional) Identificador numérico del documento, que se incluirá en los metadatos de cada chunk. Útil para trazabilidad y auditoría.
+        numero_expediente: (Opcional) Número de expediente asociado al documento, que se incluirá en los metadatos de cada chunk. Permite filtrar por expediente en las consultas.
+        tipo_documento: (Opcional) Tipo de documento que se incluirá en los metadatos de cada chunk. Permite filtrar por tipo de documento en las consultas.
+        sha256: (Opcional) Hash SHA256 del documento original, que se incluirá en los metadatos de cada chunk. Permite verificar la integridad del documento y detectar cambios.
+        title: (Opcional) Título del documento, que se incluirá en los metadatos de cada chunk. Si no se proporciona, se usará el nombre del archivo sin extensión como título.
+    
+    Returns:
+        Lista de instancias de VectorBaseDocument que representan los chunks indexados del contenido Markdown. Cada instancia incluye el contenido del chunk, su embedding y metadatos asociados 
+        (nombre de archivo, título, hash, número de expediente, tipo de documento, etc.).
+        Si ocurre un error durante el proceso de indexación (chunking, generación de embeddings, guardado en Qdrant), 
+        se devuelve una lista vacía y se registran los errores correspondientes.
+    """
+    if not (markdown_content or "").strip():
+        return []
+
+    safe_title = (title or "").strip() or Path(filename).stem
+    safe_hash = (sha256 or "").strip() or ""
+
+    try:
+        with timed_block(f"chunking-md {filename}"):
+            chunks = chunk_text(markdown_content)
+    except (RuntimeError, TypeError, ValueError):
+        logger.exception("Error haciendo chunks desde Markdown en %s", filename)
+        return []
+
+    if not chunks:
+        logger.warning("%s: sin chunks válidos (Markdown vacío tras limpieza)", filename)
+        return []
+
+    with timed_block(f"embeddings-md {filename}"):
+        vectors = embedding_model(chunks, to_list=True)
+
+    if len(vectors) != len(chunks):
+        logger.error(
+            "%s: nº chunks markdown (%d) != nº embeddings (%d)",
+            filename,
+            len(chunks),
+            len(vectors),
+        )
+        return []
+
+    with timed_block(f"guardar qdrant-md {filename}"):
+        docs: list[VectorBaseDocument] = []
+        base_meta = {
+            "filename": filename,
+            "title": safe_title,
+            "sha256": safe_hash,
+            "numero_expediente": numero_expediente,
+            "tipo_documento": tipo_documento,
+            "source": "markdown",
+        }
+        if document_id is not None:
+            base_meta["document_id"] = int(document_id)
+
+        for idx, (chunk, vec) in enumerate(zip(chunks, vectors)):
+            meta = dict(base_meta)
+            meta["segment_index"] = idx
+            docs.append(VectorBaseDocument(content=chunk, embedding=vec, metadata=meta))
+
+        VectorBaseDocument.save_many(docs)
+        logger.info("Guardados %d chunks (Markdown) en Qdrant", len(docs))
         return docs
 
 

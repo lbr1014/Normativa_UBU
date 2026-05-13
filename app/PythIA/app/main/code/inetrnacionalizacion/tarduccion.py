@@ -289,6 +289,9 @@ def get_client_translations() -> dict[str, str]:
         "scraping.status_error",
         "process.cancel_error",
         "process.resume_tracking",
+        "jobs.done_generic",
+        "jobs.cancelled_generic",
+        "jobs.failed_generic",
         "docs.no_files_selected",
         "docs.files_selected",
     ]
