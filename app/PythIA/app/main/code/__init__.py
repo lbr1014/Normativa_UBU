@@ -161,8 +161,15 @@ def create_app():
     if not profile_dir.is_absolute():
         profile_dir = data_dir / profile_dir
     app.config["PROFILE_UPLOAD_FOLDER"] = profile_dir
-    
-    app.config["PROFILE_UPLOAD_FOLDER"].mkdir(parents=True, exist_ok=True)
+
+    try:
+        app.config["PROFILE_UPLOAD_FOLDER"].mkdir(parents=True, exist_ok=True)
+    except (PermissionError, FileNotFoundError):
+        # En algunos entornos (CI) PROFILE_UPLOAD_FOLDER suele apuntar a /data/...
+        # pero el runner no permite escribir ahí. Hacemos fallback a DATA_DIR.
+        fallback_profile_dir = (data_dir / "profiles").resolve()
+        app.config["PROFILE_UPLOAD_FOLDER"] = fallback_profile_dir
+        fallback_profile_dir.mkdir(parents=True, exist_ok=True)
 
     # Flask Mail
     app.config["MAIL_SERVER"] = os.environ.get("MAIL_SERVER", "")
