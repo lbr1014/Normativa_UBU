@@ -1509,7 +1509,16 @@ def _execute_subprocess_with_cancellation(script_path: Path, cwd: Path, env: dic
     Returns:
         None.
     """
-    proc = subprocess.Popen([sys.executable, str(script_path)], cwd=str(cwd), env=env)
+    proc = subprocess.Popen(
+        [sys.executable, str(script_path)],
+        cwd=str(cwd),
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
     while True:
         if should_cancel():
             proc.terminate()
@@ -1523,7 +1532,13 @@ def _execute_subprocess_with_cancellation(script_path: Path, cwd: Path, env: dic
         code = proc.poll()
         if code is not None:
             if code != 0:
-                raise subprocess.CalledProcessError(code, [sys.executable, str(script_path)])
+                stdout, stderr = proc.communicate(timeout=5)
+                raise subprocess.CalledProcessError(
+                    code,
+                    [sys.executable, str(script_path)],
+                    output=stdout,
+                    stderr=stderr,
+                )
             return
 
         try:
@@ -1640,6 +1655,16 @@ def _handle_scraping_exception(app, job_id: int, user_email: str, docs_url: str,
         job = WebScrapingSate.query.get(job_id)
         if not job:
             raise exc
+
+        # Si el fallo proviene de un subprocess, adjuntar stderr/stdout para diagnóstico.
+        if isinstance(exc, subprocess.CalledProcessError):
+            details = []
+            if getattr(exc, "stderr", None):
+                details.append(f"stderr:\n{exc.stderr.strip()}")
+            if getattr(exc, "output", None):
+                details.append(f"stdout:\n{exc.output.strip()}")
+            if details:
+                exc = RuntimeError(f"{exc}\n\n" + "\n\n".join(details))
         _mark_job_failed(job, exc, message=translate_for(lang, "scraping.failed"))
         db.session.commit()
         _send_email_safe(
@@ -1688,7 +1713,8 @@ def scraping_async(app, job_id: int, user_email: str, docs_url: str, lang: str =
             base_pliegos, scraper_dir, script_1, script_2, _root, env = _build_scraping_context()
 
             def should_cancel() -> bool:
-                """Comprueba si el job de scraping debe cancelarse.
+                """
+                Comprueba si el job de scraping debe cancelarse.
 
                 Returns:
                     ``True`` si se ha solicitado cancelacion.
