@@ -26,12 +26,21 @@ OBJETIVO = "Junta de Gobierno de la Diputación Provincial de Burgos"
 
 def _project_root() -> Path:
     """
-    Obtiene la ruta raíz del proyecto.
+    Resuelve la raíz del proyecto (carpeta que contiene `app/` y `data/`).
+
+    En local suele ser `.../PythIA`, y en Docker suele ser `/app`.
 
     Returns:
-        Path: Ruta absoluta al directorio raíz del proyecto, asumiendo que este script está ubicado en app/main/code/services/web_scraping/.
+        Path: Ruta absoluta al directorio raíz del proyecto.
     """
-    return Path(__file__).resolve().parents[5]
+    start = Path(__file__).resolve()
+    for candidate in [start.parent, *start.parents]:
+        if (candidate / "app").is_dir() and (candidate / "data").is_dir():
+            return candidate
+    for candidate in [start.parent, *start.parents]:
+        if (candidate / "app").is_dir():
+            return candidate
+    return start.parents[5]
 
 
 def _ensure_writable_dir(path: Path) -> None:

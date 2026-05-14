@@ -18,9 +18,22 @@ Tuple = tuple
 import aiofiles
 from playwright.async_api import async_playwright
 
+
 def _project_root() -> Path:
-    # .../app/main/code/services/web_scraping/DescargarPliegos.py -> project root
-    return Path(__file__).resolve().parents[5]
+    """
+    Resuelve la raíz del proyecto (carpeta que contiene `app/` y `data/`).
+
+    Returns:
+        Path: Ruta absoluta al directorio raíz del proyecto.
+    """
+    start = Path(__file__).resolve()
+    for candidate in [start.parent, *start.parents]:
+        if (candidate / "app").is_dir() and (candidate / "data").is_dir():
+            return candidate
+    for candidate in [start.parent, *start.parents]:
+        if (candidate / "app").is_dir():
+            return candidate
+    return start.parents[5]
 
 
 WEB_SCRAPING_DATA_DIR = _project_root() / "data" / "web_scraping"
@@ -63,9 +76,6 @@ def ensure_dest_dir() -> None:
         DEST.mkdir(parents=True, exist_ok=True)
         return
     except PermissionError:
-        # En CI (y otros entornos) a veces se define DOCS_DIR=/data/...,
-        # pero el runner no permite escribir ahí. Hacemos fallback a un path
-        # relativo del repo para no bloquear el proceso.
         configured = os.environ.get("DOCS_DIR") or os.environ.get("PLIEGOS_DEST")
         if configured and Path(configured).is_absolute():
             logger.warning(
