@@ -85,14 +85,9 @@ services:
       - ollama_ocr:/root/.ollama
     environment:
       OCR_MODEL_NAME: ${OCR_MODEL_NAME:-blaifa/Nanonets-OCR-s}
-      OLLAMA_HOST: 0.0.0.0:11434
+      OLLAMA_HOST: http://ollama_ocr:11434
     entrypoint: ["sh", "-lc"]
-    command: >
-      until ollama list >/dev/null 2>&1; do sleep 1; done;
-      echo "[ollama_ocr_init] Pulling OCR model: $$OCR_MODEL_NAME";
-      ollama pull "$$OCR_MODEL_NAME";
-      echo "[ollama_ocr_init] Done";
-      exit 0
+    command: "until ollama list >/dev/null 2>&1; do sleep 1; done; echo \"[ollama_ocr_init] Pulling OCR model: $$OCR_MODEL_NAME\"; ollama pull \"$$OCR_MODEL_NAME\"; echo \"[ollama_ocr_init] Done\"; exit 0"
     restart: "no"
 
   web:
