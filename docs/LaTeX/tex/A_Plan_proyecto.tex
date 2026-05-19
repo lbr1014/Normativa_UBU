@@ -580,7 +580,7 @@ El \eng{burndown} de este \eng{sprint} se ilustra en la figura~\ref{fig:Burndown
 \imagenflotante{Burndown/Sprint25}{\eng{Burndown chart} del \eng{sprint} 25.}
 
 \subsection{\eng{Sprint} 26 (30/04/2026 -- 07/05/2026)}
-Como objetivo principal del \myhref{https://github.com/lbr1014/TFG_RAG/milestone/26?closed=1}{Sprint 26} se decidió explicar algunos de los apartados que faltan de los anexos y la memoria. Concretamente se va a explicar el manual del programador, y se va a comenzar con el manual del usuario. También, se va a seguir redactand la viabilidad y los aspectos importantes durante el desarrollo. Para llevar a cabo estos objetivos se plantearon las siguientes tareas:
+Como objetivo principal del \myhref{https://github.com/lbr1014/TFG_RAG/milestone/26?closed=1}{Sprint 26} se decidió comenzar a explicar algunos de los apartados que faltan de los anexos y la memoria. Concretamente se va a explicar el manual del programador, y se va a comenzar con el manual del usuario. También, se va a seguir redactando la viabilidad y los aspectos importantes durante el desarrollo. Para llevar a cabo estos objetivos se plantearon las siguientes tareas:
 
 \begin{itemize}
 \tightlist
@@ -601,26 +601,55 @@ Como objetivo principal del \myhref{https://github.com/lbr1014/TFG_RAG/milestone
 	\item Explicar aspectos importantes del desarrollo del proyecto.
 \end{itemize}
 
-Para realizar el \eng{sprint} se estimaron 32 horas de trabajo. Tras finalizar el \eng{sprint} se explicarón todos los apartados en el tiempo estimado.
+Para realizar el \eng{sprint} se estimaron 32 horas de trabajo. Tras finalizar el \eng{sprint} se comenzaron a explicar todos los apartados marcados como objetivo. Por cada apartado se decidió como estructurarlo y que aspectos son importantes incluir. Además, se ha investigado sobre las leyes relevantes para desarrollar la viabilidad legal del proyecto. Para realizar estas tareas se invirtió más o menos el tiempo previsto.
 
-%El \eng{burndown} de este \eng{sprint} se ilustra en la figura~\ref{fig:Burndown/Sprint26}.
-%\imagenflotante{Burndown/Sprint26}{\eng{Burndown chart} del \eng{sprint} 26.}
+El \eng{burndown} de este \eng{sprint} se ilustra en la figura~\ref{fig:Burndown/Sprint26}.
+\imagenflotante{Burndown/Sprint26}{\eng{Burndown chart} del \eng{sprint} 26.}
 
 \subsection{\eng{Sprint} 27 (07/05/2026 -- 14/05/2026)}
-%Como objetivo principal del \myhref{https://github.com/lbr1014/TFG_RAG/milestone/27?closed=1}{Sprint 27}
+Como objetivo principal del \myhref{https://github.com/lbr1014/TFG_RAG/milestone/27?closed=1}{Sprint 27} se fijó cambiar algunos \eng{tempaltes} y \file{CSS} de la aplicación para introducir la última iteración del diseño de las interfaces. Estos cambios en el diseño tienen como objetivo tanto mejorar el aspecto de la \eng{web} como hacerla más accesible para los usuarios. Además, la conversión a \file{Markdown} sigue presentando algún problema, por ejemplo, cuando lleva mucho tiempo en ejecución satura la \file{GPU} haciendo que se tarde mucho en responder a las consultas. Respecto a la documentación se ha decidido seguir redactando algunos de los apartados que se empezaron a desarrollar en el \eng{sprint} anterior. Para llevar a cabo estos objetivos se plantearon las siguientes tareas:
+\begin{itemize}
+\tightlist
+	\item Mejorar la interfaz gráfica.
+	\item Terminar de redactar la viabilidad legal del proyecto.
+	\item Mejorar la documentación del programador.
+	\item Seguir explicando los aspectos relevantes del sistema.
+	\item Mejorar el funcionamiento de la conversión a \file{Markdown}.
+\end{itemize}
 
-%Para llevar a cabo estos objetivos se plantearon las siguientes tareas:
+Para realizar el \eng{sprint} se estimaron 24 horas de trabajo. Aunque si que se han completado todas las tareas al finalizar el \eng{sprint} el tiempo invertido ha sido mayor, de unas 30 horas. Principalmente se debe a que introducir los cambios en el diseño ha llevado más tiempo del previsto. Además, como aspecto destacable del \eng{sprint} cabría destacar que para evitar que la conversión a \file{Markdown} sature la \file{GPU} ralentizando las repuestas se ha levantado un \file{Ollama} que solo usa la conversión. Esto se debe a que el uso de la \file{GPU} funciona a través de \file{Ollama} al tratarse de modelos \file{OCR} y de \file{LLM}.
 
-
-%Para realizar el \eng{sprint} se estimaron  horas de trabajo
-
-%El \eng{burndown} de este \eng{sprint} se ilustra en la figura~\ref{fig:Burndown/Sprint27}.
-%\imagenflotante{Burndown/Sprint27}{\eng{Burndown chart} del \eng{sprint} 27.}
+El \eng{burndown} de este \eng{sprint} se ilustra en la figura~\ref{fig:Burndown/Sprint27}.
+\imagenflotante{Burndown/Sprint27}{\eng{Burndown chart} del \eng{sprint} 27.}
 
 \subsection{\eng{Sprint} 28 (14/05/2026 -- 21/05/2026)}
-%Como objetivo principal del \myhref{https://github.com/lbr1014/TFG_RAG/milestone/28?closed=1}{Sprint 28}
+Como objetivo principal del \myhref{https://github.com/lbr1014/TFG_RAG/milestone/28?closed=1}{Sprint 28} se ha fijado dejar casi terminada la memoria del TFG y seguir completando los anexos, concretamente finalizando aquellos apartados que ya estaban empezados. Además, se ha decidido incluir un tutorial de uso de la aplicación utilizando la herramienta \file{driver.js}. La finalidad de este tutorial es hacer la aplicación más accesible para los usuarios. Para llevar a cabo estos objetivos se plantearon las siguientes tareas:
 
-%Para realizar el \eng{sprint} se estimaron horas de trabajo
+\begin{itemize}
+\tightlist
+	\item Hacer tutorial para el uso de la aplicación \eng{web}.
+	\begin{itemize}
+	\tightlist
+		\item Estudiar el uso de \file{driver.js}.
+	\end{itemize}
+	\item Redactar apartados de los anexos.
+	\begin{itemize}
+	\tightlist
+		\item Completar el estudio de viabilidad del proyecto.
+		\item Completar los requisitos funcionales.
+		\item Terminar el apartado de diseño de los anexos.
+	\end{itemize}
+	\item Arreglos de los \eng{tests} de integración.
+	\item Redactar apartados de la memoria.
+	\begin{itemize}
+	\tightlist
+		\item Redactar apartados que faltan de la memoria.
+		\item Completar apartados ya empezados en la memoria.
+	\end{itemize}
+	\item Añadir evaluación \eng{RAG}.
+\end{itemize}
+
+Para realizar el \eng{sprint} se estimaron 42 horas de trabajo.
 
 %El \eng{burndown} de este \eng{sprint} se ilustra en la figura~\ref{fig:Burndown/Sprint28}.
 %\imagenflotante{Burndown/Sprint28}{\eng{Burndown chart} del \eng{sprint} 28.}
