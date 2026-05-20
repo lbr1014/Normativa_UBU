@@ -9,17 +9,16 @@ from zoneinfo import ZoneInfo
 
 from flask_login import login_user
 
-from app.test.support import BaseAppTestCase
-
-from app.main.code.model.consulta import Consulta
 from app.main.code.controllers.main.routes import (
     best_pid_for_consulta,
-    build_selected_user_comparison_payload,
     build_meta_by_consulta,
+    build_selected_user_comparison_payload,
     build_usage_stats_payload,
     build_user_country_map_payload,
     paginate_consultas,
 )
+from app.main.code.model.consulta import Consulta
+from app.test.support import BaseAppTestCase
 
 
 class MainRoutesUnitTest(BaseAppTestCase):
@@ -110,6 +109,10 @@ class MainRoutesUnitTest(BaseAppTestCase):
         self.assertEqual(
             payload["data"],
             [
+<<<<<<< Updated upstream
+=======
+                {"user": "Global", "count": 3},
+>>>>>>> Stashed changes
                 {"user": "Luis (luis-selected@example.com)", "count": 1},
                 {"user": "Eva (eva-selected@example.com)", "count": 0},
             ],
@@ -131,7 +134,11 @@ class MainRoutesUnitTest(BaseAppTestCase):
         )
 
         self.assertEqual(payload["selected_user_ids"], [user_1.id, user_2.id, user_3.id])
+<<<<<<< Updated upstream
         self.assertEqual([item["count"] for item in payload["data"]], [2, 1, 0])
+=======
+        self.assertEqual([item["count"] for item in payload["data"]], [3, 2, 1, 0])
+>>>>>>> Stashed changes
         self.assertEqual(payload["stats"]["mean"], 1)
         self.assertEqual(payload["stats"]["median"], 1)
 
