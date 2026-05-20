@@ -42,6 +42,7 @@ class User(db.Model, UserMixin):
     profile_image = db.Column(db.String(255), nullable=True)
     password_hash = db.Column(db.String(255), nullable=False)
     last_login = db.Column(db.DateTime(timezone=True), nullable=True)
+    login_count = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     is_admin = db.Column(db.Boolean, nullable=False, default=False)
     theme_mode = db.Column(db.String(20), nullable=False, default="system", server_default="system")  
     preferred_model = db.Column(db.String(50), nullable=False, default="llama3.1:8b-instruct-q4_K_M", server_default="llama3.1:8b-instruct-q4_K_M")
@@ -85,6 +86,7 @@ class User(db.Model, UserMixin):
         Actualiza la fecha del último inicio de sesión.
         """
         self.last_login = datetime.now(ZoneInfo("Europe/Madrid"))
+        self.login_count = int(self.login_count or 0) + 1
 
     @staticmethod
     def get_by_id(user_id: int) -> User | None:
