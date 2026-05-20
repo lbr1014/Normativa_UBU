@@ -110,6 +110,7 @@ class MainRoutesUnitTest(BaseAppTestCase):
         self.assertEqual(
             payload["data"],
             [
+                {"user": "Global", "count": 3},
                 {"user": "Luis (luis-selected@example.com)", "count": 1},
                 {"user": "Eva (eva-selected@example.com)", "count": 0},
             ],
@@ -131,7 +132,7 @@ class MainRoutesUnitTest(BaseAppTestCase):
         )
 
         self.assertEqual(payload["selected_user_ids"], [user_1.id, user_2.id, user_3.id])
-        self.assertEqual([item["count"] for item in payload["data"]], [2, 1, 0])
+        self.assertEqual([item["count"] for item in payload["data"]], [3, 2, 1, 0])
         self.assertEqual(payload["stats"]["mean"], 1)
         self.assertEqual(payload["stats"]["median"], 1)
 
