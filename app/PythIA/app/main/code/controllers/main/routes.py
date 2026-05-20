@@ -1,6 +1,6 @@
 ﻿"""
 Autora: Lydia Blanco Ruiz
-Script para las rutas principales, historial de consultas, perfil de usuario y estadÃ­sticas de uso.
+Script para las rutas principales, historial de consultas, perfil de usuario y estadísticas de uso.
 """
 
 import calendar
@@ -53,15 +53,15 @@ PROFILE_IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
 
 def paginate_consultas(base_query, per_page=10) -> tuple:
     """
-    Aplica paginaciÃ³n estÃ¡ndar a una query de consultas.
+    Aplica páginación estándar a una query de consultas.
 
-    Extrae del request.args el nÃºmero de pÃ¡gina y aplica filtrado por usuario
-    si el usuario actual no es administrador. Devuelve los elementos paginados
-    con informaciÃ³n de pÃ¡ginas.
+    Extrae del request.args el número de páginas y aplica filtrado por usuario
+    si el usuario actual no es administrador. Devuelve los elementos páginados
+    con información de páginass.
 
     Args:
-        base_query (Query): Consulta SQLAlchemy base a paginar.
-        per_page (int, optional): Elementos por pÃ¡gina. Defaults to 10.
+        base_query (Query): Consulta SQLAlchemy base a páginar.
+        per_page (int, optional): Elementos por páginas. Defaults to 10.
 
     Returns:
         tuple: Tupla con (items, page, total_pages, total_consultas).
@@ -204,7 +204,7 @@ def _history_filter_options() -> tuple[list, list[str]]:
 
 def build_model_by_consulta(consultas: list) -> dict[int, str]:
     """
-    Obtiene el modelo asociado a cada consulta visible en la pagina.
+    Obtiene el modelo asociado a cada consulta visible en la página.
     """
     if not consultas:
         return {}
@@ -241,13 +241,13 @@ def build_model_by_consulta(consultas: list) -> dict[int, str]:
 @main_bp.route("/")
 def inicio() -> str:
     """
-    Renderiza la pÃ¡gina de inicio de la aplicaciÃ³n PythIA.
+    Renderiza la páginas de inicio de la aplicación PythIA.
 
-    Muestra la pÃ¡gina de inicio con el tÃ­tulo y autor de la aplicaciÃ³n,
-    sin requerir autenticaciÃ³n.
+    Muestra la páginas de inicio con el título y autor de la aplicación,
+    sin requerir autenticación.
 
     Returns:
-        str: HTML renderizado de la pÃ¡gina de inicio.
+        str: HTML renderizado de la páginas de inicio.
     """
     return render_template(
         "index.html",
@@ -259,13 +259,13 @@ def inicio() -> str:
 @login_required
 def pag_principal() -> str:
     """
-    Renderiza la pÃ¡gina principal del usuario autenticado.
+    Renderiza la páginas principal del usuario autenticado.
 
-    Obtiene las consultas mÃ¡s recientes del usuario (o todas si es admin),
-    las pagina y construye metadatos asociados para mostrar en la pÃ¡gina.
+    Obtiene las consultas más recientes del usuario (o todas si es admin),
+    las página y construye metadatos asociados para mostrar en la páginas.
 
     Returns:
-        str: HTML renderizado de la pÃ¡gina principal con consultas y metadata.
+        str: HTML renderizado de la páginas principal con consultas y metadata.
     """
     consultas_usuario = (
         Consulta.query
@@ -284,16 +284,16 @@ def pag_principal() -> str:
 
 def build_activity_streak(user: User, consultas: list) -> int:
     """
-    Calcula la racha de dÃ­as consecutivos con actividad reciente.
-    Usa dÃ­as con consultas y el Ãºltimo inicio de sesiÃ³n del usuario. Si el usuario
-    se ha conectado hoy, la racha puede continuar aunque todavÃ­a no haya consultado.
+    Calcula la racha de días consecutivos con actividad reciente.
+    Usa días con consultas y el último inicio de sesión del usuario. Si el usuario
+    se ha conectado hoy, la racha puede continuar aunque todavía no haya consultado.
     
     Args:
         user (User): Usuario para el que se calcula la racha.
         consultas (list): Lista de consultas del usuario, ordenadas por fecha ascendente.
         
     Returns:
-        int: NÃºmero de dÃ­as consecutivos con actividad, contando desde hoy hacia atrÃ¡s.
+        int: Número de días consecutivos con actividad, contando desde hoy hacia atrás.
     """
     active_days = {_safe_created_at(consulta).date() for consulta in consultas}
 
@@ -317,16 +317,16 @@ def build_activity_streak(user: User, consultas: list) -> int:
 
 def build_home_dashboard_metrics(user: User, consultas: list) -> dict:
     """
-    Construye las mÃ©tricas resumidas que se muestran en la pÃ¡gina principal.
+    Construye las métricas resumidas que se muestran en la página principal.
     
     Args:
-        user (User): Usuario para el que se construyen las mÃ©tricas.
+        user (User): Usuario para el que se construyen las métricas.
         consultas (list): Lista de consultas del usuario.
         
     Returns:        
-        dict: Diccionario con mÃ©tricas como racha de actividad, total de consultas,
-            modelos usados, dÃ­as activos, tiempo promedio de respuesta, fecha de Ãºltima consulta,
-            datos para el grÃ¡fico de anillo de consultas y calendario mensual.
+        dict: Diccionario con métricas como racha de actividad, total de consultas,
+            modelos usados, días activos, tiempo promedio de respuesta, fecha de última consulta,
+            datos para el gráfico de anillo de consultas y calendario mensual.
     """
     distinct_models = {
         (job.model_name or "").strip()
@@ -364,8 +364,8 @@ def build_home_month_calendar(consultas: list) -> dict:
         consultas (list): Lista de consultas del usuario, ordenadas por fecha ascendente.
     
     Returns:
-        dict: Diccionario con la estructura del calendario mensual, incluyendo el label del mes, los dÃ­as de la semana y 
-            las semanas con sus dÃ­as y conteos de consultas.
+        dict: Diccionario con la estructura del calendario mensual, incluyendo el label del mes, los días de la semana y 
+            las semanas con sus días y conteos de consultas.
     """
     today = datetime.now(timezone.utc).date()
     month_start = today.replace(day=1)
@@ -431,14 +431,14 @@ def build_home_month_calendar(consultas: list) -> dict:
 
 def build_home_query_donut(user: User, user_total_queries: int) -> dict:
     """
-    Construye el reparto del anillo de consultas de la pÃ¡gina principal.
+    Construye el reparto del anillo de consultas de la páginas principal.
     
     Args:
         user (User): Usuario para el que se construye el anillo.
-        user_total_queries (int): NÃºmero total de consultas del usuario.
+        user_total_queries (int): Número total de consultas del usuario.
         
     Returns:
-        dict: Diccionario con el tÃ­tulo del anillo, el total de consultas, el total central (consultas del usuario) y los segmentos para el grÃ¡fico.
+        dict: Diccionario con el título del anillo, el total de consultas, el total central (consultas del usuario) y los segmentos para el gráfico.
     """
     colors = ["#58d68d", "#5dade2", "#f4d03f", "#ec7063", "#af7ac5", "#48c9b0", "#eb984e", "#7fb3d5"]
 
@@ -562,7 +562,7 @@ def _save_profile_image(file_storage) -> str | None:
         file_storage: Archivo subido desde el formulario, esperado un FileStorage de Werkzeug.
         
     Returns:
-        str | None: Ruta relativa a la imagen guardada para almacenar en el perfil, o None si no se guardÃ³ ninguna imagen.
+        str | None: Ruta relativa a la imagen guardada para almacenar en el perfil, o None si no se guardó ninguna imagen.
     """
     if not file_storage or not file_storage.filename:
         return None
@@ -582,7 +582,13 @@ def _save_profile_image(file_storage) -> str | None:
 
 def _render_edit_user(form: EditUserForm) -> str:
     """
-    Renderiza la pagina de perfil con el avatar calculado.
+    Renderiza la página de perfil con el avatar calculado.
+    
+    Args:
+        form (EditUserForm): Formulario de edición de usuario, con los datos y errores actuales.
+        
+    Returns:
+        str: HTML renderizado de la página de edición de usuario, con el formulario y la información del perfil.
     """
     return render_template(
         "edit_user.html",
@@ -596,6 +602,12 @@ def _render_edit_user(form: EditUserForm) -> str:
 def _update_profile_name(form: EditUserForm) -> None:
     """
     Actualiza el nombre del usuario si el formulario lo incluye.
+    
+    Args:
+        form (EditUserForm): Formulario de edición de usuario, con los datos actuales.
+        
+    Returns:
+        None: Actualiza el nombre del usuario actual si el formulario tiene un nombre válido.
     """
     if form.nombre.data:
         current_user.nombre = form.nombre.data.strip()
@@ -604,6 +616,12 @@ def _update_profile_name(form: EditUserForm) -> None:
 def _update_profile_email(form: EditUserForm) -> bool:
     """
     Actualiza el email y devuelve False si ya existe en otro usuario.
+    
+    Args:
+        form (EditUserForm): Formulario de edición de usuario, con los datos actuales.
+        
+    Returns:
+        bool: True si el email se actualizó correctamente o no se cambió, False si el nuevo email ya existe en otro usuario.
     """
     if not form.email.data:
         return True
@@ -620,6 +638,9 @@ def _update_profile_email(form: EditUserForm) -> bool:
 def _update_profile_image(form: EditUserForm) -> None:
     """
     Guarda la nueva foto de perfil si el usuario ha subido una.
+    
+    Args:
+        form (EditUserForm): Formulario de edición de usuario, con los datos actuales.
     """
     uploaded_profile_image = _save_profile_image(form.profile_image.data)
     if not uploaded_profile_image:
@@ -630,9 +651,15 @@ def _update_profile_image(form: EditUserForm) -> None:
     
 @main_bp.get("/profile_image/<path:filename>")
 @login_required
-def profile_image(filename: str):
+def profile_image(filename: str) -> Response:
     """
     Sirve imágenes de perfil almacenadas en data/profiles.
+    
+    Args:
+        filename (str): Nombre del archivo de imagen de perfil a servir, esperado que sea solo el nombre sin subdirectorios.
+        
+    Returns:
+        Response: Respuesta de Flask con la imagen solicitada, o error 404 si no se encuentra.
     """
 
     upload_dir = current_app.config["PROFILE_UPLOAD_FOLDER"]
@@ -646,6 +673,12 @@ def profile_image(filename: str):
 def _update_profile_password(form: EditUserForm) -> None:
     """
     Actualiza la contraseña solo cuando se ha indicado una nueva.
+    
+    Args:
+        form (EditUserForm): Formulario de edición de usuario, con los datos actuales.
+        
+    Returns:
+        None: Actualiza la contraseña del usuario actual si el formulario tiene una nueva contraseña válida.
     """
     if form.new_password.data:
         current_user.set_password(form.new_password.data)
@@ -654,6 +687,12 @@ def _update_profile_password(form: EditUserForm) -> None:
 def _apply_edit_user_form(form: EditUserForm) -> bool:
     """
     Aplica los cambios del formulario al usuario actual.
+    
+    Args:
+        form (EditUserForm): Formulario de edición de usuario, con los datos actuales.
+        
+    Returns:
+        bool: True si los cambios se aplicaron correctamente, False en caso contrario.
     """
     _update_profile_name(form)
     if not _update_profile_email(form):
@@ -708,6 +747,9 @@ def edit_user() -> str | Response:
 def delete_own_account() -> Response:
     """
     Elimina la cuenta del usuario autenticado y cierra su sesion.
+    
+    Returns:
+        Response: Respuesta de Flask tras eliminar la cuenta. Redirige a la página de login.
     """
     form = EmptyForm()
     if not form.validate_on_submit():
@@ -732,10 +774,10 @@ def historial() -> str:
     Renderiza el historial de consultas del usuario.
 
     Obtiene todas las consultas del usuario ordenadas por fecha descendente,
-    las pagina y construye los metadatos asociados para cada consulta.
+    las página y construye los metadatos asociados para cada consulta.
 
     Returns:
-        str: HTML renderizado del historial de consultas paginado.
+        str: HTML renderizado del historial de consultas páginado.
     """
     filters = _history_filters()
     q = _apply_history_sort(
@@ -769,11 +811,11 @@ def _month_sequence(total_months: int = 12) -> list:
     """
     Genera una secuencia de tuplas (aÃ±o, mes) hacia el pasado.
 
-    Comienza desde el primer dÃ­a del mes actual y retrocede el nÃºmero
+    Comienza desde el primer día del mes actual y retrocede el número
     de meses especificado, retornando la secuencia en orden ascendente.
 
     Args:
-        total_months (int, optional): NÃºmero de meses a generar. Defaults to 12.
+        total_months (int, optional): Número de meses a generar. Defaults to 12.
 
     Returns:
         list: Lista de tuplas (aÃ±o, mes) ordenadas ascendentemente.
@@ -796,16 +838,16 @@ def _month_sequence(total_months: int = 12) -> list:
 
 def _safe_created_at(consulta: Consulta) -> datetime:
     """
-    Obtiene la fecha de creaciÃ³n de una consulta sin informaciÃ³n de zona horaria.
+    Obtiene la fecha de creación de una consulta sin información de zona horaria.
 
-    Si la consulta no tiene fecha de creaciÃ³n, devuelve la fecha/hora actual.
-    Elimina la informaciÃ³n de zona horaria (tzinfo) si existe.
+    Si la consulta no tiene fecha de creación, devuelve la fecha/hora actual.
+    Elimina la información de zona horaria (tzinfo) si existe.
 
     Args:
         consulta (Consulta): Entidad de consulta a procesar.
 
     Returns:
-        datetime: Fecha y hora sin informaciÃ³n de zona horaria.
+        datetime: Fecha y hora sin información de zona horaria.
     """
     created_at = consulta.created_at or datetime.now(timezone.utc)
     return created_at.replace(tzinfo=None) if created_at.tzinfo else created_at
@@ -823,17 +865,17 @@ def _process_consulta_stats(
     user_counter: defaultdict,
 ) -> None:
     """
-    Procesa y actualiza las estadÃ­sticas de una consulta individual.
+    Procesa y actualiza las estadísticas de una consulta individual.
 
-    Extrae informaciÃ³n de fecha/hora de la consulta y la distribuye en los
-    contadores por mes, dÃ­a, dÃ­a de semana, hora y usuario.
+    Extrae información de fecha/hora de la consulta y la distribuye en los
+    contadores por mes, día, día de semana, hora y usuario.
 
     Args:
         consulta (Consulta): Consulta a procesar.
         monthly_counts (dict): Contador de consultas por mes.
         monthly_times (defaultdict): Tiempos de respuesta agrupados por mes.
-        daily_counts (dict): Contador de consultas por dÃ­a.
-        weekday_counts (dict): Contador de consultas por dÃ­a de semana.
+        daily_counts (dict): Contador de consultas por día.
+        weekday_counts (dict): Contador de consultas por día de semana.
         hourly_counts (dict): Contador de consultas por hora.
         user_counter (defaultdict): Contador de consultas por usuario.
 
@@ -862,15 +904,15 @@ def _process_consulta_stats(
 
 def build_usage_stats_payload(consultas: list[Consulta], *, include_top_users: bool = False) -> dict:
     """
-    Construye un payload completo de estadÃ­sticas de uso de consultas.
+    Construye un payload completo de estadísticas de uso de consultas.
 
-    Procesa una lista de consultas para generar estadÃ­sticas agregadas:
-    resÃºmenes, consultas mensuales, tiempos promedio, histogramas diarios,
-    semanales y horarios. Opcionalmente incluye los 8 usuarios mÃ¡s activos.
+    Procesa una lista de consultas para generar estadísticas agregadas:
+    resúmenes, consultas mensuales, tiempos promedio, histogramas diarios,
+    semanales y horarios. Opcionalmente incluye los 8 usuarios más activos.
 
     Args:
         consultas (list[Consulta]): Lista de entidades Consulta a procesar.
-        include_top_users (bool, optional): Incluir los 8 usuarios mÃ¡s activos. Defaults to False.
+        include_top_users (bool, optional): Incluir los 8 usuarios más activos. Defaults to False.
 
     Returns:
         dict: Diccionario con keys: summary, monthly_queries, monthly_avg_time,
@@ -983,7 +1025,7 @@ def build_usage_stats_payload(consultas: list[Consulta], *, include_top_users: b
     if include_top_users:
         payload["top_users"] = [
             {"user": name, "count": count}
-            for name, count in sorted(user_counter.items(), key=lambda item: (-item[1], item[0]))[:8]
+            for name, count in sorted(user_counter.items(), key=lambda item: (-item[1], item[0]))[:10]
         ]
         payload["user_comparison"] = build_user_comparison_payload(user_counter)
 
@@ -992,17 +1034,22 @@ def build_usage_stats_payload(consultas: list[Consulta], *, include_top_users: b
 
 def build_user_comparison_payload(user_counter: dict[str, int]) -> dict:
     """
-    Construye la payload de comparaciÃ³n de usuarios con estadÃ­sticas de uso.
-    Calcula la media, mediana y varianza del nÃºmero de consultas por usuario
-    y ordena a los usuarios por nÃºmero de consultas para mostrar en la comparaciÃ³n.
+    Construye la payload de comparación de usuarios con estadísticas de uso.
+    Calcula la media, mediana y varianza del número de consultas por usuario
+    y ordena a los usuarios por número de consultas para mostrar en la comparación.
     
     Args:
-        user_counter (dict): Diccionario con el nÃºmero de consultas por usuario.
+        user_counter (dict): Diccionario con el número de consultas por usuario.
     
     Returns:
-        dict: Payload con la comparaciÃ³n de usuarios y estadÃ­sticas agregadas.
+        dict: Payload con la comparación de usuarios y estadísticas agregadas.
     """
-    counts = [count for count in user_counter.values() if count is not None]
+    global_label = t("stats.comparison_global")
+    counts = [
+        count
+        for name, count in user_counter.items()
+        if name != global_label and count is not None
+    ]
     if not counts:
         return {"data": [], "stats": {"mean": 0, "median": 0, "variance": 0}}
 
@@ -1025,17 +1072,24 @@ def build_user_comparison_payload(user_counter: dict[str, int]) -> dict:
     }
 
 
-def build_selected_user_comparison_payload(consultas: list[Consulta], users: list[User], selected_user_ids=None) -> dict:
+def build_selected_user_comparison_payload(
+    consultas: list[Consulta],
+    users: list[User],
+    selected_user_ids=None,
+    *,
+    include_global: bool = True,
+) -> dict:
     """
     Construye la comparacion de usuarios que el administrador quiere ver.
     
     Args:
         consultas (list[Consulta]): Lista de consultas a analizar.
         users (list[User]): Lista de usuarios registrados.
-        selected_user_ids (list[int], optional): Lista de IDs de usuarios seleccionados para comparaciÃ³n. Si no se proporciona, se ordenan por nÃºmero de consultas y se seleccionan todos.
-    
+        selected_user_ids (list[int], optional): Lista de IDs de usuarios seleccionados para comparación. Si no se proporciona, se ordenan por número de consultas y se seleccionan todos.
+        include_global (bool, optional): Incluye estadísticas globales en la comparación. Defaults to True.
+
     Returns:
-        dict: Payload con comparaciÃ³n de usuarios seleccionados y sus estadÃ­sticas de uso.
+        dict: Payload con comparación de usuarios seleccionados y sus estadísticas de uso.
     """
     users_by_id = {int(user.id): user for user in users}
     counts_by_user_id = defaultdict(int)
@@ -1059,7 +1113,11 @@ def build_selected_user_comparison_payload(consultas: list[Consulta], users: lis
             )
         ]
 
-    comparison_counter = {
+    comparison_counter = {}
+    if include_global:
+        comparison_counter[t("stats.comparison_global")] = len(consultas)
+
+    comparison_counter |= {
         f"{users_by_id[user_id].nombre} ({users_by_id[user_id].email})": counts_by_user_id.get(user_id, 0)
         for user_id in selected_ids
     }
@@ -1108,20 +1166,21 @@ def build_user_country_map_payload(users: list[User], *, include_user_names: boo
 @login_required
 def stats_page() -> str:
     """
-    Renderiza la pÃ¡gina de estadÃ­sticas de uso.
+    Renderiza la páginas de estadísticas de uso.
 
-    Si el usuario es administrador, permite seleccionar un usuario especÃ­fico
-    o ver estadÃ­sticas globales. Usuarios regulares ven sÃ³lo sus estadÃ­sticas.
-    Genera un payload completo de estadÃ­sticas y lo pasa al template.
+    Si el usuario es administrador, permite seleccionar un usuario específico
+    o ver estadísticas globales. Usuarios regulares ven solo sus estadísticas.
+    Genera un payload completo de estadísticas y lo pasa al template.
 
     Returns:
-        str: HTML renderizado de la pÃ¡gina de estadÃ­sticas.
+        str: HTML renderizado de la páginas de estadísticas.
     """
     selected_user = current_user
     selected_user_id = None
     selected_comparison_user_ids = []
     users = []
     is_global_scope = False
+    usage_scope = "user"
 
     if current_user.is_admin:
         users = User.query.order_by(User.nombre.asc(), User.email.asc()).all()
@@ -1131,30 +1190,63 @@ def stats_page() -> str:
             selected_user = User.get_by_id(selected_user_id)
             if not selected_user:
                 abort(404)
+            usage_scope = "user"
         else:
             selected_user = None
             is_global_scope = True
+            usage_scope = "global"
+    else:
+        usage_scope = request.args.get("usage_scope", "user")
+        if usage_scope not in {"user", "global"}:
+            usage_scope = "user"
 
-    base_query = Consulta.query.order_by(Consulta.created_at.asc())
-    if selected_user is not None:
-        base_query = base_query.filter(Consulta.user_id == int(selected_user.id))
+    all_consultas = Consulta.query.order_by(Consulta.created_at.asc()).all()
 
-    consultas = base_query.all()
-    stats_payload = build_usage_stats_payload(
-        consultas,
-        include_top_users=current_user.is_admin and is_global_scope,
+    usage_query = Consulta.query.order_by(Consulta.created_at.asc())
+    if current_user.is_admin:
+        if selected_user is not None:
+            usage_query = usage_query.filter(Consulta.user_id == int(selected_user.id))
+    else:
+        if usage_scope == "user":
+            usage_query = usage_query.filter(Consulta.user_id == int(current_user.id))
+
+    usage_consultas = usage_query.all() if usage_scope != "global" else all_consultas
+
+    usage_payload = build_usage_stats_payload(usage_consultas, include_top_users=False)
+    global_payload = build_usage_stats_payload(
+        all_consultas,
+        include_top_users=current_user.is_admin,
     )
-    if current_user.is_admin and is_global_scope:
+
+    top_logins = []
+    if current_user.is_admin:
+        top_logins = [
+            {"user": user.nombre, "count": int(user.login_count or 0)}
+            for user in User.query.order_by(User.login_count.desc(), User.nombre.asc()).limit(10).all()
+            if int(user.login_count or 0) > 0
+        ]
+
+    stats_payload = {
+        "usage": usage_payload,
+        "top_users": global_payload.get("top_users", []),
+        "top_logins": top_logins,
+        "user_comparison": global_payload.get("user_comparison", {"data": [], "stats": {"mean": 0, "median": 0, "variance": 0}}),
+    }
+    if current_user.is_admin:
         stats_payload["user_comparison"] = build_selected_user_comparison_payload(
-            consultas,
+            all_consultas,
             users,
             selected_comparison_user_ids,
+            include_global=True,
         )
-    elif not current_user.is_admin:
+    else:
+        current_user_queries = sum(
+            1 for consulta in all_consultas if getattr(consulta, "user_id", None) is not None and int(consulta.user_id) == int(current_user.id)
+        )
         stats_payload["user_comparison"] = build_user_comparison_payload(
             {
-                f"{t('stats.comparison_current_user', name=current_user.nombre)} ({current_user.email})": len(consultas),
-                t("stats.comparison_global"): Consulta.query.count(),
+                f"{t('stats.comparison_current_user', name=current_user.nombre)} ({current_user.email})": current_user_queries,
+                t("stats.comparison_global"): len(all_consultas),
             }
         )
 
@@ -1163,11 +1255,18 @@ def stats_page() -> str:
         include_user_names=current_user.is_admin,
     )
 
-    scope_title = (
-        t("stats.scope_global")
-        if is_global_scope
-        else t("stats.scope_user", name=selected_user.nombre)
-    )
+    if current_user.is_admin:
+        scope_title = (
+            t("stats.scope_global")
+            if is_global_scope
+            else t("stats.scope_user", name=selected_user.nombre)
+        )
+    else:
+        scope_title = (
+            t("stats.scope_global")
+            if usage_scope == "global"
+            else t("stats.scope_user", name=current_user.nombre)
+        )
 
     return render_template(
         "stats.html",
@@ -1178,6 +1277,7 @@ def stats_page() -> str:
         selected_user=selected_user,
         selected_user_id=selected_user_id,
         selected_comparison_user_ids=stats_payload.get("user_comparison", {}).get("selected_user_ids", []),
+        usage_scope=usage_scope,
     )
     
 def best_pid_for_consulta(consulta: Consulta) -> str:
@@ -1186,13 +1286,13 @@ def best_pid_for_consulta(consulta: Consulta) -> str:
 
     Intenta primero obtener el ID del fragmento con mejor ranking de la lista
     de fragmentos. Si no hay fragmentos, busca el chunk con mejor ranking
-    entre los consultaChunks. Devuelve un string vacÃ­o si no hay ninguno.
+    entre los consultaChunks. Devuelve un string vací­o si no hay ninguno.
 
     Args:
         consulta (Consulta): Consulta a procesar.
 
     Returns:
-        str: ID de punto Qdrant del mejor fragmento, o string vacÃ­o.
+        str: ID de punto Qdrant del mejor fragmento, o string vacío.
     """
     fragmentos = sorted(consulta.fragmentos or [], key=lambda item: item.get("ranking", 0))
     if fragmentos:
@@ -1213,7 +1313,7 @@ def build_meta_by_consulta(consultas: list[Consulta]) -> dict:
 
     Para cada consulta, extrae el fragmento con mejor ranking y obtiene su
     qdrant_point_id, metadata y contenido. Para consultas sin fragmentos,
-    recupera la informaciÃ³n desde Qdrant usando el legacy pid.
+    recupera la información desde Qdrant usando el legacy pid.
 
     Args:
         consultas (list): Lista de entidades Consulta a procesar.
@@ -1254,7 +1354,7 @@ def build_meta_by_consulta(consultas: list[Consulta]) -> dict:
 @login_required
 def delete_consulta(consulta_id: int) -> Response:
     """
-    Elimina una consulta especÃ­fica del usuario.
+    Elimina una consulta específica del usuario.
 
     Valida el formulario CSRF y verifica que el usuario actual sea propietario
     de la consulta o administrador. Elimina la consulta de la base de datos y
@@ -1264,7 +1364,7 @@ def delete_consulta(consulta_id: int) -> Response:
         consulta_id (int): ID de la consulta a eliminar.
 
     Returns:
-        Response: RedirecciÃ³n al referrer o al historial.
+        Response: Redirección al referrer o al historial.
     """
     form = EmptyForm()
     if not form.validate_on_submit():
@@ -1286,6 +1386,9 @@ def delete_consulta(consulta_id: int) -> Response:
 def bulk_delete_consultas() -> Response:
     """
     Elimina varias consultas seleccionadas desde el historial.
+    
+    Returns:
+        Response: Redirección al referrer o al historial después de eliminar las consultas seleccionadas.
     """
     form = EmptyForm()
     if not form.validate_on_submit():
