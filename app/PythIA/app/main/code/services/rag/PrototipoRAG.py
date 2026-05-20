@@ -1823,16 +1823,19 @@ async def ask_rag_llm(
         context_blocks=context_blocks,
         query_profile=query_profile,
     )
-    generation = ask_ollama(prompt, model=model, should_cancel=should_cancel)
-    timeout_seconds = settings.OLLAMA_GENERATION_TIMEOUT_SECONDS
-    if timeout_seconds is None:
-        return await generation
-    try:
-        return await asyncio.wait_for(generation, timeout=timeout_seconds)
-    except asyncio.TimeoutError as exc:
-        raise OllamaTimeoutError(
-            f"Ollama ha superado el tiempo máximo de generación ({timeout_seconds:g} s)."
-        ) from exc
+    from app.main.code.services.resource_priority import rag_priority_async
+
+    async with rag_priority_async():
+        generation = ask_ollama(prompt, model=model, should_cancel=should_cancel)
+        timeout_seconds = settings.OLLAMA_GENERATION_TIMEOUT_SECONDS
+        if timeout_seconds is None:
+            return await generation
+        try:
+            return await asyncio.wait_for(generation, timeout=timeout_seconds)
+        except asyncio.TimeoutError as exc:
+            raise OllamaTimeoutError(
+                f"Ollama ha superado el tiempo máximo de generación ({timeout_seconds:g} s)."
+            ) from exc
 
 
 def obtener_chunk_de_query(

@@ -73,6 +73,7 @@ else:
 PDF_RENDER_DPI = int(os.getenv("PDF_RENDER_DPI", "200"))
 OCR_MAX_IMAGE_SIDE = int(os.getenv("OCR_MAX_IMAGE_SIDE", "1600"))
 OCR_CONCURRENCY = int(os.getenv("OCR_CONCURRENCY", "1"))
+OCR_RENDER_CONCURRENCY = int(os.getenv("OCR_RENDER_CONCURRENCY", str(OCR_CONCURRENCY)))
 OCR_RETRY_MAX_IMAGE_SIDES = [
     int(value.strip())
     for value in os.getenv("OCR_RETRY_MAX_IMAGE_SIDES", "1600,1280,1024,896,768").split(",")
@@ -459,6 +460,11 @@ async def ocr_page_with_nanonets_async(
 
             for num_gpu in attempts:
                 try:
+                    from app.main.code.services.resource_priority import (
+                        wait_for_rag_idle_async,
+                    )
+
+                    await wait_for_rag_idle_async()
                     data = await _post_ollama_chat_async(
                         client,
                         _build_chat_payload(user_content, image_base64, num_gpu, model_name=resolved_model),
@@ -788,18 +794,29 @@ async def process_pdf_async(pdf_path: Path, on_page_start=None, model_name: str 
 
     try:
         async with httpx.AsyncClient(base_url=OLLAMA_BASE_URL, timeout=timeout) as client:
-            semaphore = asyncio.Semaphore(max(1, int(OCR_CONCURRENCY or 1)))
+            # Separar concurrencia de renderizado (CPU) de las llamadas OCR a Ollama (GPU/servidor).
+            # Esto permite mayor paralelismo sin aumentar la contención sobre Ollama.
+            render_semaphore = asyncio.Semaphore(max(1, int(OCR_RENDER_CONCURRENCY or 1)))
+            ocr_semaphore = asyncio.Semaphore(max(1, int(OCR_CONCURRENCY or 1)))
+            from app.main.code.services.resource_priority import wait_for_rag_idle_async
 
             async def process_page(page_number: int) -> None:
-                async with semaphore:
-                    if on_page_start is not None:
-                        on_page_start(page_number, total_pages)
-                    logger.info("Página %s/%s", page_number, total_pages)
-                    t0 = time.perf_counter()
+                if on_page_start is not None:
+                    on_page_start(page_number, total_pages)
+
+                logger.info("Página %s/%s", page_number, total_pages)
+
+                # 1) Renderizar a imagen (CPU). Esto puede paralelizarse bastante sin tocar Ollama.
+                t0 = time.perf_counter()
+                async with render_semaphore:
                     img_path = await asyncio.to_thread(pdf_page_to_image, pdf_path, page_number, tmp_dir)
-                    timings["render_s"].append(time.perf_counter() - t0)
+                timings["render_s"].append(time.perf_counter() - t0)
+
+                # 2) OCR (Ollama). Respetar prioridad de RAG y limitar concurrencia real contra Ollama.
+                try:
                     try:
-                        try:
+                        await wait_for_rag_idle_async()
+                        async with ocr_semaphore:
                             t1 = time.perf_counter()
                             md = await ocr_page_with_nanonets_async(
                                 client,
@@ -809,17 +826,17 @@ async def process_pdf_async(pdf_path: Path, on_page_start=None, model_name: str 
                                 model_name=resolved_model,
                             )
                             timings["ocr_s"].append(time.perf_counter() - t1)
-                        except OllamaOCRException as exc:
-                            if OCR_PAGE_FAILURE_MODE == "raise":
-                                raise
-                            logger.warning("OCR omitido en página %s/%s: %s", page_number, total_pages, exc)
-                            md = _page_failure_markdown(page_number, total_pages, exc)
-                        page_markdowns[page_number - 1] = md
-                    finally:
-                        try:
-                            img_path.unlink(missing_ok=True)
-                        except OSError:
-                            pass
+                    except OllamaOCRException as exc:
+                        if OCR_PAGE_FAILURE_MODE == "raise":
+                            raise
+                        logger.warning("OCR omitido en página %s/%s: %s", page_number, total_pages, exc)
+                        md = _page_failure_markdown(page_number, total_pages, exc)
+                    page_markdowns[page_number - 1] = md
+                finally:
+                    try:
+                        img_path.unlink(missing_ok=True)
+                    except OSError:
+                        pass
 
             await asyncio.gather(*(process_page(i) for i in range(1, total_pages + 1)))
     finally:

@@ -704,6 +704,39 @@ class DocumentosService:
         converted = 0
         failed = 0
         pending_docs, skipped = self._collect_pending_markdown_docs()
+        if pending_docs:
+            from app.main.code.services.markdown.Conversion_markdown import (
+                get_pdf_page_count,
+            )
+            try:
+                from pdf2image.exceptions import (  # type: ignore
+                    PDFInfoNotInstalledError,
+                    PDFPageCountError,
+                    PDFSyntaxError,
+                )
+
+                page_count_errors = (
+                    OSError,
+                    RuntimeError,
+                    ValueError,
+                    PDFInfoNotInstalledError,
+                    PDFPageCountError,
+                    PDFSyntaxError,
+                )
+            except ImportError:  
+                page_count_errors = (OSError, RuntimeError, ValueError)
+
+            docs_with_pages: list[tuple[int, Documento]] = []
+            for doc in pending_docs:
+                pdf_path = Path(doc.path)
+                try:
+                    pages = get_pdf_page_count(pdf_path)
+                except page_count_errors:
+                    pages = 10**9
+                docs_with_pages.append((pages, doc))
+
+            docs_with_pages.sort(key=lambda item: (item[0], str(item[1].nombre or "")))
+            pending_docs = [doc for _, doc in docs_with_pages]
         total = len(pending_docs)
         if on_progress:
             on_progress(0, total)
