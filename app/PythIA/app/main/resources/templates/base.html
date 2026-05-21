@@ -109,6 +109,20 @@
       {% block content %}{% endblock %}
     </div>
   </main>
+
+  {% if current_user.is_authenticated %}
+    <button
+      type="button"
+      class="btn btn-primary rounded-circle shadow-lg pythia-help-fab"
+      id="pythia-tour-fab"
+      aria-label="{{ t('tutorial.fab_tooltip') }}"
+      title="{{ t('tutorial.fab_tooltip') }}"
+      data-bs-toggle="tooltip"
+      data-bs-placement="left"
+    >
+      <i class="bi bi-question-lg" aria-hidden="true"></i>
+    </button>
+  {% endif %}
   <script>
     window.PYTHIA_I18N = {{ client_translations|tojson }};
     window.pythiaTranslate = function(key, params) {

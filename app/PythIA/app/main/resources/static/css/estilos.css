@@ -1561,3 +1561,20 @@ body[data-theme="light"] .invalid-feedback.d-block {
     min-width: 0;
   }
 }
+
+.pythia-help-fab {
+  position: fixed;
+  right: 1.25rem;
+  bottom: 5rem;
+  width: 3.25rem;
+  height: 3.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1085;
+}
+
+.pythia-help-fab i {
+  font-size: 1.25rem;
+  line-height: 1;
+}

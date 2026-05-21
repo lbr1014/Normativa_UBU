@@ -337,10 +337,17 @@ def get_client_translations() -> dict[str, str]:
         "tutorial.nav.logout.desc",
         "tutorial.screen_overview.title",
         "tutorial.screen_overview.desc",
+        "tutorial.home.logo.title",
+        "tutorial.home.logo.desc",
+        "tutorial.home.menu.title",
+        "tutorial.home.menu.desc",
+        "tutorial.home.rag.title",
+        "tutorial.home.rag.desc",
         "tutorial.rag.form.title",
         "tutorial.rag.form.desc",
         "tutorial.error.no_driver",
         "tutorial.error.no_steps",
+        "tutorial.fab_tooltip",
     ]
     return {key: t(key) for key in keys}
 

@@ -1,5 +1,6 @@
 (() => {
   const startButtonId = "pythia-tour-start";
+  const floatingButtonId = "pythia-tour-fab";
 
   function t(key, params) {
     try {
@@ -99,6 +100,25 @@
 
     const steps = perPage[endpoint] ? [...perPage[endpoint]] : [];
 
+    if (endpoint === "main.pag_principal") {
+      const homeSteps = [
+        {
+          element: "#nav-logo-home",
+          popover: { title: t("tutorial.home.logo.title"), description: t("tutorial.home.logo.desc"), side: "bottom", align: "start" },
+        },
+        {
+          element: "#nav-open-menu",
+          popover: { title: t("tutorial.home.menu.title"), description: t("tutorial.home.menu.desc"), side: "bottom", align: "start" },
+        },
+        {
+          element: "#home-rag-card",
+          popover: { title: t("tutorial.home.rag.title"), description: t("tutorial.home.rag.desc"), side: "bottom", align: "start" },
+        },
+      ];
+
+      return homeSteps.filter((step) => elementExists(step.element));
+    }
+
     steps.push({
       element: "main.app-main-shell",
       popover: { title: t("tutorial.screen_overview.title"), description: t("tutorial.screen_overview.desc"), side: "bottom", align: "start" },
@@ -107,7 +127,8 @@
     return steps.filter((step) => elementExists(step.element));
   }
 
-  function startTour() {
+  function startTour(options = {}) {
+    const { includeMenu = true } = options;
     const createDriver =
       (window.driver && window.driver.js && typeof window.driver.js.driver === "function" && window.driver.js.driver) ||
       (window.driverjs && typeof window.driverjs.driver === "function" && window.driverjs.driver) ||
@@ -121,7 +142,7 @@
     }
 
     const endpoint = getEndpoint();
-    const steps = [...buildMenuSteps(), ...buildPageSteps(endpoint)];
+    const steps = includeMenu ? buildMenuSteps() : buildPageSteps(endpoint);
     if (!steps.length) {
       showToast(t("tutorial.error.no_steps"), "warning");
       return;
@@ -145,11 +166,20 @@
     const btn = document.getElementById(startButtonId);
     if (!btn) return;
     btn.addEventListener("click", () => {
-      startTour();
+      startTour({ includeMenu: true });
     });
   }
 
   document.addEventListener("DOMContentLoaded", () => {
     wireButton();
+    const fab = document.getElementById(floatingButtonId);
+    if (fab) {
+      try {
+        window.bootstrap?.Tooltip?.getOrCreateInstance(fab);
+      } catch {
+        // noop
+      }
+      fab.addEventListener("click", () => startTour({ includeMenu: false }));
+    }
   });
 })();

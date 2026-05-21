@@ -11,6 +11,8 @@ from .keys import (
     TIEMPO,
 )
 
+STATS_TITLE_ES = "Estadísticas"
+
 TRANSLATIONS_ES = {
     "app.default_title": "Mi web",
     "app.welcome": "Bienvenido",
@@ -53,7 +55,7 @@ TRANSLATIONS_ES = {
     "nav.manage_users": "Administrar usuarios",
     "nav.query_history": "Historial de consultas",
     "nav.edit_user": "Perfil de Usuario",
-    "nav.usage_stats": "Estadísticas",
+    "nav.usage_stats": STATS_TITLE_ES,
     "nav.home": "Página principal",
     "nav.settings": "Configuración",
     "nav.appearance": "Apariencia",
@@ -260,7 +262,7 @@ TRANSLATIONS_ES = {
     "home.donut_user_title": CONSULTAS,
     "home.donut_user_segment": CONSULTAS,
     "home.donut_global_segment": "Resto global",
-    "stats.page_title": "Estadísticas",
+    "stats.page_title": STATS_TITLE_ES,
     "stats.subtitle": "Consulta gráficas para ver el uso del modelo.",
     "stats.scope_global_short": "Global",
     "stats.scope_user_short": "Tu uso",
@@ -492,7 +494,7 @@ TRANSLATIONS_ES = {
     "tutorial.nav.history.desc": "Consulta las preguntas y respuestas realizadas anteriormente.",
     "tutorial.nav.profile.title": "Perfil",
     "tutorial.nav.profile.desc": "Edita tu perfil y tus preferencias.",
-    "tutorial.nav.stats.title": "Estadísticas",
+    "tutorial.nav.stats.title": STATS_TITLE_ES,
     "tutorial.nav.stats.desc": "Revisa métricas de uso y gráficas.",
     "tutorial.nav.docs.title": "Documentos",
     "tutorial.nav.docs.desc": "Administra los documentos (solo administradores).",
@@ -506,8 +508,15 @@ TRANSLATIONS_ES = {
     "tutorial.nav.logout.desc": "Cierra tu sesión actual.",
     "tutorial.screen_overview.title": "Vista general",
     "tutorial.screen_overview.desc": "Aquí verás el contenido principal de esta pantalla.",
+    "tutorial.home.logo.title": "Redirección",
+    "tutorial.home.logo.desc": "Pulsa aquí cuando quieras volver a la página principal.",
+    "tutorial.home.menu.title": "Menú",
+    "tutorial.home.menu.desc": "Pulsa aquí cuando quieras abrir el menú.",
+    "tutorial.home.rag.title": "Consulta",
+    "tutorial.home.rag.desc": "Pulsa aquí cuando quieras realizar una consulta al modelo.",
     "tutorial.rag.form.title": "Chat / Consulta",
     "tutorial.rag.form.desc": "Escribe tu pregunta y envíala para obtener una respuesta.",
     "tutorial.error.no_driver": "No se ha podido cargar el tutorial (Driver.js no disponible). Revisa tu conexión o bloqueadores de contenido.",
     "tutorial.error.no_steps": "No hay pasos de tutorial disponibles para esta pantalla.",
+    "tutorial.fab_tooltip": "Ver un tutorial interactivo sobre el uso de la página",
 }

@@ -30,7 +30,7 @@
           </p>
         </div>
         <div class="app-header-wordmark" aria-label="PythIA">
-          <img src="{{ url_for('static', filename='img/PythIA_letras.png') }}" alt="PythIA" class="logo-header logo-header-letters">
+          <img id="nav-logo-home" src="{{ url_for('static', filename='img/PythIA_letras.png') }}" alt="PythIA" class="logo-header logo-header-letters">
         </div>
       {% else %}
         <div class="navbar-brand app-brand me-0 app-brand-static" aria-current="page">
@@ -47,7 +47,7 @@
       {% endif %}
 
       {% if show_authenticated_header %}
-        <button class="navbar-toggler border-0 shadow-none app-navbar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#mainNavbar" aria-controls="mainNavbar" aria-expanded="false" aria-label="{{ t('nav.open_menu') }}">
+        <button class="navbar-toggler border-0 shadow-none app-navbar-toggler" id="nav-open-menu" type="button" data-bs-toggle="offcanvas" data-bs-target="#mainNavbar" aria-controls="mainNavbar" aria-expanded="false" aria-label="{{ t('nav.open_menu') }}">
           <span class="navbar-toggler-icon"></span>
         </button>
       {% elif show_guest_auth_links %}
@@ -76,34 +76,24 @@
         </button>
       </div>
       <ul class="navbar-nav justify-content-end flex-grow-1 pe-0 app-navbar-nav-mobile">
-        {% if request.endpoint != 'main.pag_principal' %}
+        <li class="nav-item">
+          <a class="nav-link app-nav-link{% if request.endpoint == 'main.pag_principal' %} active{% endif %}" id="nav-home" href="{{ url_for('main.pag_principal') }}"{% if request.endpoint == 'main.pag_principal' %} aria-current="page"{% endif %}>{{ t("nav.home") }}</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link app-nav-link{% if request.endpoint == 'main.historial' %} active{% endif %}" id="nav-history" href="{{ url_for('main.historial') }}"{% if request.endpoint == 'main.historial' %} aria-current="page"{% endif %}>{{ t("nav.query_history") }}</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link app-nav-link{% if request.endpoint == 'main.edit_user' %} active{% endif %}" id="nav-profile" href="{{ url_for('main.edit_user') }}"{% if request.endpoint == 'main.edit_user' %} aria-current="page"{% endif %}>{{ t("nav.edit_user") }}</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link app-nav-link{% if request.endpoint == 'main.stats_page' %} active{% endif %}" id="nav-stats" href="{{ url_for('main.stats_page') }}"{% if request.endpoint == 'main.stats_page' %} aria-current="page"{% endif %}>{{ t("nav.usage_stats") }}</a>
+        </li>
+        {% if current_user.is_admin %}
           <li class="nav-item">
-            <a class="nav-link app-nav-link" id="nav-home" href="{{ url_for('main.pag_principal') }}">{{ t("nav.home") }}</a>
+            <a class="nav-link app-nav-link{% if request.endpoint == 'admin.documents_list_page' %} active{% endif %}" id="nav-docs" href="{{ url_for('admin.documents_list_page') }}"{% if request.endpoint == 'admin.documents_list_page' %} aria-current="page"{% endif %}>{{ t("nav.manage_documents") }}</a>
           </li>
-        {% endif %}
-        {% if request.endpoint != 'main.historial' %}
           <li class="nav-item">
-            <a class="nav-link app-nav-link" id="nav-history" href="{{ url_for('main.historial') }}">{{ t("nav.query_history") }}</a>
-          </li>
-        {% endif %}
-        {% if request.endpoint != 'main.edit_user' %}
-          <li class="nav-item">
-            <a class="nav-link app-nav-link" id="nav-profile" href="{{ url_for('main.edit_user') }}">{{ t("nav.edit_user") }}</a>
-          </li>
-        {% endif %}
-        {% if request.endpoint != 'main.stats_page' %}
-          <li class="nav-item">
-            <a class="nav-link app-nav-link" id="nav-stats" href="{{ url_for('main.stats_page') }}">{{ t("nav.usage_stats") }}</a>
-          </li>
-        {% endif %}
-        {% if current_user.is_admin and request.endpoint != 'admin.documents_list_page' %}
-          <li class="nav-item">
-            <a class="nav-link app-nav-link" id="nav-docs" href="{{ url_for('admin.documents_list_page') }}">{{ t("nav.manage_documents") }}</a>
-          </li>
-        {% endif %}
-        {% if current_user.is_admin and request.endpoint != 'admin.users' %}
-          <li class="nav-item">
-            <a class="nav-link app-nav-link" id="nav-users" href="{{ url_for('admin.users') }}">{{ t("nav.manage_users") }}</a>
+            <a class="nav-link app-nav-link{% if request.endpoint == 'admin.users' %} active{% endif %}" id="nav-users" href="{{ url_for('admin.users') }}"{% if request.endpoint == 'admin.users' %} aria-current="page"{% endif %}>{{ t("nav.manage_users") }}</a>
           </li>
         {% endif %}
       </ul>
