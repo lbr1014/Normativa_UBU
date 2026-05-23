@@ -6,12 +6,12 @@
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/PythIA_logo.svg') }}">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons/1.11.3/font/bootstrap-icons.min.css') }}">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.3.1/dist/driver.css" crossorigin="anonymous">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.3.1/dist/driver.css" integrity="sha384-eyrYgcjChmzD338JTHFZssgJHOqqOZbajet8yZpCw8ESroLDi28BarMEKCImNGHC" crossorigin="anonymous">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/estilos.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/luz.css') }}">
     {% block styles %}{% endblock %}
 </head>
-<body data-theme="{{current_user.theme_mode if current_user.is_authenticated else 'system'}}" data-endpoint="{{ request.endpoint }}">
+<body data-theme="{{current_user.theme_mode if current_user.is_authenticated else 'system'}}" data-endpoint="{{ request.endpoint }}" data-is-admin="{{ '1' if current_user.is_authenticated and current_user.is_admin else '0' }}">
 {% include "components/app_header.html" %}
 
   {% set breadcrumb_items = [] %}
@@ -132,7 +132,7 @@
     };
   </script>
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/driver.js@1.3.1/dist/driver.js.iife.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/driver.js@1.3.1/dist/driver.js.iife.js" integrity="sha384-BhR06AMz62Xn0o53z8itVS1vw4JslNckRFgOTa6/Dob0Agdmbbh8Dr9sDO2h18TO" crossorigin="anonymous"></script>
   <script src="{{ url_for('static', filename='js/answer_renderer.js', v='20260504-markdown') }}"></script>
   <script src="{{ url_for('static', filename='js/functionalities.js') }}"></script>
   <script src="{{ url_for('static', filename='js/tutorials.js', v='20260521-driverjs') }}"></script>

@@ -138,7 +138,7 @@
                       <button type="button" class="stats-view-button is-active" data-hours-view="bars">
                         {{ t("stats.chart_hours_view_bars") }}
                       </button>
-                      <button type="button" class="stats-view-button" data-hours-view="heatmap">
+                      <button type="button" class="stats-view-button" id="stats-hours-heatmap" data-hours-view="heatmap">
                         {{ t("stats.chart_hours_view_heatmap") }}
                       </button>
                     </fieldset>
@@ -201,7 +201,7 @@
                             </option>
                           {% endfor %}
                         </select>
-                        <button type="submit" class="btn btn-primary stats-comparison-apply">
+                        <button type="submit" class="btn btn-primary stats-comparison-apply" id="stats-comparison-apply">
                           {{ t("stats.comparison_filter_apply") }}
                         </button>
                       </div>
@@ -246,8 +246,8 @@
 {% endblock %}
 
 {% block scripts %}
-  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js" integrity="sha384-CjloA8y00+1SDAUkjs099PVfnY2KmDC2BZnws9kh8D/lX1s46w6EPhpXdqMfjK6i" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3" integrity="sha384-Ukv1p/xTma6P4/2bY5KzWBw+ydSpXmhCMtyciIQVDJ1RmOxtCYNMF1uXT9T63H67" crossorigin="anonymous"></script>
   <script>
     window.PYTHIA_STATS = {
       locale: {{ current_locale|tojson }},

@@ -127,10 +127,11 @@
         </div>
 
         <div class="profile-actions">
-          {{ form.submit(class_="btn btn-primary btn-lg") }}
+          {{ form.submit(class_="btn btn-primary btn-lg", id="profile-save") }}
           <a href="{{ url_for('main.pag_principal') }}" class="btn btn-secondary btn-lg app-btn-cancel">{{ t("common.cancel") }}</a>
           <button type="button"
                   class="btn btn-danger btn-lg"
+                  id="profile-delete-account"
                   data-bs-toggle="modal"
                   data-bs-target="#deleteConfirmModal"
                   data-item-name="{{ t('user.account') }}"

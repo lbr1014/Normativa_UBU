@@ -33,6 +33,7 @@
                 required=True
               ) }}
               <label for="files"
+                     id="docs-choose-files"
                      class="upload-file-picker-label"
                      data-bs-toggle="tooltip"
                      data-bs-title="{{ upload_form.files.label.text }}">
@@ -49,6 +50,7 @@
 
           <div class="mb-3">
             <button type="submit"
+                    id="docs-upload-button"
                     class="btn btn-primary w-100"
                     data-bs-toggle="tooltip"
                     data-bs-title="{{ t('docs.upload_button_tooltip') }}">
@@ -62,6 +64,7 @@
               <div class="documents-action">
                 <button form="scrapingForm"
                         type="submit"
+                        id="docs-scraping-button"
                         class="btn btn-outline-light w-100"
                         data-bs-toggle="tooltip"
                         data-bs-title="{{ t('docs.scraping_button_tooltip') }}">
@@ -72,6 +75,7 @@
               <div class="documents-action">
                 <button form="markdownForm"
                         type="submit"
+                        id="docs-markdown-button"
                         class="btn btn-outline-light w-100"
                         data-bs-toggle="tooltip"
                         data-bs-title="{{ t('docs.markdown_button_tooltip') }}"
@@ -83,6 +87,7 @@
               <div class="documents-action">
                 <button form="vectorForm"
                         type="submit"
+                        id="docs-vector-button"
                         class="btn btn-primary w-100"
                         data-bs-toggle="tooltip"
                         data-bs-title="{{ t('docs.vector_button_tooltip') }}">
@@ -104,9 +109,10 @@
         </form>
 
         <div id="scraping-progress" data-finished="false" class="mt-4 d-none" aria-label="{{ t('docs.progress_aria') }}">
-          <div class="progress upload-progress w-100" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div class="progress upload-progress w-100" aria-hidden="true">
             <div class="progress-bar" style="width: 0%"></div>
           </div>
+          <progress class="visually-hidden" id="scraping-progress-native" max="100" value="0" aria-label="{{ t('docs.progress_aria') }}"></progress>
           <div class="progress-text small text-muted-app mt-2 text-center" aria-live="polite">
             {{ t("docs.running_default") }}
           </div>
@@ -123,6 +129,7 @@
         <div class="app-sticky-bar app-sticky-surface app-sticky-shell">
           <div class="app-filter-toolbar">
             <button class="btn btn-outline-light btn-sm app-filter-toggle"
+                    id="docs-filter-toggle"
                     type="button"
                     data-bs-toggle="collapse"
                     data-bs-target="#documentsFilterCollapse"
@@ -137,6 +144,7 @@
                 <div class="documents-counter">{{ t("docs.count", count=(total_docs if total_docs is defined else docs|length)) }}</div>
                 <button type="button"
                         class="btn btn-danger btn-sm admin-users-bulk-button"
+                        id="docs-bulk-delete"
                         data-bs-toggle="modal"
                         data-bs-target="#deleteConfirmModal"
                         data-item-name="{{ t('docs.selected_documents') }}"
@@ -195,7 +203,7 @@
           </div>
 
           <div class="admin-users-filter-actions">
-            <button type="submit" class="btn btn-primary">{{ t("common.filter") }}</button>
+            <button type="submit" class="btn btn-primary" id="docs-filter-apply">{{ t("common.filter") }}</button>
             <a href="{{ url_for('admin.documents_list_page') }}" class="btn btn-outline-light">{{ t("common.clear") }}</a>
           </div>
         </form>

@@ -13,6 +13,7 @@
     <div class="app-sticky-bar app-sticky-surface app-sticky-shell">
       <div class="app-filter-toolbar">
         <button class="btn btn-outline-light btn-sm app-filter-toggle"
+                id="history-filter-toggle"
                 type="button"
                 data-bs-toggle="collapse"
                 data-bs-target="#historyFilterCollapse"
@@ -31,6 +32,7 @@
           {% endif %}
           <button type="button"
                   class="btn btn-danger btn-sm admin-users-bulk-button"
+                  id="history-bulk-delete"
                   data-bs-toggle="modal"
                   data-bs-target="#deleteConfirmModal"
                   data-item-name="{{ t('history.title')|lower }}"
@@ -90,7 +92,7 @@
       </div>
 
       <div class="admin-users-filter-actions">
-        <button type="submit" class="btn btn-primary">{{ t("common.filter") }}</button>
+        <button type="submit" class="btn btn-primary" id="history-filter-apply">{{ t("common.filter") }}</button>
         <a href="{{ url_for('main.historial') }}" class="btn btn-outline-light">{{ t("common.clear") }}</a>
       </div>
     </form>

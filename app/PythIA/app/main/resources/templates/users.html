@@ -64,6 +64,7 @@
         <div class="app-sticky-bar app-sticky-surface app-sticky-shell">
           <div class="app-filter-toolbar">
             <button class="btn btn-outline-light btn-sm app-filter-toggle"
+                    id="users-filter-toggle"
                     type="button"
                     data-bs-toggle="collapse"
                     data-bs-target="#usersFilterCollapse"
@@ -79,12 +80,14 @@
                       name="bulk_action"
                       value="toggle"
                       class="btn btn-outline-light btn-sm admin-users-bulk-button"
+                      id="users-bulk-toggle"
                       form="bulk-users-form"
                       disabled>
                 {{ t("users.bulk_change_type") }}
               </button>
               <button type="button"
                       class="btn btn-danger btn-sm admin-users-bulk-button"
+                      id="users-bulk-delete"
                       data-bs-toggle="modal"
                       data-bs-target="#deleteConfirmModal"
                       data-item-name="{{ t('users.selected_users') }}"
@@ -129,7 +132,7 @@
           </div>
 
           <div class="admin-users-filter-actions">
-            <button type="submit" class="btn btn-primary">{{ t("common.filter") }}</button>
+            <button type="submit" class="btn btn-primary" id="users-filter-apply">{{ t("common.filter") }}</button>
             <a href="{{ url_for('admin.users') }}" class="btn btn-outline-light">{{ t("common.clear") }}</a>
           </div>
         </form>

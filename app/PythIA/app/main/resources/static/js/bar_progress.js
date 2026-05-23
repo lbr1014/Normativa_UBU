@@ -1,6 +1,7 @@
 document.addEventListener("DOMContentLoaded", () => {
   const progressBox = document.getElementById("scraping-progress");
   const progressEl = progressBox?.querySelector(".progress");
+  const nativeProgressEl = progressBox?.querySelector("progress");
   const bar = progressBox?.querySelector(".progress-bar");
   const text = progressBox?.querySelector(".progress-text");
   const cancelButton = document.getElementById("cancel-job-button");
@@ -91,6 +92,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (text) text.textContent = "";
     if (bar) bar.style.width = "0%";
     if (progressEl) progressEl.setAttribute("aria-valuenow", "0");
+    if (nativeProgressEl) nativeProgressEl.value = 0;
   }
 
   function showToast(title, message, variant = "success") {
@@ -145,6 +147,7 @@ document.addEventListener("DOMContentLoaded", () => {
       bar.style.width = "0%";
     }
     if (progressEl) progressEl.setAttribute("aria-valuenow", "0");
+    if (nativeProgressEl) nativeProgressEl.value = 0;
     toggleButtons(true);
   }
 
@@ -158,6 +161,7 @@ document.addEventListener("DOMContentLoaded", () => {
       bar.style.width = `${boundedPercent}%`;
     }
     if (progressEl) progressEl.setAttribute("aria-valuenow", String(boundedPercent));
+    if (nativeProgressEl) nativeProgressEl.value = boundedPercent;
     if (text) text.textContent = message;
   }
 
@@ -169,6 +173,7 @@ document.addEventListener("DOMContentLoaded", () => {
       bar.style.width = "0%";
     }
     if (progressEl) progressEl.setAttribute("aria-valuenow", "0");
+    if (nativeProgressEl) nativeProgressEl.value = 0;
     if (text) text.textContent = message;
   }
 
@@ -194,6 +199,7 @@ document.addEventListener("DOMContentLoaded", () => {
       bar.style.width = "100%";
     }
     if (progressEl) progressEl.setAttribute("aria-valuenow", "100");
+    if (nativeProgressEl) nativeProgressEl.value = 100;
     if (text) text.textContent = message;
     showToast(tr("jobs.failed_generic"), message || tr("jobs.failed_generic"), "danger");
     setActiveJob(null, null);

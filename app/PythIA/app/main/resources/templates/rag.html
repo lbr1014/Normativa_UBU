@@ -21,7 +21,7 @@
           <div class="rag-model-select-shell">
             {{ form.model(class="form-select rag-model-select", id="rag-model-selector") }}
           </div>
-          <a class="btn btn-outline-light btn-header rag-model-compare-btn" href="{{ url_for('rag.model_comparison_page') }}">
+          <a id="rag-compare-models" class="btn btn-outline-light btn-header rag-model-compare-btn" href="{{ url_for('rag.model_comparison_page') }}">
             {{ t("rag.compare_models_button") }}
           </a>
         </div>

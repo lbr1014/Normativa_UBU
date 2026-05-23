@@ -19,7 +19,7 @@
   </div>
 
   <div class="d-flex justify-content-center align-items-center gap-3 flex-wrap mt-3">
-    <button class="btn btn-modelo luz" type="submit" data-rag-ask>{{ t("rag.ask_button") }}</button>
+    <button id="rag-chat-ask" class="btn btn-modelo luz" type="submit" data-rag-ask>{{ t("rag.ask_button") }}</button>
     <button class="btn btn-outline-light btn-header d-none" type="button" data-rag-cancel>{{ t("rag.cancel_button") }}</button>
     <div class="rag-status d-inline-flex align-items-center gap-2 w-100 justify-content-center" aria-live="polite" data-rag-status></div>
   </div>
@@ -37,6 +37,7 @@
     <h3 class="rag-section-title h6 mb-0">{{ t("rag.fragment_used") }}</h3>
     <button type="button"
             class="btn btn-outline-light btn-sm"
+            id="rag-view-all-fragments-chat"
             data-bs-toggle="modal"
             data-bs-target="#chunksModal"
             data-consulta-id="rag">
