@@ -44,7 +44,12 @@ from app.main.code.inetrnacionalizacion.tarduccion import (
     translate_for,
 )
 from app.main.code.model.job_state import JobStateMixin
-from app.main.code.services.async_tasks import executor, markdown_executor
+from app.main.code.services.async_tasks import (
+    cancel_tracked,
+    executor,
+    markdown_executor,
+    submit_tracked,
+)
 from app.main.code.services.markdown_conversion_state import (
     send_markdown_finished_email,
 )
@@ -788,7 +793,17 @@ def convert_documents_to_markdown() -> ResponseReturnValue:
     db.session.commit()
 
     app_obj = current_app._get_current_object()
-    markdown_executor.submit(markdown_async, app_obj, job.id, current_user.email, documents_page_url(), lang)
+    submit_tracked(
+        markdown_executor,
+        job_type="markdown",
+        tracked_job_id=job.id,
+        fn=markdown_async,
+        app=app_obj,
+        job_id=job.id,
+        user_email=current_user.email,
+        docs_url=documents_page_url(),
+        lang=lang,
+    )
 
     return jsonify({"job_id": job.id}), 202
 
@@ -818,6 +833,7 @@ def cancel_markdown_conversion(job_id: int) -> ResponseReturnValue:
     job.cancel_requested = True
     _set_job_message(job, t("markdown.cancelling"))
     if job.status == "queued":
+        cancel_tracked(job_type="markdown", tracked_job_id=job.id)
         job.status = "cancelled"
         job.finished_at = _now_madrid()
     db.session.commit()
@@ -1162,7 +1178,17 @@ def update_vector_db() -> ResponseReturnValue:
     db.session.commit()
 
     app_obj = current_app._get_current_object()
-    executor.submit(documentos_async, app_obj, job.id, current_user.email, documents_page_url(), lang)
+    submit_tracked(
+        executor,
+        job_type="vector",
+        tracked_job_id=job.id,
+        fn=documentos_async,
+        app=app_obj,
+        job_id=job.id,
+        user_email=current_user.email,
+        docs_url=documents_page_url(),
+        lang=lang,
+    )
 
     return jsonify({"job_id": job.id}), 202
 
@@ -1191,6 +1217,7 @@ def cancel_vector_db(job_id: int) -> ResponseReturnValue:
 
     job.cancel_requested = True
     if job.status == "queued":
+        cancel_tracked(job_type="vector", tracked_job_id=job.id)
         job.status = "cancelled"
         job.finished_at = _now_madrid()
     db.session.commit()
@@ -1554,7 +1581,17 @@ def web_scraping_documents() -> ResponseReturnValue:
     db.session.commit()
 
     app_obj = current_app._get_current_object()
-    executor.submit(scraping_async, app_obj, job.id, current_user.email, documents_page_url(), lang)
+    submit_tracked(
+        executor,
+        job_type="scraping",
+        tracked_job_id=job.id,
+        fn=scraping_async,
+        app=app_obj,
+        job_id=job.id,
+        user_email=current_user.email,
+        docs_url=documents_page_url(),
+        lang=lang,
+    )
 
     return jsonify({"job_id": job.id}), 202
 
@@ -1584,6 +1621,7 @@ def cancel_web_scraping(job_id: int) -> ResponseReturnValue:
     job.cancel_requested = True
     _set_job_message(job, t("scraping.cancelling"))
     if job.status == "queued":
+        cancel_tracked(job_type="scraping", tracked_job_id=job.id)
         job.status = "cancelled"
         job.finished_at = _now_madrid()
     db.session.commit()

@@ -289,4 +289,9 @@ def create_app():
     app.register_blueprint(rag_bp)
     register_error_handlers(app)
 
+    # Cerrar pools de hilos al parar el servidor / proceso para evitar hilos colgados.
+    from .services.async_tasks import register_executor_shutdown
+
+    register_executor_shutdown(app)
+
     return app

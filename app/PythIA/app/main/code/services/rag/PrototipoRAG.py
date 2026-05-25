@@ -277,7 +277,99 @@ def get_ollama_execution_device() -> str:
     return "GPU_REQ"
 
 
-async def get_ollama_effective_execution_device(  # NOSONAR
+def _normalize_ollama_model_name(value: str | None) -> str:
+    """
+    Normaliza un nombre de modelo de Ollama para comparaciones, eliminando espacios y convirtiendo a minúsculas.
+
+    Args:
+        value (str | None): cadena con el nombre del modelo.
+
+    Returns:
+        str: cadena normalizada.
+    """
+    return (value or "").strip().lower()
+
+
+def _timeout_to_total_seconds(request_timeout: httpx.Timeout) -> float | None:
+    """
+    Convierte un `httpx.Timeout` en un único timeout "total" (segundos) para usar
+    con un context manager, httpx permite configurar timeouts por fase (connect/read/write/pool). Para
+    un límite total conservador, usamos el máximo de los valores definidos.
+    
+    Args:
+        request_timeout: instancia de httpx.Timeout con los timeouts configurados para la petición.
+    
+    Returns:
+        float | None: El timeout total recomendado en segundos, o None si no se han definido timeouts.
+    """
+    candidates: list[float] = []
+    for value in (
+        request_timeout.connect,
+        request_timeout.read,
+        request_timeout.write,
+        request_timeout.pool,
+    ):
+        if value is None:
+            continue
+        candidates.append(float(value))
+    return max(candidates) if candidates else None
+
+
+async def _fetch_ollama_ps_payload(*, request_timeout: httpx.Timeout) -> dict:
+    """
+    Obtiene el payload de la API /api/ps de Ollama, que contiene información sobre los modelos cargados y su uso de VRAM.
+
+    Args:
+        request_timeout (httpx.Timeout): Timeout configurado para la petición a Ollama, que se convertirá en un timeout total para la operación.
+
+    Returns:
+        dict: el payload de la respuesta, contieniendo información sobre los modelos cargados en Ollama y su uso de VRAM.
+    """
+    total_timeout = _timeout_to_total_seconds(request_timeout)
+    async with httpx.AsyncClient(base_url=OLLAMA_BASE_URL) as client:
+        if total_timeout is None:
+            resp = await client.get("/api/ps")
+        else:
+            # Compatibilidad Python 3.10+: `asyncio.timeout()` solo existe desde 3.11.
+            resp = await asyncio.wait_for(client.get("/api/ps"), timeout=total_timeout)
+        resp.raise_for_status()
+        return resp.json() if resp.content else {}
+
+
+def _infer_device_from_ollama_ps_payload(payload: dict, *, target_model: str) -> str | None:
+    """
+    Infere el dispositivo de ejecución (GPU o CPU) que Ollama está usando para un modelo específico, a partir del payload de /api/ps.
+    
+    Args:
+        payload: Diccionario con la información de los procesos/modelos cargados en Ollama, obtenido de la API /api/ps.
+        target_model: Nombre del modelo para el cual se quiere inferir el dispositivo de ejecución, ya normalizado (sin espacios y en minúsculas).
+    
+    Returns:
+        str | None: "GPU" si el modelo está usando VRAM, "CPU" si no está usando VRAM, o None si no se pudo determinar (modelo no encontrado en el payload).
+    
+    """
+    models = payload.get("models")
+    if not isinstance(models, list):
+        return None
+
+    for item in models:
+        if not isinstance(item, dict):
+            continue
+
+        name = _normalize_ollama_model_name(str(item.get("name") or item.get("model") or ""))
+        if name != target_model:
+            continue
+
+        try:
+            size_vram = int(item.get("size_vram") or 0)
+        except (TypeError, ValueError):
+            size_vram = 0
+
+        return "GPU" if size_vram > 0 else "CPU"
+    return None
+
+
+async def get_ollama_effective_execution_device( 
     *,
     model_name: str,
     should_cancel=None,
@@ -301,39 +393,14 @@ async def get_ollama_effective_execution_device(  # NOSONAR
         pool=settings.OLLAMA_POOL_TIMEOUT_SECONDS,
     )
 
-    def _normalize_model(value: str | None) -> str:
-        return (value or "").strip().lower()
-
-    async def _fetch_ps_payload() -> dict:
-        async with httpx.AsyncClient(base_url=OLLAMA_BASE_URL, timeout=timeout) as client:
-            resp = await client.get("/api/ps")
-            resp.raise_for_status()
-            return resp.json() if resp.content else {}
-
-    def _infer_device_from_ps(payload: dict, *, target_model: str) -> str | None:
-        models = payload.get("models")
-        if not isinstance(models, list):
-            return None
-
-        for item in models:
-            if not isinstance(item, dict):
-                continue
-            name = _normalize_model(str(item.get("name") or item.get("model") or ""))
-            if name != target_model:
-                continue
-            try:
-                size_vram = int(item.get("size_vram") or 0)
-            except (TypeError, ValueError):
-                size_vram = 0
-            return "GPU" if size_vram > 0 else "CPU"
-        return None
-
     try:
-        payload = await _fetch_ps_payload()
+        payload = await _fetch_ollama_ps_payload(request_timeout=timeout)
     except (httpx.HTTPError, ValueError, TypeError):
         return fallback
 
-    device = _infer_device_from_ps(payload, target_model=_normalize_model(model_name))
+    device = _infer_device_from_ollama_ps_payload(
+        payload, target_model=_normalize_ollama_model_name(model_name)
+    )
     return device or fallback
 
 
@@ -1766,7 +1833,11 @@ async def ask_ollama(
         pool=settings.OLLAMA_POOL_TIMEOUT_SECONDS,
     )
     try:
-        async with httpx.AsyncClient(base_url=OLLAMA_BASE_URL, timeout=timeout) as client:
+        from app.main.code.services.resource_priority import ollama_request_slot_async
+
+        async with ollama_request_slot_async(), httpx.AsyncClient(
+            base_url=OLLAMA_BASE_URL, timeout=timeout
+        ) as client:
             await ensure_ollama_model_available(client, model_name, should_cancel=should_cancel)
             async with client.stream(
                 "POST",

@@ -303,7 +303,12 @@ async def _post_ollama_chat_async(client: httpx.AsyncClient, payload: dict) -> d
     """
     model_name = str(payload.get("model") or MODEL_NAME)
     try:
-        response = await client.post("/api/chat", json=payload)
+        from app.main.code.services.resource_priority import (
+            ollama_request_slot_background_async,
+        )
+
+        async with ollama_request_slot_background_async():
+            response = await client.post("/api/chat", json=payload)
     except httpx.TimeoutException as exc:
         raise OllamaOCRException(
             f"Timeout en Ollama tras {OLLAMA_READ_TIMEOUT_SECONDS}s con el modelo '{model_name}'."
@@ -801,14 +806,13 @@ async def process_pdf_async(pdf_path: Path, on_page_start=None, model_name: str 
             from app.main.code.services.resource_priority import wait_for_rag_idle_async
 
             async def process_page(page_number: int) -> None:
-                if on_page_start is not None:
-                    on_page_start(page_number, total_pages)
-
                 logger.info("Página %s/%s", page_number, total_pages)
 
                 # 1) Renderizar a imagen (CPU). Esto puede paralelizarse bastante sin tocar Ollama.
                 t0 = time.perf_counter()
                 async with render_semaphore:
+                    if on_page_start is not None:
+                        on_page_start(page_number, total_pages)
                     img_path = await asyncio.to_thread(pdf_page_to_image, pdf_path, page_number, tmp_dir)
                 timings["render_s"].append(time.perf_counter() - t0)
 
