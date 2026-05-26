@@ -6,6 +6,7 @@ Script con los formularios Flask-WTF usados por autenticación, administración,
 from typing import ClassVar
 
 from flask import current_app
+from flask_login import current_user
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileAllowed, FileField
 from wtforms import (
@@ -63,6 +64,22 @@ MIN_LENGTH_PASSWRD = "validation.min_length_8"
 
 """str: Clave de traducción para validación de seguridad de contraseña."""
 VALIDATE_PASSWRD_SECURITY = "validation.password_security"
+
+
+def _validate_email_with_emailable(field: StringField) -> None:
+    api_key = current_app.config.get("EMAILABLE_API_KEY")
+    if not api_key:
+        return
+
+    email = (field.data or "").strip().lower()
+    if not email:
+        return
+
+    result = verify_email(email)
+    state = (result or {}).get("state")
+
+    if state in {"undeliverable", "invalid", "disposable"}:
+        raise ValidationError(t("auth.email_undeliverable"))
 
 
 class LocalizedFlaskForm(FlaskForm):
@@ -252,22 +269,7 @@ class SignupForm(LocalizedFlaskForm):
     submit = SubmitField("Crear cuenta")
 
     def validate_email(self, field: StringField) -> None:
-        """
-        Valida el email usando Emailable (si hay API key configurada).
-        Si no hay API key o hay un error de red, no bloquea el registro par aevitar fallso.
-        
-        Args: 
-            field (StringField): Campo de email a validar.
-        """
-        api_key = current_app.config.get("EMAILABLE_API_KEY")
-        if not api_key:
-            return
-
-        result = verify_email(field.data.lower().strip())
-        state = (result or {}).get("state")
-
-        if state in {"undeliverable", "invalid", "disposable"}:
-            raise ValidationError(t("auth.email_undeliverable"))
+        _validate_email_with_emailable(field)
 
 
 class AdminCreateUserForm(LocalizedFlaskForm):
@@ -375,6 +377,24 @@ class EditUserForm(LocalizedFlaskForm):
         super().__init__(*args, **kwargs)
 
         self.preferred_model.choices = get_rag_llm_model_choices()
+
+    def validate_email(self, field: StringField) -> None:
+        """
+        Valida el email usando Emailable (si hay API key configurada).
+
+        Solo se aplica cuando el usuario proporciona un nuevo email distinto al actual.
+        Si no hay API key o hay un error de red, no bloquea para mantener el
+        comportamiento anterior.
+        """
+        if not field.data:
+            return
+
+        new_email = field.data.lower().strip()
+        current_email = (getattr(current_user, "email", "") or "").lower().strip()
+        if current_email and new_email == current_email:
+            return
+
+        _validate_email_with_emailable(field)
 
 
 class RAGQueryForm(LocalizedFlaskForm):
