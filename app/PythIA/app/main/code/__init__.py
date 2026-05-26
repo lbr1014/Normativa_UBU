@@ -135,7 +135,12 @@ def _configure_data_dirs(app: Flask, *, project_root: Path) -> None:
         app (Flask): La aplicación Flask a configurar.
         project_root (Path): La ruta raíz del proyecto.
     """
-    data_dir = Path(os.environ.get("DATA_DIR") or (project_root / "data"))
+    data_dir_env = os.environ.get("DATA_DIR")
+    if data_dir_env:
+        data_dir = Path(data_dir_env)
+    else:
+        docker_data_dir = Path("/data")
+        data_dir = docker_data_dir if docker_data_dir.is_dir() else (project_root / "data")
     app.config["DATA_DIR"] = data_dir
 
     docs_dir_env = os.environ.get("DOCS_DIR")
