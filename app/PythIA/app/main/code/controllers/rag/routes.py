@@ -4,8 +4,10 @@ Script para las rutas de consulta RAG, seguimiento de estado y cancelación de c
 """
 
 import asyncio
+import json
 import re
 from collections import defaultdict
+from pathlib import Path
 
 from flask import (
     abort,
@@ -13,6 +15,7 @@ from flask import (
     jsonify,
     render_template,
     request,
+    url_for,
 )
 from flask.typing import ResponseReturnValue
 from flask_login import current_user, login_required
@@ -26,6 +29,7 @@ from app.main.code.inetrnacionalizacion.tarduccion import (
     translate_for,
 )
 from app.main.code.model.documento import Documento
+from app.main.code.model.rag_evaluation_state import RAGEvaluationState
 from app.main.code.model.rag_query_state import RAGQueryState
 from app.main.code.services.async_tasks import cancel_tracked, executor, submit_tracked
 from app.main.code.services.rag.PrototipoRAG import (
@@ -63,6 +67,104 @@ def rag_page() -> str:
         expediente_type_payload=expediente_type_payload,
     )
 
+
+@rag_bp.get("/evaluation/latest")
+@login_required
+def latest_rag_evaluation() -> ResponseReturnValue:
+    """
+    Devuelve el último resultado de evaluación del RAG ejecutado por un admin.
+    
+    Returns:
+        JSON con el resumen de la última evaluación RAG, o un error si no hay resultados disponibles o si ocurre un problema al leerlos.
+    """
+    job = (
+        RAGEvaluationState.query.filter(RAGEvaluationState.status == "done")
+        .order_by(RAGEvaluationState.finished_at.desc(), RAGEvaluationState.id.desc())
+        .first()
+    )
+    if not job or not job.results_json_path:
+        return jsonify({"error": t("rag.evaluation.no_results")}), 404
+
+    data_dir = Path(current_app.config.get("DATA_DIR") or Path.cwd()).resolve()
+    results_path = Path(job.results_json_path).resolve()
+    try:
+        results_path.relative_to(data_dir)
+    except ValueError:
+        return jsonify({"error": "Ruta de resultados inválida."}), 400
+
+    if not results_path.exists():
+        return jsonify({"error": t("rag.evaluation.no_results")}), 404
+
+    try:
+        payload = json.loads(results_path.read_text(encoding="utf-8"))
+    except Exception:
+        return jsonify({"error": "No se pudieron leer los resultados."}), 500
+
+    return jsonify(
+        {
+            "job_id": job.id,
+            "finished_at": job.finished_at.isoformat() if job.finished_at else None,
+            "final_metrics": payload.get("final_metrics") or {},
+            "ragas_metrics": payload.get("ragas_metrics") or {},
+            "coseno_metrics": payload.get("coseno_metrics") or {},
+        }
+    )
+
+
+@rag_bp.get("/evaluation/<int:job_id>")
+@login_required
+def rag_evaluation_detail(job_id: int) -> ResponseReturnValue:
+    """
+    Renderiza el detalle de una evaluación (resumen + filas por pregunta).
+    
+    Returns:
+        Respuesta HTML con el detalle de la evaluación, o un error si el job no existe, no está terminado o si hay problemas al leer los resultados.
+    """
+    job = RAGEvaluationState.query.get_or_404(job_id)
+    if job.status != "done" or not job.results_json_path or not job.row_results_json_path:
+        abort(404)
+
+    data_dir = Path(current_app.config.get("DATA_DIR") or Path.cwd()).resolve()
+    results_path = Path(job.results_json_path).resolve()
+    rows_path = Path(job.row_results_json_path).resolve()
+    config_path = Path(job.config_json_path).resolve() if job.config_json_path else None
+
+    for path in (results_path, rows_path, config_path):
+        if not path:
+            continue
+        try:
+            path.relative_to(data_dir)
+        except ValueError:
+            abort(400)
+
+    if not results_path.exists() or not rows_path.exists():
+        abort(404)
+
+    try:
+        summary = json.loads(results_path.read_text(encoding="utf-8"))
+    except Exception:
+        abort(500)
+
+    try:
+        rows_payload = json.loads(rows_path.read_text(encoding="utf-8"))
+    except Exception:
+        rows_payload = []
+
+    config_payload = {}
+    if config_path and config_path.exists():
+        try:
+            config_payload = json.loads(config_path.read_text(encoding="utf-8"))
+        except Exception:
+            config_payload = {}
+
+    return render_template(
+        "rag_evaluation_detail.html",
+        job=job,
+        summary=summary,
+        rows=rows_payload,
+        config=config_payload,
+        back_url=url_for("rag.rag_page"),
+    )
 
 def build_expediente_type_payload() -> dict[str, list[str]]:
     """

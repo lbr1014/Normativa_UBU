@@ -35,6 +35,7 @@ from app.main.code.countries import (
     normalize_country_code,
 )
 from app.main.code.decorators import admin_required
+from app.main.code.error_handling import wants_json_response
 from app.main.code.extensions import db
 from app.main.code.forms import AdminCreateUserForm, EmptyForm, PdfUploadForm
 from app.main.code.inetrnacionalizacion.tarduccion import (
@@ -58,16 +59,19 @@ from app.main.code.services.web_scraping_state import send_scraping_finished_ema
 
 from ...model.documento import Documento
 from ...model.markdown_conversion_state import MarkdownConversionState
+from ...model.rag_evaluation_state import RAGEvaluationState
 from ...model.user import User
 from ...model.vector_update_state import VectorUpdateState
 from ...model.web_scraping_state import WebScrapingSate
 from ...services.documentos import DocumentosService, JobCancelledError
+from ...services.evaluation.rag_evaluation_service import run_rag_evaluation
 from ...services.rag.PrototipoRAG import index_pliegos_dir, qdrant_delete_by_filename
 from . import admin_bp
 
 MIMETYPE = "text/markdown; charset=utf-8"
 STALE_JOB_MESSAGE = "Proceso interrumpido por reinicio del servicio."
 ACTIVE_STATUSES = {"queued", "running"}
+RAG_EVAL_JOB_TYPE = "rag_evaluation"
 
 
 def _normalize_dt_for_compare(dt: datetime | None, *, reference: datetime) -> datetime | None:
@@ -175,12 +179,14 @@ def active_jobs_status() -> ResponseReturnValue:
     markdown = _latest_active(MarkdownConversionState)
     vector = _latest_active(VectorUpdateState)
     scraping = _latest_active(WebScrapingSate)
+    rag_eval = _latest_active(RAGEvaluationState)
 
     return jsonify(
         {
             "markdown": {"job_id": markdown.id, "status": markdown.status} if markdown else None,
             "vector": {"job_id": vector.id, "status": vector.status} if vector else None,
             "scraping": {"job_id": scraping.id, "status": scraping.status} if scraping else None,
+            "rag_evaluation": {"job_id": rag_eval.id, "status": rag_eval.status} if rag_eval else None,
         }
     )
 
@@ -1148,6 +1154,173 @@ def markdown_async(app, job_id: int, user_email: str, docs_url: str, lang: str =
                 _cancel_markdown_job(job, lang)
         except ADMIN_RECOVERABLE_ERRORS as exc:
             _handle_markdown_exception(app, job_id, user_email, docs_url, lang, exc)
+        finally:
+            db.session.remove()
+
+
+@admin_bp.post("/rag/evaluation/run")
+@login_required
+@admin_required
+def run_rag_evaluation_job() -> ResponseReturnValue:
+    """
+    Lanza la evaluación del RAG (ARES + RAGAS) en segundo plano.
+
+    Returns:
+        JSON con el job_id (si se solicita JSON) o redirección con flash.
+    """
+    invalid = _validate_post_action(json_response=wants_json_response())
+    if invalid:
+        return invalid
+
+    lang = get_locale()
+    job = RAGEvaluationState(status="queued", progress=0, cancel_requested=False, error=None)
+    job.set_message(translate_for(lang, "jobs.queued_short"))
+    db.session.add(job)
+    db.session.commit()
+
+    app_obj = current_app._get_current_object()
+    submit_tracked(
+        executor,
+        job_type=RAG_EVAL_JOB_TYPE,
+        tracked_job_id=job.id,
+        fn=rag_evaluation_async,
+        app=app_obj,
+        job_id=job.id,
+        lang=lang,
+    )
+
+    if wants_json_response():
+        return jsonify({"job_id": job.id}), 202
+
+    flash("Evaluación del RAG encolada. Puedes consultar el estado desde el panel de jobs.", "info")
+    return redirect(url_for("main.historial"))
+
+
+@admin_bp.get("/rag/evaluation/status/<int:job_id>")
+@login_required
+@admin_required
+def rag_evaluation_status(job_id: int) -> ResponseReturnValue:
+    """
+    Devuelve el estado actual de un job de evaluación del RAG.
+
+    Args:
+        job_id (int): Identificador del job de evaluación del RAG.
+
+    Returns:
+        ResponseReturnValue: Respuesta JSON con el estado actual del job, incluyendo progreso, mensaje, error y rutas a los resultados si están disponibles.
+    """
+    
+    job = RAGEvaluationState.query.get(job_id)
+    if not job:
+        abort(404)
+
+    boot_at = current_app.config.get("APP_BOOT_AT")
+    if _job_is_stale_since_boot(job, boot_at=boot_at):
+        _mark_job_as_stale(job)
+        db.session.commit()
+
+    return jsonify(
+        {
+            "status": job.status,
+            "progress": job.progress,
+            "message": localize_runtime_message(job.message),
+            "error": job.error,
+            "output_dir": job.output_dir,
+            "results_json_path": job.results_json_path,
+            "row_results_json_path": job.row_results_json_path,
+            "config_json_path": job.config_json_path,
+        }
+    )
+
+
+@admin_bp.get("/rag/evaluation/download/<int:job_id>/<string:artifact>")
+@login_required
+@admin_required
+def download_rag_evaluation_artifact(job_id: int, artifact: str) -> ResponseReturnValue:
+    """
+    Descarga un artefacto (archivo de resultados) generado por la evaluación del RAG.
+    Pueden ser:
+        - results
+        - rows
+        - config
+        - ares_questions
+        - ares_dataset_json
+        - ares_dataset_tsv
+        
+    Args:
+        job_id (int): Identificador del job de evaluación del RAG.
+        artifact (str): Nombre del artefacto a descargar.
+        
+    Returns:
+        ResponseReturnValue: Archivo para descargar o error 404/400 si no se encuentra o es una ruta no permitida.
+    """
+    job = RAGEvaluationState.query.get_or_404(job_id)
+    mapping = {
+        "results": job.results_json_path,
+        "rows": job.row_results_json_path,
+        "config": job.config_json_path,
+        "ares_questions": job.ares_questions_json_path,
+        "ares_dataset_json": job.ares_dataset_json_path,
+        "ares_dataset_tsv": job.ares_dataset_tsv_path,
+    }
+    path_raw = mapping.get(artifact)
+    if not path_raw:
+        abort(404)
+
+    data_dir = Path(current_app.config.get("DATA_DIR") or Path.cwd()).resolve()
+    file_path = Path(path_raw).resolve()
+    try:
+        file_path.relative_to(data_dir)
+    except ValueError:
+        abort(400)
+
+    if not file_path.exists():
+        abort(404)
+
+    return send_file(file_path, as_attachment=True)
+
+
+def rag_evaluation_async(*, app, job_id: int, lang: str) -> None:
+    """
+    Ejecuta la evaluación del RAG dentro de un contexto de aplicación Flask.
+    
+    Args:
+        app: Aplicación Flask activa.
+        job_id: Identificador del job de evaluación del RAG.
+        lang: Código de idioma activo para mensajes traducidos.
+    """
+    with app.app_context():
+        try:
+            job = RAGEvaluationState.query.get(job_id)
+            if not job:
+                return
+
+            job.mark_running(message=translate_for(lang, "rag.evaluation.running"))
+            job.progress = 5
+            db.session.commit()
+
+            data_dir = Path(current_app.config.get("DATA_DIR") or Path.cwd())
+            job.progress = 15
+            db.session.commit()
+            artifacts = run_rag_evaluation(data_dir=data_dir)
+
+            job.progress = 95
+            job.output_dir = str(artifacts.output_dir)
+            job.results_json_path = str(artifacts.results_json_path)
+            job.row_results_json_path = str(artifacts.row_results_json_path)
+            job.config_json_path = str(artifacts.config_json_path)
+            job.ares_questions_json_path = str(artifacts.ares_questions_json_path)
+            job.ares_dataset_json_path = str(artifacts.ares_dataset_json_path)
+            job.ares_dataset_tsv_path = str(artifacts.ares_dataset_tsv_path)
+            job.mark_done(message="Evaluación finalizada.")
+            db.session.commit()
+        except Exception as exc:
+            db.session.rollback()
+            job = RAGEvaluationState.query.get(job_id)
+            if job:
+                current_app.logger.exception("Fallo en evaluación RAG job_id=%s", job_id)
+                job.mark_failed(exc, message="La evaluación del RAG ha fallado.")
+                db.session.commit()
         finally:
             db.session.remove()
 

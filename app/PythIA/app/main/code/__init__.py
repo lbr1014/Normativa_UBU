@@ -20,6 +20,9 @@ from app.main.code.model import (
     MarkdownConversionState as MarkdownConversionState,
 )
 from app.main.code.model import (
+    RAGEvaluationState as RAGEvaluationState,
+)
+from app.main.code.model import (
     RAGQueryState as RAGQueryState,
 )
 from app.main.code.model import (
