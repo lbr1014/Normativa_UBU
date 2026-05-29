@@ -20,8 +20,8 @@ Configuration (via variables de entorno):
 import asyncio
 import json
 import os
-import random
 import re
+import secrets
 from pathlib import Path
 
 from app.main.code.services.rag.PrototipoRAG import VectorBaseDocument, ask_ollama
@@ -199,14 +199,22 @@ def main() -> None:
         return
 
     print("Starting question generation...")
-    random.seed(7)
+    shuffle_seed_raw = os.getenv("ARES_SHUFFLE_SEED")
+    if shuffle_seed_raw is None or shuffle_seed_raw == "":
+        rng = secrets.SystemRandom()
+        print("Shuffling chunks with a cryptographically secure RNG (ARES_SHUFFLE_SEED not set)")
+    else:
+        import random
+
+        rng = random.Random(int(shuffle_seed_raw))
+        print(f"Shuffling chunks with a deterministic seed (ARES_SHUFFLE_SEED={shuffle_seed_raw})")
 
     docs = iter_chunks(limit_total=3000)
     print(f"Retrieved {len(docs)} chunks from database")
     chunks = [clean_chunk(d.content) for d in docs]
     chunks = [c for c in chunks if good_chunk(c)]
     print(f"After filtering, {len(chunks)} good chunks remain")
-    random.shuffle(chunks)
+    rng.shuffle(chunks)
 
     questions = []
     seen = set()
