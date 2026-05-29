@@ -122,6 +122,74 @@
   border-radius: 22px;
 }
 
+.rag-eval-card{
+  background: transparent;
+  border: 0;
+}
+
+.rag-eval-metric-grid{
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
+.rag-eval-metric{
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 6px 4px;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+}
+
+.rag-eval-ring{
+  width: 94px;
+  height: 94px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  --rag-eval-accent: #a855f7;
+  background: conic-gradient(var(--rag-eval-accent) calc(var(--rag-eval-pct, 0) * 1%), rgba(255, 255, 255, 0.14) 0);
+}
+
+.rag-eval-ring-inner{
+  width: 76px;
+  height: 76px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.rag-eval-ring-value{
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+body[data-theme="light"] .rag-eval-ring{
+  background: conic-gradient(var(--rag-eval-accent) calc(var(--rag-eval-pct, 0) * 1%), rgba(17, 24, 39, 0.14) 0);
+}
+
+body[data-theme="light"] .rag-eval-ring-inner{
+  border-color: rgba(17, 24, 39, 0.10);
+}
+
+body[data-theme="light"] .rag-eval-ring-value{
+  color: rgba(17, 24, 39, 0.92);
+}
+
+.rag-eval-metric-label{
+  text-align: center;
+  color: var(--app-text-soft);
+  font-size: 0.92rem;
+  font-weight: 650;
+  max-width: 160px;
+}
+
 .rag-model-stats-link{
   white-space: nowrap;
 }

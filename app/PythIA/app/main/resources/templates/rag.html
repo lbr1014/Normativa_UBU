@@ -11,6 +11,40 @@
 {% block content %}
 <div class="py-4 py-md-5">
   <section class="rag-card rag-card-flat">
+    <div class="card rag-eval-card mb-4">
+      <div class="card-body">
+        <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+          <div>
+            <h3 class="mb-1">{{ t("rag.evaluation.title") }}</h3>
+            <p class="mb-0 text-muted">{{ t("rag.evaluation.subtitle") }}</p>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            {% if current_user.is_admin %}
+              <form id="rag-eval-run-form" method="POST" action="{{ url_for('admin.run_rag_evaluation_job') }}">
+                {{ post_form.hidden_tag() }}
+                <button id="rag-eval-run-btn" type="submit" class="btn btn-outline-warning btn-sm">
+                  {{ t("rag.evaluation.run_button") }}
+                </button>
+              </form>
+            {% endif %}
+          </div>
+        </div>
+
+        <div id="rag-eval-progress" class="mt-3 d-none" aria-live="polite">
+          <div class="d-flex justify-content-between">
+            <small id="rag-eval-progress-text" class="text-muted">{{ t("common.loading") }}</small>
+            <small id="rag-eval-progress-pct" class="text-muted">0%</small>
+          </div>
+          <div class="progress mt-2" role="progressbar" aria-label="{{ t('rag.evaluation.progress_aria') }}">
+            <div id="rag-eval-progress-bar" class="progress-bar" style="width:0%"></div>
+          </div>
+        </div>
+
+        <div id="rag-eval-empty" class="alert alert-info mt-3 d-none"></div>
+        <div id="rag-eval-metrics" class="rag-eval-metrics mt-3 d-none"></div>
+      </div>
+    </div>
+
     <div class="rag-top-grid">
       <div class="card rag-model-card">
         <div class="rag-model-card-media">
@@ -81,6 +115,148 @@
 
   function tr(key, params) {
     return window.pythiaTranslate ? window.pythiaTranslate(key, params) : key;
+  }
+
+  function clamp01(value) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return 0;
+    return Math.max(0, Math.min(1, num));
+  }
+
+  function metricLabel(key) {
+    const map = {
+      "faithfulness": tr("rag.evaluation.metric.faithfulness"),
+      "answer_relevancy": tr("rag.evaluation.metric.answer_relevancy"),
+      "answer_correctness": tr("rag.evaluation.metric.answer_correctness"),
+      "context_precision": tr("rag.evaluation.metric.context_precision"),
+      "context_recall": tr("rag.evaluation.metric.context_recall"),
+      "context_relevancy": tr("rag.evaluation.metric.context_relevancy"),
+    };
+    return map[key] || key;
+  }
+
+  function renderEvaluationMetrics(container, payload) {
+    const metrics = payload?.final_metrics || {};
+    const jobId = payload?.job_id;
+    const keys = [
+      "faithfulness",
+      "answer_relevancy",
+      "answer_correctness",
+      "context_precision",
+      "context_recall",
+      "context_relevancy",
+    ];
+    const cards = keys.map((key) => {
+      const score = clamp01(metrics[key]);
+      const pct = Math.round(score * 100);
+      const aria = `${metricLabel(key)}: ${pct}%`;
+      return `
+        <div class="rag-eval-metric" role="group" aria-label="${aria}">
+          <div class="rag-eval-ring" style="--rag-eval-pct:${pct}">
+            <div class="rag-eval-ring-inner">
+              <div class="rag-eval-ring-value">${pct}%</div>
+            </div>
+          </div>
+          <div class="rag-eval-metric-label">${metricLabel(key)}</div>
+        </div>`;
+    }).join("");
+
+    const detailUrlTemplate = "{{ url_for('rag.rag_evaluation_detail', job_id=0) }}";
+    const detailUrl = jobId ? detailUrlTemplate.replace("/0", `/${jobId}`) : null;
+    const detailLink = detailUrl
+      ? `<div class="mt-3"><a class="btn btn-outline-secondary btn-sm" href="${detailUrl}">{{ t("rag.evaluation.view_detail") }}</a></div>`
+      : "";
+
+    container.innerHTML = `<div class="rag-eval-metric-grid">${cards}</div>${detailLink}`;
+  }
+
+  async function fetchLatestEvaluation() {
+    const res = await fetch("{{ url_for('rag.latest_rag_evaluation') }}", { headers: { "Accept": "application/json" } });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      const err = data?.error || tr("rag.evaluation.no_results");
+      return { ok: false, error: err };
+    }
+    return { ok: true, data: await res.json() };
+  }
+
+  async function fetchEvalStatus(jobId) {
+    const url = "{{ url_for('admin.rag_evaluation_status', job_id=0) }}".replace("/0", `/${jobId}`);
+    const res = await fetch(url, { headers: { "Accept": "application/json" } });
+    if (!res.ok) return null;
+    return res.json();
+  }
+
+  async function refreshEvaluationUI() {
+    const emptyEl = document.getElementById("rag-eval-empty");
+    const metricsEl = document.getElementById("rag-eval-metrics");
+
+    const latest = await fetchLatestEvaluation();
+    if (!latest.ok) {
+      metricsEl?.classList.add("d-none");
+      if (emptyEl) {
+        emptyEl.textContent = latest.error;
+        emptyEl.classList.remove("d-none");
+      }
+      return;
+    }
+
+    if (emptyEl) emptyEl.classList.add("d-none");
+    if (metricsEl) {
+      renderEvaluationMetrics(metricsEl, latest.data);
+      metricsEl.classList.remove("d-none");
+    }
+  }
+
+  async function startEvaluation() {
+    const form = document.getElementById("rag-eval-run-form");
+    if (!form) return;
+    const runBtn = document.getElementById("rag-eval-run-btn");
+    const progressShell = document.getElementById("rag-eval-progress");
+    const progressText = document.getElementById("rag-eval-progress-text");
+    const progressPct = document.getElementById("rag-eval-progress-pct");
+    const progressBar = document.getElementById("rag-eval-progress-bar");
+    const emptyEl = document.getElementById("rag-eval-empty");
+    const metricsEl = document.getElementById("rag-eval-metrics");
+
+    emptyEl?.classList.add("d-none");
+    metricsEl?.classList.add("d-none");
+
+    runBtn && (runBtn.disabled = true);
+    progressShell?.classList.remove("d-none");
+    progressText && (progressText.textContent = tr("rag.evaluation.running"));
+    progressPct && (progressPct.textContent = "0%");
+    progressBar && (progressBar.style.width = "0%");
+
+    const formData = new FormData(form);
+    const res = await fetch(form.action, { method: "POST", body: formData, headers: { "Accept": "application/json" } });
+    const data = await res.json().catch(() => ({}));
+    const jobId = data?.job_id;
+    if (!res.ok || !jobId) {
+      progressText && (progressText.textContent = tr("rag.evaluation.failed"));
+      runBtn && (runBtn.disabled = false);
+      return;
+    }
+
+    let done = false;
+    while (!done) {
+      await new Promise((r) => setTimeout(r, 1200));
+      const status = await fetchEvalStatus(jobId);
+      if (!status) continue;
+      const pct = Math.max(0, Math.min(100, Number(status.progress ?? 0)));
+      progressPct && (progressPct.textContent = `${pct}%`);
+      progressBar && (progressBar.style.width = `${pct}%`);
+      progressText && (progressText.textContent = status.message || tr("rag.evaluation.running"));
+      if (status.status === "done") done = true;
+      if (status.status === "failed" || status.status === "cancelled") {
+        done = true;
+        progressText && (progressText.textContent = status.error || tr("rag.evaluation.failed"));
+      }
+    }
+
+    runBtn && (runBtn.disabled = false);
+    progressShell?.classList.add("d-none");
+    await refreshEvaluationUI();
   }
 
   function initRagWorkspace(root) {
@@ -494,6 +670,13 @@
     const pane = document.getElementById(id);
     if (pane) initRagWorkspace(pane);
   });
+
+  document.getElementById("rag-eval-run-form")?.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    startEvaluation();
+  });
+
+  refreshEvaluationUI();
 
   // D3 chart (index chart style)
   window.PYTHIA_MODEL_USAGE = {{ (model_usage_payload or {})|tojson }};
