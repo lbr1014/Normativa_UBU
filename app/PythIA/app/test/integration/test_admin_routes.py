@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 
 from app.main.code.extensions import db
 from app.main.code.model.markdown_conversion_state import MarkdownConversionState
+from app.main.code.model.rag_evaluation_state import RAGEvaluationState
 from app.main.code.model.user import User
 from app.main.code.model.vector_update_state import VectorUpdateState
 from app.main.code.model.web_scraping_state import WebScrapingSate
@@ -172,6 +173,17 @@ class AdminRoutesIntegrationTest(BaseAppTestCase):
         self.assertEqual(response.status_code, 202)
         job_id = response.get_json()["job_id"]
         job = db.session.get(VectorUpdateState, job_id)
+        self.assertIsNotNone(job)
+        self.assertEqual(job.status, "queued")
+        mock_submit.assert_called_once()
+
+    @patch("app.main.code.controllers.admin.routes.executor.submit")
+    def test_admin_rag_evaluation_creates_queued_job(self, mock_submit):
+        response = self.client.post("/admin/rag/evaluation/run", headers={"Accept": "application/json"})
+
+        self.assertEqual(response.status_code, 202)
+        job_id = response.get_json()["job_id"]
+        job = db.session.get(RAGEvaluationState, job_id)
         self.assertIsNotNone(job)
         self.assertEqual(job.status, "queued")
         mock_submit.assert_called_once()
