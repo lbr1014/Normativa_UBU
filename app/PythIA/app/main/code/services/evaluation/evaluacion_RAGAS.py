@@ -9,6 +9,7 @@ import json
 import math
 import os
 import traceback
+import urllib.parse
 from pathlib import Path
 from typing import Any
 
@@ -74,15 +75,69 @@ load_env_file(PROJECT_ROOT / "config.env")
 def obtener_mejor_chunk_sync(question: str) -> dict:
     """
     Wrapper síncrono para `obtener_mejor_chunk` (que es async en PrototipoRAG).
+    
+    Args:
+        question: Pregunta para la que se desea obtener el mejor chunk.
+        
+    Returns:
+        dict: Resultado con la mejor respuesta y los chunks recuperados.
     """
     return asyncio.run(obtener_mejor_chunk(question))
 
-OLLAMA_BASE_URL = os.getenv(
-    "OLLAMA_BASE_URL",
-    os.getenv("ARES_OLLAMA_BASE_URL", "http://127.0.0.1:11435"),
-).rstrip("/")
-if OLLAMA_BASE_URL and "://" not in OLLAMA_BASE_URL:
-    OLLAMA_BASE_URL = f"http://{OLLAMA_BASE_URL}".rstrip("/")
+def _is_local_hostname(hostname: str | None) -> bool:
+    """
+    Determina si un nombre de host es local (localhost, 127.0.0.1, ::1).
+
+    Args:
+        hostname (str | None): nombre de host a evaluar.
+
+    Returns:
+        bool: devuelve True si el nombre de host es local, False en caso contrario.
+    """
+    if not hostname:
+        return False
+    hostname = hostname.strip().lower()
+    return hostname in {"localhost", "127.0.0.1", "::1"}
+
+
+def _normalize_base_url(raw_value: str) -> str:
+    """
+    Normaliza y valida la URL base para Ollama.
+    
+    Asegura que la URL tenga un esquema válido (http o https), corrige URLs sin esquema
+    y valida que las conexiones inseguras solo se permitan a hosts locales.
+    
+    Args:
+        raw_value: URL base sin procesar.
+    
+    Returns:
+        str: URL base normalizada y validada.
+    """
+    value = (raw_value or "").strip().rstrip("/")
+    if not value:
+        return value
+
+    if "://" not in value:
+        hostname = value.split("/", 1)[0].split(":", 1)[0]
+        scheme = "http" if _is_local_hostname(hostname) else "https"
+        value = f"{scheme}://{value}".rstrip("/")
+
+    parsed = urllib.parse.urlsplit(value)
+    if parsed.scheme == "http" and not _is_local_hostname(parsed.hostname):
+        raise ValueError(
+            "Insecure OLLAMA_BASE_URL over http is only allowed for localhost/127.0.0.1/::1. "
+            "Use https for remote hosts."
+        )
+
+    return value
+
+
+OLLAMA_BASE_URL = _normalize_base_url(
+    os.getenv(
+        "OLLAMA_BASE_URL",
+        os.getenv("ARES_OLLAMA_BASE_URL", "http://127.0.0.1:11435"),
+    )
+)
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b-instruct-q4_K_M")
 RAGAS_JUDGE_MODEL = os.getenv("RAGAS_JUDGE_MODEL", "gemma3:4b")
 OLLAMA_REQUEST_TIMEOUT = int(os.getenv("OLLAMA_REQUEST_TIMEOUT", "300"))
