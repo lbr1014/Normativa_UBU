@@ -11,6 +11,7 @@ import os
 import traceback
 import urllib.parse
 from pathlib import Path
+from turtle import pd
 from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[5]
@@ -20,19 +21,19 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 
 try:
     from langchain_community.llms import Ollama as OllamaLLM
-except Exception:  
+except ImportError:
     OllamaLLM = None  
 
 try:
     from langchain_community.chat_models import (
         ChatOllama as CommunityChatOllama,
     )
-except Exception:  
+except ImportError:
     CommunityChatOllama = None  
 
 try:
     from langchain_ollama import ChatOllama as OllamaChatOllama
-except Exception:  
+except ImportError:
     OllamaChatOllama = None  
 from ragas import evaluate
 from ragas.run_config import RunConfig
@@ -638,6 +639,66 @@ def build_ragas_rows(questions: list[dict], k_contexts: int = 3) -> list[dict]:
     return rows
 
 
+def _coseno_build_texts(
+    question: str,
+    answer: str,
+    ground_truth: str,
+    evidence: str,
+    contexts: list[str],
+    reference: str,
+) -> list[str]:
+    """
+    Construye la lista de textos a vectorizar para las metricas de similitud coseno.
+
+    Args:
+        question (str): pregunta
+        answer (str): respuesta
+        ground_truth (str): verdad de referencia
+        evidence (str): evidencia
+        contexts (list[str]): contextos
+        reference (str): referencia
+
+    Returns:
+        list[str]: Textos normalizados para generar embeddings de similitud coseno.
+    """
+    texts_local = [
+        question,
+        answer,
+        ground_truth or question,
+        evidence or reference,
+    ]
+    texts_local.extend(contexts if contexts else [""])
+    return texts_local
+
+
+def _coseno_context_recall(
+    embeddings: HuggingFaceEmbeddings,
+    joined_context: str,
+    ground_truth: str,
+    ground_truth_vec: list[float],
+    evidence_vec: list[float],
+) -> float:
+    """
+    Calcula la puntuacion de recall de contexto basada en similitud coseno.
+
+    Args:
+        embeddings (HuggingFaceEmbeddings): Modelo de embeddings para vectorizar el contexto unido.
+        joined_context (str): Contexto unido de los contextos recuperados.
+        ground_truth (str): Verdad de referencia para comparar, si no hay se usará la evidencia o pregunta.
+        ground_truth_vec (list[float]): Vector del ground truth o referencia para comparar.
+        evidence_vec (list[float]): Vector de la evidencia para comparar si no hay ground truth.
+
+    Returns:
+        float: Puntuación de recall de contexto basada en similitud coseno, o 0.0 si no hay contexto unido.
+    """
+    if not joined_context:
+        return 0.0
+    joined_context_vec = batch_embeddings(embeddings, [joined_context])[0]
+    if ground_truth:
+        return cosine_similarity(joined_context_vec, ground_truth_vec)
+    return cosine_similarity(joined_context_vec, evidence_vec)
+
+
 def compute_coseno_metrics(
     rows: list[dict], embeddings: HuggingFaceEmbeddings
 ) -> list[dict]:
@@ -660,8 +721,9 @@ def compute_coseno_metrics(
         reference = ground_truth or evidence or question
         joined_context = "\n\n".join(contexts)
 
-        texts = [question, answer, ground_truth or question, evidence or reference]
-        texts.extend(contexts if contexts else [""])
+        texts = _coseno_build_texts(
+            question, answer, ground_truth, evidence, contexts, reference
+        )
         vectors = batch_embeddings(embeddings, texts)
 
         question_vec = vectors[0]
@@ -691,13 +753,9 @@ def compute_coseno_metrics(
             else 0.0
         )
 
-        if joined_context:
-            joined_context_vec = batch_embeddings(embeddings, [joined_context])[0]
-            context_recall = cosine_similarity(joined_context_vec, ground_truth_vec)
-            if not ground_truth:
-                context_recall = cosine_similarity(joined_context_vec, evidence_vec)
-        else:
-            context_recall = 0.0
+        context_recall = _coseno_context_recall(
+            embeddings, joined_context, ground_truth, ground_truth_vec, evidence_vec
+        )
 
         row["_coseno_metrics"] = {
             "faithfulness": faithfulness,
@@ -709,6 +767,215 @@ def compute_coseno_metrics(
         }
 
     return rows
+
+
+def _ragas_empty_result(aliases_local: dict[str, str]) -> tuple[dict, list[dict], dict]:
+    """
+    Construye un resultado vacio con diagnosticos indicando que no se resolvieron metricas RAGAS.
+
+    Args:
+        aliases_local (dict[str, str]): Mapa de alias de metricas RAGAS que se intentaron resolver.
+
+    Returns:
+        tuple[dict, list[dict], dict]: Resultado vacio, lista vacia de filas y diagnosticos con issues reportados.
+    """
+    return {}, [], {
+        "resolved_metrics": [],
+        "aliases": aliases_local,
+        "dataframe_columns": [],
+        "non_null_counts": {},
+        "issues": ["No se resolvió ninguna métrica RAGAS con la versión instalada."],
+    }
+
+
+def _ragas_build_diagnostics(aliases_local: dict[str, str]) -> dict:
+    """
+    Construye diagnosticos para el proceso de evaluacion RAGAS.
+
+    Args:
+        aliases_local (dict[str, str]): Mapa de alias de metricas RAGAS resueltas.
+
+    Returns:
+        dict: Diagnosticos iniciales con información sobre las métricas resueltas, columnas esperadas y configuración usada.
+    """
+    return {
+        "resolved_metrics": [aliases_local[key] for key in aliases_local],
+        "aliases": aliases_local,
+        "dataframe_columns": [],
+        "non_null_counts": {},
+        "issues": [],
+        "judge_model": RAGAS_JUDGE_MODEL,
+        "raise_exceptions": RAGAS_RAISE_EXCEPTIONS,
+        "timeout_seconds": RAGAS_REQUEST_TIMEOUT,
+    }
+
+
+def _ragas_evaluate_dataset(
+    dataset_local: Dataset,
+    active_metrics_local: list,
+    ragas_llm_local: Any,
+    ragas_embeddings_local: Any,
+    run_config_local: RunConfig,
+) -> Any:
+    """
+    Ejecuta la evaluación de RAGAS sobre un dataset con las métricas y configuración proporcionadas.
+
+    Args:
+        dataset_local (Dataset): Dataset de HuggingFace con las filas de evaluación.
+        active_metrics_local (list): Lista de métricas RAGAS activas para esta ejecución.
+        ragas_llm_local (Any): Modelo de lenguaje adaptado para RAGAS.
+        ragas_embeddings_local (Any): Modelo de embeddings adaptado para RAGAS.
+        run_config_local (RunConfig): Configuración de ejecución para RAGAS, incluyendo timeout y retries.
+
+    Returns:
+        Any: Resultado de la evaluación de RAGAS, típicamente un DataFrame con las métricas calculadas por fila.
+    """
+    return evaluate(
+        dataset_local,
+        metrics=active_metrics_local,
+        llm=ragas_llm_local,
+        embeddings=ragas_embeddings_local,
+        run_config=run_config_local,
+        raise_exceptions=RAGAS_RAISE_EXCEPTIONS,
+    )
+
+
+def _ragas_evaluate_with_timeout_fallback(
+    dataset_local: Dataset,
+    metrics_local: list,
+    aliases_local: dict[str, str],
+    ragas_llm_local: Any,
+    ragas_embeddings_local: Any,
+    run_config_local: RunConfig,
+    diagnostics_local: dict,
+) -> tuple[Any, dict[str, str]]:
+    """
+    Ejecuta la evaluación de RAGAS sobre un dataset con las métricas y configuración proporcionadas, con manejo de timeout.
+
+    Args:
+        dataset_local (Dataset): Dataset de HuggingFace con las filas de evaluación para RAGAS.
+        metrics_local (list): Lista de metricas RAGAS a evaluar inicialmente.
+        aliases_local (dict[str, str]): Mapa de alias de metricas RAGAS resueltas para esta ejecución.
+        ragas_llm_local (Any): Modelo de lenguaje adaptado para RAGAS.
+        ragas_embeddings_local (Any): Modelo de embeddings adaptado para RAGAS.
+        run_config_local (RunConfig): Configuración de ejecución para RAGAS, incluyendo timeout y retries.
+        diagnostics_local (dict): Diagnosticos iniciales con información sobre las métricas resueltas, columnas esperadas y configuración usada.
+
+    Returns:
+        tuple[Any, dict[str, str]]: Resultado de la evaluación de RAGAS (DataFrame) y el mapa de alias de métricas que se resolvieron activas finalmente.
+    """
+    active_metrics_local = metrics_local
+    active_aliases_local = dict(aliases_local)
+    try:
+        result_local = _ragas_evaluate_dataset(
+            dataset_local,
+            active_metrics_local,
+            ragas_llm_local,
+            ragas_embeddings_local,
+            run_config_local,
+        )
+        return result_local, active_aliases_local
+    except TimeoutError:
+        reduced = [
+            metric
+            for metric in metrics_local
+            if active_aliases_local.get("answer_correctness") != getattr(metric, "name", None)
+            and getattr(metric, "name", None) != active_aliases_local.get("answer_correctness")
+        ]
+        if len(reduced) == len(metrics_local):
+            raise
+        diagnostics_local["issues"].append(
+            "Timeout en RAGAS con todas las metricas. Reintentando sin answer_correctness."
+        )
+        active_metrics_local = reduced
+        active_aliases_local.pop("answer_correctness", None)
+        result_local = _ragas_evaluate_dataset(
+            dataset_local,
+            active_metrics_local,
+            ragas_llm_local,
+            ragas_embeddings_local,
+            run_config_local,
+        )
+        return result_local, active_aliases_local
+
+
+def _ragas_summarize(df_local: pd.DataFrame, aliases_local: dict[str, str]) -> dict:
+    """
+    Resume las métricas RAGAS calculadas en un DataFrame.
+
+    Args:
+        df_local (pd.DataFrame): DataFrame resultante de la evaluación de RAGAS con las métricas calculadas por fila.
+        aliases_local (dict[str, str]): Mapa de alias de metricas RAGAS resueltas para esta ejecución.
+
+    Returns:
+        dict: Resumen de métricas RAGAS calculadas, con valores promedio por métrica o None si no hay datos válidos.
+    """
+    summary_local = {}
+    for output_name, source_name in aliases_local.items():
+        if source_name in df_local.columns:
+            series = df_local[source_name]
+            summary_local[output_name] = (
+                None if series.dropna().empty else round(float(series.dropna().mean()), 6)
+            )
+    return summary_local
+
+
+def _ragas_normalize_rows(raw_records: list[dict], aliases_local: dict[str, str]) -> list[dict]:
+    """
+    Normaliza los registros obtenidos de la evaluación RAGAS.
+
+    Args:
+        raw_records (list[dict]): Registros sin procesar obtenidos del DataFrame de resultados de RAGAS, típicamente con claves basadas en los nombres originales de las métricas. 
+        aliases_local (dict[str, str]): Mapa de alias de metricas RAGAS resueltas para esta ejecución, que indica qué clave de salida corresponde a cada métrica resuelta.
+
+    Returns:
+        list[dict]: Lista de registros normalizados, donde cada registro es un diccionario que incluye los campos originales de entrada (question, answer, contexts, etc.) y 
+            las métricas RAGAS calculadas con claves normalizadas según los alias resueltos. Si una métrica no se resolvió o no está presente en el registro original, no se incluirá en el diccionario resultante.
+    """
+    out_rows: list[dict] = []
+    for record in raw_records:
+        normalized = dict(record)
+        for output_name, source_name in aliases_local.items():
+            if source_name in record:
+                normalized[output_name] = record[source_name]
+        out_rows.append(normalized)
+    return out_rows
+
+
+def _ragas_add_column_diagnostics(df_local: pd.DataFrame, aliases_local: dict[str, str], diagnostics_local: dict) -> None:
+    """
+    Agrega diagnósticos sobre las columnas del DataFrame resultante de la evaluación RAGAS.
+
+    Args:
+        df_local (pd.DataFrame): DataFrame resultante de la evaluación de RAGAS con las métricas calculadas por fila.
+        aliases_local (dict[str, str]): Mapa de alias de metricas RAGAS resueltas para esta ejecución, que indica qué clave de salida corresponde a cada métrica resuelta.
+        diagnostics_local (dict): Diccionario para almacenar los diagnósticos.
+    """
+    diagnostics_local["resolved_metrics"] = [aliases_local[key] for key in aliases_local]
+    diagnostics_local["aliases"] = aliases_local
+    diagnostics_local["dataframe_columns"] = list(df_local.columns)
+    for output_name, source_name in aliases_local.items():
+        if source_name not in df_local.columns:
+            diagnostics_local["non_null_counts"][output_name] = 0
+            diagnostics_local["issues"].append(
+                f"La columna '{source_name}' no aparecio en la salida de RAGAS."
+            )
+            continue
+        non_null = int(df_local[source_name].notna().sum())
+        diagnostics_local["non_null_counts"][output_name] = non_null
+        if non_null == 0:
+            diagnostics_local["issues"].append(
+                f"La columna '{source_name}' existe pero todos sus valores son nulos/NaN."
+            )
+
+    if aliases_local and all(
+        diagnostics_local["non_null_counts"].get(name, 0) == 0 for name in aliases_local
+    ):
+        diagnostics_local["issues"].append(
+            "RAGAS no produjo ningun valor util. La causa mas probable es incompatibilidad "
+            "entre la version de RAGAS y los wrappers LangChain/Ollama, timeout del modelo juez "
+            "o fallos de parsing del modelo."
+        )
 
 
 def run_ragas(
@@ -736,13 +1003,7 @@ def run_ragas(
     """
     metrics, aliases = resolve_ragas_metrics(rows)
     if not metrics:
-        return {}, [], {
-            "resolved_metrics": [],
-            "aliases": aliases,
-            "dataframe_columns": [],
-            "non_null_counts": {},
-            "issues": ["No se resolvió ninguna métrica RAGAS con la versión instalada."],
-        }
+        return _ragas_empty_result(aliases)
 
     dataset = Dataset.from_list(rows)
     run_config = RunConfig(
@@ -753,102 +1014,27 @@ def run_ragas(
 
     ragas_llm = wrap_llm_for_ragas(llm)
     ragas_embeddings = wrap_embeddings_for_ragas(embeddings)
-    diagnostics = {
-        "resolved_metrics": [aliases[key] for key in aliases],
-        "aliases": aliases,
-        "dataframe_columns": [],
-        "non_null_counts": {},
-        "issues": [],
-        "judge_model": RAGAS_JUDGE_MODEL,
-        "raise_exceptions": RAGAS_RAISE_EXCEPTIONS,
-        "timeout_seconds": RAGAS_REQUEST_TIMEOUT,
-    }
-
-    active_metrics = metrics
-    active_aliases = dict(aliases)
-    try:
-        result = evaluate(
-            dataset,
-            metrics=active_metrics,
-            llm=ragas_llm,
-            embeddings=ragas_embeddings,
-            run_config=run_config,
-            raise_exceptions=RAGAS_RAISE_EXCEPTIONS,
-        )
-    except TimeoutError:
-        reduced = [
-            metric
-            for metric in metrics
-            if active_aliases.get("answer_correctness") != getattr(metric, "name", None)
-            and getattr(metric, "name", None) != active_aliases.get("answer_correctness")
-        ]
-        if len(reduced) == len(metrics):
-            raise
-        diagnostics["issues"].append(
-            "Timeout en RAGAS con todas las metricas. Reintentando sin answer_correctness."
-        )
-        active_metrics = reduced
-        active_aliases.pop("answer_correctness", None)
-        result = evaluate(
-            dataset,
-            metrics=active_metrics,
-            llm=ragas_llm,
-            embeddings=ragas_embeddings,
-            run_config=run_config,
-            raise_exceptions=RAGAS_RAISE_EXCEPTIONS,
-        )
+    diagnostics = _ragas_build_diagnostics(aliases)
+    result, active_aliases = _ragas_evaluate_with_timeout_fallback(
+        dataset,
+        metrics,
+        aliases,
+        ragas_llm,
+        ragas_embeddings,
+        run_config,
+        diagnostics,
+    )
 
     df = result.to_pandas()
     raw_row_records = df.to_dict(orient="records")
-    row_records = []
-    summary = {}
-
-    for output_name, source_name in active_aliases.items():
-        if source_name in df.columns:
-            series = df[source_name]
-            summary[output_name] = (
-                None if series.dropna().empty else round(float(series.dropna().mean()), 6)
-            )
-
-    for record in raw_row_records:
-        normalized = dict(record)
-        for output_name, source_name in active_aliases.items():
-            if source_name in record:
-                normalized[output_name] = record[source_name]
-        row_records.append(normalized)
-
-    diagnostics["resolved_metrics"] = [active_aliases[key] for key in active_aliases]
-    diagnostics["aliases"] = active_aliases
-    diagnostics["dataframe_columns"] = list(df.columns)
-    for output_name, source_name in active_aliases.items():
-        if source_name not in df.columns:
-            diagnostics["non_null_counts"][output_name] = 0
-            diagnostics["issues"].append(
-                f"La columna '{source_name}' no aparecio en la salida de RAGAS."
-            )
-            continue
-        non_null = int(df[source_name].notna().sum())
-        diagnostics["non_null_counts"][output_name] = non_null
-        if non_null == 0:
-            diagnostics["issues"].append(
-                f"La columna '{source_name}' existe pero todos sus valores son nulos/NaN."
-            )
-
-    if active_aliases and all(
-        diagnostics["non_null_counts"].get(name, 0) == 0 for name in active_aliases
-    ):
-        diagnostics["issues"].append(
-            "RAGAS no produjo ningun valor util. La causa mas probable es incompatibilidad "
-            "entre la version de RAGAS y los wrappers LangChain/Ollama, timeout del modelo juez "
-            "o fallos de parsing del modelo."
-        )
+    summary = _ragas_summarize(df, active_aliases)
+    row_records = _ragas_normalize_rows(raw_row_records, active_aliases)
+    _ragas_add_column_diagnostics(df, active_aliases, diagnostics)
 
     return summary, row_records, diagnostics
 
 
-def merge_metrics(
-    rows: list[dict], ragas_rows: list[dict], ragas_summary: dict
-) -> tuple[dict, list[dict]]:
+def merge_metrics(rows: list[dict], ragas_rows: list[dict]) -> tuple[dict, list[dict]]:
     """
     Fusiona métricas RAGAS con métricas de coseno en una salida final.
 
@@ -864,6 +1050,25 @@ def merge_metrics(
         tuple[dict, list[dict]]: Resumen final por métrica, y detalle por pregunta
             con trazabilidad de origen (weighted, ragas, coseno) para cada puntuación.
     """
+    metric_list = selected_metric_names()
+
+    def _score_source(ragas_value: float | None, coseno_value: float | None) -> str:
+        """
+        Determina la fuente de la puntuación final basada en los valores de RAGAS y coseno.
+
+        Args:
+            ragas_value (float | None): Valor de la métrica de RAGAS.
+            coseno_value (float | None): Valor de la métrica de coseno.
+
+        Returns:
+            str: Fuente de la puntuación final.
+        """
+        if ragas_value is not None and coseno_value is not None:
+            return "weighted"
+        if ragas_value is not None:
+            return "ragas"
+        return "coseno"
+
     final_rows = []
     ragas_rows_by_question = {
         safe_text(item.get("question") or item.get("user_input")): item
@@ -884,7 +1089,7 @@ def merge_metrics(
         out["ragas_metrics"] = {}
         out["coseno_metrics"] = {}
         out["final_metrics"] = {}
-        for metric_name in selected_metric_names():
+        for metric_name in metric_list:
             ragas_value = valid_score(ragas_row.get(metric_name))
             fallback_value = valid_score(coseno.get(metric_name))
             final_value = combine_scores(ragas_value, fallback_value)
@@ -893,22 +1098,16 @@ def merge_metrics(
             out["final_metrics"][metric_name] = final_value
 
         out["score_source"] = {
-            metric_name: (
-                "weighted"
-                if out["ragas_metrics"].get(metric_name) is not None
-                and out["coseno_metrics"].get(metric_name) is not None
-                else (
-                    "ragas"
-                    if out["ragas_metrics"].get(metric_name) is not None
-                    else "coseno"
-                )
+            metric_name: _score_source(
+                out["ragas_metrics"].get(metric_name),
+                out["coseno_metrics"].get(metric_name),
             )
-            for metric_name in selected_metric_names()
+            for metric_name in metric_list
         }
         final_rows.append(out)
 
     final_summary = {}
-    for metric_name in selected_metric_names():
+    for metric_name in metric_list:
         values = [
             row.get("final_metrics", {}).get(metric_name)
             for row in final_rows
@@ -996,7 +1195,7 @@ def main():
         print("RAGAS evaluation failed with an exception:")
         print(ragas_diagnostics["traceback"])
 
-    final_summary, row_records = merge_metrics(rows, ragas_rows, ragas_summary)
+    final_summary, row_records = merge_metrics(rows, ragas_rows)
     coseno_summary = summarize_metric_values(row_records, "coseno_metrics")
     ragas_only_summary = summarize_metric_values(row_records, "ragas_metrics")
     source_counts = build_source_counts(row_records)

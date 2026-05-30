@@ -72,7 +72,17 @@ def infer_document_metadata_from_filename(filename: str) -> tuple[str | None, st
     Returns:
         Una tupla con el Número de expediente y el tipo de documento.
     """
-    return Documento.infer_metadata_from_filename(filename)
+    inferred = Documento.infer_metadata_from_filename(filename)
+    if inferred is None:
+        return None, None
+    if isinstance(inferred, tuple):
+        if len(inferred) == 2:
+            return inferred[0], inferred[1]
+        if len(inferred) == 1:
+            return inferred[0], None
+        if len(inferred) > 2:
+            return inferred[0], inferred[1]
+    return None, None
 
 class DocumentosService:
     """
@@ -701,63 +711,61 @@ class DocumentosService:
         Returns:
             Un resumen con convertidos, fallidos, omitidos y total.
         """
+        def _apply_result(result: str) -> tuple[int, int, int]:
+            """
+            Aplica el resultado de procesar un documento.
+
+            Args:
+                result (str): Resultado de procesar un documento, puede ser "converted", "skipped" o "failed".
+
+            Returns:
+                tuple[int, int, int]: Número de documentos convertidos, fallidos y omitidos.
+            """
+            if result == "converted":
+                return 1, 0, 0
+            if result == "skipped":
+                return 0, 0, 1
+            return 0, 1, 0
+
+        def _convert_one(doc: Documento, index: int, total_docs: int) -> str:
+            """
+            Convierte un documento a Markdown y maneja cancelación.
+
+            Args:
+                doc (Documento): documento que se va a procesar.
+                index (int): indice del documento actual en el lote, empezando en 1.
+                total_docs (int): total de documentos en el lote, para informar del progreso.
+
+            Raises:
+                JobCancelledError: Si se detecta que el proceso ha sido cancelado por el usuario.
+
+            Returns:
+                str: El resultado del procesamiento del documento, que puede ser "converted", "skipped" o "failed".
+            """
+            if should_cancel and should_cancel():
+                raise JobCancelledError("Conversión a Markdown cancelada por el usuario.")
+            return self._process_pending_markdown_doc(
+                doc,
+                index,
+                total_docs,
+                on_current_doc=on_current_doc,
+                on_page_start=on_page_start,
+            )
+
         converted = 0
         failed = 0
         pending_docs, skipped = self._collect_pending_markdown_docs()
-        if pending_docs:
-            from app.main.code.services.markdown.Conversion_markdown import (
-                get_pdf_page_count,
-            )
-            try:
-                from pdf2image.exceptions import (  # type: ignore
-                    PDFInfoNotInstalledError,
-                    PDFPageCountError,
-                    PDFSyntaxError,
-                )
-
-                page_count_errors = (
-                    OSError,
-                    RuntimeError,
-                    ValueError,
-                    PDFInfoNotInstalledError,
-                    PDFPageCountError,
-                    PDFSyntaxError,
-                )
-            except ImportError:  
-                page_count_errors = (OSError, RuntimeError, ValueError)
-
-            docs_with_pages: list[tuple[int, Documento]] = []
-            for doc in pending_docs:
-                pdf_path = Path(doc.path)
-                try:
-                    pages = get_pdf_page_count(pdf_path)
-                except page_count_errors:
-                    pages = 10**9
-                docs_with_pages.append((pages, doc))
-
-            docs_with_pages.sort(key=lambda item: (item[0], str(item[1].nombre or "")))
-            pending_docs = [doc for _, doc in docs_with_pages]
+        pending_docs = self._sort_docs_by_page_count(pending_docs)
         total = len(pending_docs)
         if on_progress:
             on_progress(0, total)
 
         for i, doc in enumerate(pending_docs, start=1):
-            if should_cancel and should_cancel():
-                raise JobCancelledError("Conversión a Markdown cancelada por el usuario.")
-            result = self._process_pending_markdown_doc(
-                doc,
-                i,
-                total,
-                on_current_doc=on_current_doc,
-                on_page_start=on_page_start,
-            )
-            if result == "converted":
-                converted += 1
-            elif result == "skipped":
-                skipped += 1
-            else:
-                failed += 1
-
+            result = _convert_one(doc, i, total)
+            inc_converted, inc_failed, inc_skipped = _apply_result(result)
+            converted += inc_converted
+            failed += inc_failed
+            skipped += inc_skipped
             if on_progress:
                 on_progress(i, total)
 
@@ -768,6 +776,68 @@ class DocumentosService:
             "total": total,
         }
 
+    @staticmethod
+    def _page_count_exceptions() -> tuple[type[Exception], ...]:
+        """
+        Obtiene las excepciones relacionadas con el conteo de páginas.
+
+        Returns:
+            tuple[type[Exception], ...]: Una tupla con las clases de excepción que pueden ocurrir al contar páginas de un PDF.
+        """
+        try:
+            from pdf2image.exceptions import (
+                PDFInfoNotInstalledError,
+                PDFPageCountError,
+                PDFSyntaxError,
+            )
+        except ImportError:
+            class PDFInfoNotInstalledError(Exception):  
+                pass
+
+            class PDFPageCountError(Exception):  
+                pass
+
+            class PDFSyntaxError(Exception):  
+                pass
+
+        return (
+            OSError,
+            RuntimeError,
+            ValueError,
+            PDFInfoNotInstalledError,
+            PDFPageCountError,
+            PDFSyntaxError,
+        )
+
+    def _sort_docs_by_page_count(self, docs: list[Documento]) -> list[Documento]:
+        """
+        Ordena los documentos por cantidad de páginas.
+
+        Args:
+            docs (list[Documento]): documentos a ordenar.
+
+        Returns:
+            list[Documento]: lista con los documentos ya ordenados.
+        """
+        if not docs:
+            return docs
+        from app.main.code.services.markdown.Conversion_markdown import (
+            get_pdf_page_count,
+        )
+
+        errors = self._page_count_exceptions()
+        docs_with_pages: list[tuple[int, Documento]] = []
+        for doc in docs:
+            pdf_path = Path(doc.path)
+            try:
+                pages = int(get_pdf_page_count(pdf_path))
+            except errors:
+                pages = 10**9
+            docs_with_pages.append((pages, doc))
+        docs_with_pages.sort(key=lambda item: (item[0], str(item[1].nombre or "")))
+        return [doc for _, doc in docs_with_pages]
+
+    
     def update_vector_db(self, on_progress=None, on_current_doc=None, should_cancel=None) -> dict[str, int]:
         """
         Actualiza la base de datos vectorial con los documentos pendientes.
