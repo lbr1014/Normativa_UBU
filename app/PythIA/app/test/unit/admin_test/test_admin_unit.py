@@ -1,6 +1,9 @@
 """
 Autora: Lydia Blanco Ruiz
 Script con pruebas unitarias de los métodos de administracion.
+Su objetivo es verificar el correcto funcionamiento de los mecanismos de gestión de tareas asíncronas, conversión de documentos a Markdown,
+actualización de la base de datos vectorial, procesos de scraping, validación de formularios, envío de notificaciones y manejo de errores. 
+Las pruebas cubren tanto escenarios de ejecución normal como situaciones excepcionales, cancelaciones y fallos, garantizando la robustez de los servicios de administración de la aplicación.
 """
 
 import subprocess
@@ -9,30 +12,38 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from app.test.support import BaseAppTestCase
-
 from app.main.code.controllers.admin import routes as admin_routes
-from app.main.code.services.documentos import JobCancelledError
+from app.main.code.extensions import db
 from app.main.code.model.markdown_conversion_state import MarkdownConversionState
 from app.main.code.model.vector_update_state import VectorUpdateState
 from app.main.code.model.web_scraping_state import WebScrapingSate
-from app.main.code.extensions import db
+from app.main.code.services.documentos import JobCancelledError
+from app.test.support import BaseAppTestCase
 
 
 class AdminRoutesUnitTest(BaseAppTestCase):
     def test_fit_job_message_truncates_long_messages(self):
+        """
+        Verifica que los mensajes asociados a tareas se ajustan correctamente al tamaño máximo permitido.
+        """
         self.assertIsNone(admin_routes._fit_job_message(None))
         self.assertEqual(admin_routes._fit_job_message("abc", max_length=3), "abc")
         self.assertEqual(admin_routes._fit_job_message("abcdef", max_length=3), "abc")
         self.assertEqual(admin_routes._fit_job_message("abcdef", max_length=5), "ab...")
 
     def test_validate_post_action_returns_none_when_form_is_valid(self):
+        """
+        Comprueba que la validación de formularios POST no genera errores cuando los datos enviados son válidos.
+        """
         with patch("app.main.code.controllers.admin.routes.EmptyForm") as mock_form_class:
             mock_form_class.return_value.validate_on_submit.return_value = True
 
             self.assertIsNone(admin_routes._validate_post_action())
 
     def test_validate_post_action_returns_json_or_aborts_when_invalid(self):
+        """
+        Verifica que las solicitudes POST inválidas devuelven una respuesta JSON de error o provocan la interrupción de la petición según el contexto.
+        """
         with patch("app.main.code.controllers.admin.routes.EmptyForm") as mock_form_class, patch(
             "app.main.code.controllers.admin.routes.t", return_value="bad request"
         ):
@@ -51,6 +62,9 @@ class AdminRoutesUnitTest(BaseAppTestCase):
         self.assertEqual(getattr(raised.exception, "code", None), 400)
 
     def test_mark_job_helpers_update_common_state(self):
+        """
+        Comprueba que las funciones auxiliares de gestión de tareas actualizan correctamente estados, progreso, mensajes y errores.
+        """
         job = SimpleNamespace(status="queued", progress=0, error="old", message=None, finished_at=None)
 
         admin_routes._set_job_progress(job, 1, 0)
@@ -75,6 +89,9 @@ class AdminRoutesUnitTest(BaseAppTestCase):
         self.assertIsNone(job.error)
 
     def test_job_should_cancel_falls_back_to_cancel_requested_flag(self):
+        """
+        Verifica que una tarea puede detectar correctamente una solicitud de cancelación mediante la bandera correspondiente.
+        """
         job = SimpleNamespace(cancel_requested=True)
 
         with patch.object(admin_routes.db.session, "refresh") as mock_refresh:
@@ -83,6 +100,9 @@ class AdminRoutesUnitTest(BaseAppTestCase):
         mock_refresh.assert_called_once_with(job)
 
     def test_markdown_done_message_chooses_expected_translation_key(self):
+        """
+        Comprueba que se selecciona la clave de traducción adecuada para los mensajes finales de conversión a Markdown.
+        """
         with patch("app.main.code.controllers.admin.routes.translate_for", side_effect=lambda lang, key, **kwargs: key):
             self.assertEqual(
                 admin_routes._markdown_done_message({"converted": 0, "failed": 0}, "es"),
@@ -99,6 +119,9 @@ class AdminRoutesUnitTest(BaseAppTestCase):
 
     @patch("app.main.code.controllers.admin.routes.translate_for", side_effect=lambda lang, key, **kwargs: f"{key}:{kwargs}")
     def test_build_markdown_callbacks_update_progress_message_and_cancel(self, _mock_translate):
+        """
+        Verifica que los callbacks utilizados durante la conversión a Markdown actualizan correctamente el progreso, los mensajes y la cancelación de tareas.
+        """
         job = MarkdownConversionState(status="running", progress=0, message="Convirtiendo anterior...", cancel_requested=False)
         db.session.add(job)
         db.session.commit()
@@ -122,6 +145,9 @@ class AdminRoutesUnitTest(BaseAppTestCase):
             on_progress(2, 4)
 
     def test_send_email_safe_swallows_mail_errors(self):
+        """
+        Comprueba que los errores producidos durante el envío de correos electrónicos son capturados sin interrumpir la ejecución.
+        """
         send_fn = MagicMock(side_effect=RuntimeError("smtp"))
 
         with patch.object(self.app.logger, "exception"):
@@ -130,6 +156,9 @@ class AdminRoutesUnitTest(BaseAppTestCase):
         send_fn.assert_called_once_with(to_email="a@example.com")
 
     def test_path_and_service_helpers_use_app_config_and_dependencies(self):
+        """
+        Verifica que las funciones auxiliares obtienen correctamente rutas y servicios utilizando la configuración de la aplicación.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             self.app.config["DOCS_DIR"] = str(Path(tmpdir) / "docs")
 
@@ -147,6 +176,9 @@ class AdminRoutesUnitTest(BaseAppTestCase):
             self.assertEqual(admin_routes.documents_page_url(), "http://localhost/admin/documents/list")
 
     def test_convert_pdf_to_markdown_delegates_to_processor(self):
+        """
+        Comprueba que la conversión de PDF a Markdown delega correctamente el procesamiento en el componente especializado.
+        """
         callback = MagicMock()
         with patch("app.main.code.services.markdown.Conversion_markdown.process_pdf", return_value="# md") as mock_process:
             result = admin_routes.convert_pdf_to_markdown(Path("doc.pdf"), on_page_start=callback)
@@ -155,6 +187,9 @@ class AdminRoutesUnitTest(BaseAppTestCase):
         mock_process.assert_called_once_with(Path("doc.pdf"), on_page_start=callback)
 
     def test_markdown_cancel_finish_and_exception_helpers_update_job_and_email(self):
+        """
+        Verifica la correcta gestión de cancelaciones, finalizaciones y excepciones durante los trabajos de conversión a Markdown.        
+        """
         job = MarkdownConversionState(status="running", progress=10, message="old", cancel_requested=True)
         db.session.add(job)
         db.session.commit()
@@ -202,6 +237,10 @@ class AdminRoutesUnitTest(BaseAppTestCase):
         mock_logger.assert_called_once()
 
     def test_markdown_page_base_message_strips_page_suffixes_or_uses_default(self):
+        """
+        Comprueba la generación del mensaje base mostrado durante la conversión de documentos Markdown.
+        Se verifica que se eliminen correctamente los sufijos de página de los mensajes existentes o que se utilice un mensaje predeterminado cuando no se proporcione uno.
+        """
         with patch("app.main.code.controllers.admin.routes.translate_for", return_value="Convirtiendo documento..."):
             self.assertEqual(
                 admin_routes._markdown_page_base_message(SimpleNamespace(message=None), "es"),
@@ -214,6 +253,9 @@ class AdminRoutesUnitTest(BaseAppTestCase):
         )
 
     def test_scraping_context_finish_and_exception_helpers(self):
+        """
+        Verifica la creación del contexto de scraping y la correcta gestión de finalización y errores asociados.
+        """
         with tempfile.TemporaryDirectory() as tmpdir:
             self.app.config["DOCS_DIR"] = str(Path(tmpdir) / "docs")
             self.app.config["DATA_DIR"] = str(Path(tmpdir) / "data")
@@ -260,6 +302,9 @@ class AdminRoutesUnitTest(BaseAppTestCase):
         mock_logger.assert_called_once()
 
     def test_execute_subprocess_with_cancellation_success_failure_and_cancel(self):
+        """
+        Comprueba la ejecución de procesos externos, incluyendo casos de éxito, error y cancelación controlada.
+        """
         proc = MagicMock()
         proc.poll.side_effect = [None, 0]
         proc.wait.side_effect = [subprocess.TimeoutExpired("cmd", 1), None]
@@ -287,6 +332,9 @@ class AdminRoutesUnitTest(BaseAppTestCase):
         proc.kill.assert_called_once()
 
     def test_run_scraping_script_updates_job_or_raises_when_cancelled(self):
+        """
+        Verifica que la ejecución de scripts de scraping actualiza correctamente el estado de la tarea o se cancela cuando corresponde.
+        """
         job = WebScrapingSate(status="running", progress=0, cancel_requested=False)
         db.session.add(job)
         db.session.commit()
@@ -312,6 +360,9 @@ class AdminRoutesUnitTest(BaseAppTestCase):
                 admin_routes._run_scraping_script(job, Path("script.py"), Path("."), {}, lambda: True, "es")
 
     def test_sync_scraping_results_counts_new_files_and_honors_cancellation(self):
+        """
+        Comprueba la sincronización de resultados obtenidos mediante scraping, contabilizando nuevos documentos y respetando solicitudes de cancelación.
+        """
         job = WebScrapingSate(status="running", progress=0, cancel_requested=False)
         db.session.add(job)
         db.session.commit()
@@ -346,6 +397,9 @@ class AdminRoutesUnitTest(BaseAppTestCase):
 
     @patch("app.main.code.controllers.admin.routes.send_markdown_finished_email")
     def test_markdown_async_marks_done_and_handles_cancellation_and_errors(self, mock_send):
+        """
+        Verifica el comportamiento completo del proceso asíncrono de conversión a Markdown ante ejecuciones correctas, cancelaciones y errores.
+        """
         job = MarkdownConversionState(status="queued", progress=0, cancel_requested=False)
         db.session.add(job)
         db.session.commit()
@@ -420,6 +474,9 @@ class AdminRoutesUnitTest(BaseAppTestCase):
 
     @patch("app.main.code.controllers.admin.routes.send_update_finished_email")
     def test_documentos_async_marks_done_cancelled_and_failed(self, mock_send):
+        """
+        Comprueba el comportamiento del proceso asíncrono de actualización de la base de datos vectorial en escenarios de éxito, cancelación y fallo.
+        """
         job = VectorUpdateState(status="queued", progress=0, cancel_requested=False)
         db.session.add(job)
         db.session.commit()
@@ -531,6 +588,9 @@ class AdminRoutesUnitTest(BaseAppTestCase):
 
     @patch("app.main.code.controllers.admin.routes.send_scraping_finished_email")
     def test_scraping_async_marks_done_cancelled_and_failed(self, mock_send):
+        """
+        Verifica el funcionamiento completo del proceso asíncrono de scraping, incluyendo ejecuciones exitosas, cancelaciones y errores durante el procesamiento.
+        """
         job = WebScrapingSate(status="queued", progress=0, cancel_requested=False)
         db.session.add(job)
         db.session.commit()
