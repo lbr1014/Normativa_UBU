@@ -1,17 +1,27 @@
+"""
+Autora: Lydia Blanco Ruiz
+Script con pruebas unitarias para la conversión de documentos PDF a Markdown.
+Verifica el correcto funcionamiento de todas las etapas del proceso de conversión, incluyendo la configuración del entorno OCR, el procesamiento de imágenes,
+la comunicación con Ollama, la extracción de texto mediante OCR, la normalización de encabezados, el tratamiento de errores y la generación final de documentos Markdown. 
+Las pruebas cubren tanto escenarios normales de ejecución como condiciones excepcionales relacionadas con dependencias externas, concurrencia, fallos de OCR y procesamiento de archivos.
+"""
+
+import asyncio
 import importlib
 import importlib.util
 import os
-from pathlib import Path
 import sys
 import tempfile
 import types
 import unittest
-import asyncio
-from unittest.mock import AsyncMock, MagicMock
-from unittest.mock import patch
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 
 def _module_available(name):
+    """
+    Verifica si un módulo está disponible para importación.
+    """
     try:
         return importlib.util.find_spec(name) is not None
     except (ImportError, ValueError):
@@ -19,6 +29,9 @@ def _module_available(name):
 
 
 def _install_optional_dependency_stubs():
+    """
+    Verifica la disponibilidad de módulos opcionales y crea stubs si no están presentes para permitir la importación de Conversion_markdown sin fallar.
+    """
     if not _module_available("httpx") and "httpx" not in sys.modules:
         httpx = types.ModuleType("httpx")
         httpx.TimeoutException = TimeoutError
@@ -47,6 +60,9 @@ conversion = importlib.import_module("app.main.code.services.markdown.Conversion
 
 
 def _fake_torch(cuda_available):
+    """
+    Crea un módulo torch falso con la funcionalidad cuda simulada para pruebas.
+    """
     fake_torch = types.ModuleType("torch")
     fake_torch.cuda = MagicMock()
     fake_torch.cuda.is_available.return_value = cuda_available
@@ -54,6 +70,9 @@ def _fake_torch(cuda_available):
 
 
 def _import_conversion_with_torch(cuda_available):
+    """
+    Importa el módulo Conversion_markdown con un módulo torch simulado para probar la configuración automática de GPU
+    """
     original_torch = sys.modules.get("torch")
     sys.modules["torch"] = _fake_torch(cuda_available)
     sys.modules.pop("app.main.code.services.markdown.Conversion_markdown", None)
@@ -71,12 +90,18 @@ def _import_conversion_with_torch(cuda_available):
 
 class ConversionMarkdownUnitTest(unittest.TestCase):
     def setUp(self):
+        """
+        Configura el entorno de prueba antes de cada test, asegurando que el módulo Conversion_markdown esté limpio para pruebas de importación.
+        """
         sys.modules["app.main.code.services.markdown.Conversion_markdown"] = conversion
         import app.main.code.services.markdown as markdown_pkg
 
         markdown_pkg.Conversion_markdown = conversion
 
     def test_import_paths_cover_torch_missing_env_gpu_and_main_guard(self):
+        """
+        Verifica el comportamiento del módulo durante la importación cuando faltan dependencias, se configura el uso de GPU mediante variables de entorno y se ejecuta como programa principal.
+        """
         real_import = __import__
 
         def import_without_torch(name, *args, **kwargs):
@@ -99,23 +124,31 @@ class ConversionMarkdownUnitTest(unittest.TestCase):
 
         import runpy
 
-        with patch.object(sys, "argv", ["Conversion_markdown.py"]):
-            with self.assertRaises(SystemExit):
-                runpy.run_module("app.main.code.services.markdown.Conversion_markdown", run_name="__main__")
+        with patch.object(sys, "argv", ["Conversion_markdown.py"]), self.assertRaises(SystemExit):
+            runpy.run_module("app.main.code.services.markdown.Conversion_markdown", run_name="__main__")
 
     def test_import_auto_gpu_configuration_requests_gpu_when_env_is_missing_even_without_cuda(self):
+        """
+        Comprueba la configuración automática del uso de GPU cuando no existe configuración explícita y CUDA no está disponible
+        """
         imported = _import_conversion_with_torch(cuda_available=False)
 
         self.assertEqual(imported.DEFAULT_NUM_GPU, -1)
         self.assertEqual(imported.OLLAMA_NUM_GPU_SOURCE, "auto-ollama")
 
     def test_import_auto_gpu_configuration_requests_gpu_when_env_is_missing_with_cuda(self):
+        """
+        Verifica la configuración automática del uso de GPU cuando CUDA está disponible y no existe configuración previa.
+        """
         imported = _import_conversion_with_torch(cuda_available=True)
 
         self.assertEqual(imported.DEFAULT_NUM_GPU, -1)
         self.assertEqual(imported.OLLAMA_NUM_GPU_SOURCE, "auto-ollama")
 
     def test_build_chat_payload_sets_model_image_and_gpu_options(self):
+        """
+        Comprueba que las peticiones enviadas al modelo OCR incluyen correctamente el modelo, la imagen y las opciones de GPU configuradas.
+        """
         payload = conversion._build_chat_payload("contenido", "base64", num_gpu=0)
 
         self.assertEqual(payload["model"], conversion.MODEL_NAME)
@@ -123,7 +156,24 @@ class ConversionMarkdownUnitTest(unittest.TestCase):
         self.assertFalse(payload["stream"])
         self.assertEqual(payload["options"]["num_gpu"], 0)
 
+    def test_pct_returns_zero_when_values_is_empty(self):
+        """
+       Verifica que el cálculo de percentiles devuelve cero cuando la colección de valores está vacía.
+        """
+        self.assertEqual(conversion._pct([], 0.5), 0.0)
+
+    def test_log_timing_summary_returns_when_no_parts(self):
+        """
+        Comprueba que el registro de estadísticas temporales no genera errores cuando faltan datos de temporización.
+        """
+        with patch.object(conversion.logger, "info") as mock_info:
+            conversion._log_timing_summary(Path("x.pdf"), 2, {"unknown": [1.0]})
+        mock_info.assert_not_called()
+
     def test_process_pdf_async_runs_pages_with_concurrency_and_preserves_order(self):
+        """
+        Verifica que el procesamiento asíncrono de páginas PDF mantiene el orden correcto de salida incluso utilizando concurrencia.
+        """
         async def fake_ocr(_client, _img, page, total_pages, model_name=None):
             await asyncio.sleep(0)
             return f"page-{page}/{total_pages}"
@@ -139,12 +189,18 @@ class ConversionMarkdownUnitTest(unittest.TestCase):
         self.assertIn("page-2/2", out)
 
     def test_response_error_details_prefers_json_error_fields(self):
+        """
+        Comprueba que los detalles de error se extraen correctamente de respuestas JSON devueltas por servicios externos.
+        """
         response = MagicMock()
         response.json.return_value = {"detail": "detalle de error"}
 
         self.assertEqual(conversion._response_error_details(response), "detalle de error")
 
     def test_response_error_details_uses_text_when_json_is_invalid(self):
+        """
+        Verifica la obtención de mensajes de error cuando la respuesta recibida no contiene un JSON válido.
+        """
         response = MagicMock(text="error plano")
         response.json.side_effect = ValueError
 
@@ -159,6 +215,9 @@ class ConversionMarkdownUnitTest(unittest.TestCase):
         self.assertEqual(conversion._response_error_details(list_response), "['x']")
 
     def test_ocr_backend_and_page_failure_markdown(self):
+        """
+        Comprueba la detección del backend OCR utilizado y la generación de mensajes Markdown descriptivos cuando falla el procesamiento de una página.
+        """
         original_gpu = conversion.DEFAULT_NUM_GPU
         original_source = conversion.OLLAMA_NUM_GPU_SOURCE
         original_torch = conversion.torch
@@ -189,17 +248,26 @@ class ConversionMarkdownUnitTest(unittest.TestCase):
         self.assertIn("linea 1 linea 2", markdown)
 
     def test_service_url_from_env_handles_scheme_and_existing_url(self):
+        """
+        Verifica que las URL se generan correctamente para servicios OCR a partir de variables de entorno.
+        """
         with patch.dict(os.environ, {"OCR_URL": "host:123", "OCR_URL_SCHEME": "https"}):
             self.assertEqual(conversion._service_url_from_env("OCR_URL", "fallback"), "https://host:123")
         with patch.dict(os.environ, {"OCR_URL": "http://ready/"}):
             self.assertEqual(conversion._service_url_from_env("OCR_URL", "fallback"), "http://ready")
 
     def test_clean_index_dots_removes_dot_leaders_and_dot_only_lines(self):
+        """
+        Comprueba la eliminación de puntos de relleno y líneas innecesarias presentes en índices extraídos de documentos.
+        """
         markdown = "1. OBJETO............. 3\n.....\nTexto normal"
 
         self.assertEqual(conversion.clean_index_dots(markdown), "1. OBJETO 3\nTexto normal")
 
     def test_heading_helpers_cover_invalid_and_skip_paths(self):
+        """
+        Verifica el comportamiento de las funciones auxiliares encargadas de identificar y procesar encabezados válidos e inválidos.
+        """
         self.assertTrue(conversion._should_skip_line("", ""))
         self.assertTrue(conversion._should_skip_line("# Title", "# Title"))
         self.assertTrue(conversion._should_skip_line(" line", "line"))
@@ -225,6 +293,9 @@ class ConversionMarkdownUnitTest(unittest.TestCase):
         self.assertIsNone(conversion._process_letter_code_heading("Texto"))
 
     def test_normalize_headings_converts_supported_heading_patterns(self):
+        """
+        Comprueba la conversión automática de distintos patrones de encabezados a la sintaxis Markdown correspondiente.
+        """
         markdown = "\n# Ya\n1. OBJETO DEL CONTRATO\n1.1. Alcance\n1.1.1. Detalle\nG.2.2. Codigo\n- 1. Lista\nTexto normal"
 
         normalized = conversion.normalize_headings(markdown)
@@ -237,6 +308,9 @@ class ConversionMarkdownUnitTest(unittest.TestCase):
         self.assertIn("Texto normal", normalized)
 
     def test_post_ollama_chat_async_returns_json_payload(self):
+        """
+        Verifica que las peticiones asíncronas al servicio Ollama devuelven correctamente el contenido JSON esperado.
+        """
         response = MagicMock()
         response.raise_for_status.return_value = None
         response.json.return_value = {"message": {"content": "ok"}}
@@ -249,6 +323,9 @@ class ConversionMarkdownUnitTest(unittest.TestCase):
         client.post.assert_awaited_once_with("/api/chat", json={"payload": True})
 
     def test_post_ollama_chat_async_wraps_timeout_http_status_and_json_errors(self):
+        """
+        Comprueba la gestión de errores producidos durante las comunicaciones con Ollama, incluyendo tiempos de espera, errores HTTP y respuestas inválidas.
+        """
         client = MagicMock()
         client.post = AsyncMock(side_effect=conversion.httpx.TimeoutException("slow"))
         with self.assertRaises(conversion.OllamaOCRException):
@@ -278,12 +355,14 @@ class ConversionMarkdownUnitTest(unittest.TestCase):
             conversion.asyncio.run(conversion._post_ollama_chat_async(client, {}))
 
     def test_pdf_info_page_render_and_resize_helpers(self):
+        """
+        Verifica la obtención de información de documentos PDF, la generación de imágenes de páginas y el redimensionamiento de imágenes para OCR.
+        """
         pdf_path = Path("doc.pdf")
         with patch("app.main.code.services.markdown.Conversion_markdown.pdfinfo_from_path", return_value={"Pages": "2"}):
             self.assertEqual(conversion.get_pdf_page_count(pdf_path), 2)
-        with patch("app.main.code.services.markdown.Conversion_markdown.pdfinfo_from_path", return_value={"Pages": "0"}):
-            with self.assertRaises(RuntimeError):
-                conversion.get_pdf_page_count(pdf_path)
+        with patch("app.main.code.services.markdown.Conversion_markdown.pdfinfo_from_path", return_value={"Pages": "0"}), self.assertRaises(RuntimeError):
+            conversion.get_pdf_page_count(pdf_path)
 
         output_dir = Path(tempfile.mkdtemp())
         image = MagicMock()
@@ -293,11 +372,13 @@ class ConversionMarkdownUnitTest(unittest.TestCase):
         image.save.assert_called_once_with(img_path, "PNG")
         self.assertEqual(mock_convert.call_args.kwargs["first_page"], 3)
 
-        with patch("app.main.code.services.markdown.Conversion_markdown.convert_from_path", return_value=[]):
-            with self.assertRaises(RuntimeError):
-                conversion.pdf_page_to_image(pdf_path, 1, output_dir)
+        with patch("app.main.code.services.markdown.Conversion_markdown.convert_from_path", return_value=[]), self.assertRaises(RuntimeError):
+            conversion.pdf_page_to_image(pdf_path, 1, output_dir)
 
     def test_resize_image_for_ocr_returns_original_or_resized_file(self):
+        """
+        Comprueba que las imágenes se reutilizan o redimensionan correctamente en función de sus dimensiones.
+        """
         with tempfile.TemporaryDirectory() as tmp:
             image_path = Path(tmp) / "page.png"
             image_path.write_bytes(b"fake")
@@ -321,6 +402,9 @@ class ConversionMarkdownUnitTest(unittest.TestCase):
             resized.save.assert_called_once_with(resized_path, "PNG", optimize=True)
 
     def test_ocr_page_success_retries_fallback_and_final_failure(self):
+        """
+        Verifica el procesamiento OCR de páginas individuales, incluyendo reintentos, mecanismos de respaldo y gestión de errores.
+        """
         with tempfile.TemporaryDirectory() as tmp:
             image_path = Path(tmp) / "page.png"
             image_path.write_bytes(b"image")
@@ -349,19 +433,22 @@ class ConversionMarkdownUnitTest(unittest.TestCase):
                 self.assertEqual(result, "cpu ok")
                 self.assertEqual(mock_post.call_count, 2)
 
-                with patch("app.main.code.services.markdown.Conversion_markdown.resize_image_for_ocr", return_value=resized_path), patch(
-                    "app.main.code.services.markdown.Conversion_markdown._post_ollama_chat_async",
-                    AsyncMock(side_effect=conversion.OllamaOCRException("nope")),
-                ), patch.object(Path, "unlink", side_effect=OSError):
-                    with self.assertRaises(conversion.OllamaOCRException):
-                        conversion.asyncio.run(conversion.ocr_page_with_nanonets_async(MagicMock(), image_path, 1, 2))
+                with patch("app.main.code.services.markdown.Conversion_markdown.resize_image_for_ocr", return_value=resized_path), \
+                     patch("app.main.code.services.markdown.Conversion_markdown._post_ollama_chat_async", AsyncMock(side_effect=conversion.OllamaOCRException("nope"))), \
+                     patch.object(Path, "unlink", side_effect=OSError), \
+                     self.assertRaises(conversion.OllamaOCRException):
+                    conversion.asyncio.run(conversion.ocr_page_with_nanonets_async(MagicMock(), image_path, 1, 2))
             finally:
                 conversion.OCR_RETRY_MAX_IMAGE_SIDES = original_sides
                 conversion.DEFAULT_NUM_GPU = original_gpu
 
     def test_process_pdf_async_success_placeholder_raise_and_unlink_error(self):
+        """
+        Comprueba el comportamiento del procesamiento asíncrono de PDFs ante conversiones correctas, fallos gestionados mediante marcadores de posición y errores críticos.
+        """
         class AsyncClientContext:
             def __init__(self, **_kwargs):
+                # El constructor puede aceptar cualquier argumento pero no hace nada con ellos, ya que es un stub para httpx.AsyncClient
                 pass
 
             async def __aenter__(self):
@@ -410,13 +497,17 @@ class ConversionMarkdownUnitTest(unittest.TestCase):
             ), patch(
                 "app.main.code.services.markdown.Conversion_markdown.ocr_page_with_nanonets_async",
                 AsyncMock(side_effect=conversion.OllamaOCRException("fallo")),
-            ), patch("app.main.code.services.markdown.Conversion_markdown.httpx.AsyncClient", AsyncClientContext):
-                with self.assertRaises(conversion.OllamaOCRException):
-                    conversion.asyncio.run(conversion.process_pdf_async(pdf_path))
+            ), patch("app.main.code.services.markdown.Conversion_markdown.httpx.AsyncClient", AsyncClientContext), self.assertRaises(
+                conversion.OllamaOCRException
+            ):
+                conversion.asyncio.run(conversion.process_pdf_async(pdf_path))
         finally:
             conversion.OCR_PAGE_FAILURE_MODE = original_mode
 
     def test_process_pdf_save_markdown_and_main_paths(self):
+        """
+        Verifica la generación y almacenamiento de archivos Markdown, así como el funcionamiento de los distintos modos de ejecución del programa principal.
+        """
         pdf_path = Path("doc.pdf")
         with patch("app.main.code.services.markdown.Conversion_markdown.process_pdf_async", AsyncMock(return_value="md")):
             self.assertEqual(conversion.process_pdf(pdf_path), "md")
@@ -430,9 +521,8 @@ class ConversionMarkdownUnitTest(unittest.TestCase):
 
             in_dir = Path(tmp) / "in"
             in_dir.mkdir()
-            with patch.object(sys, "argv", ["cmd", str(in_dir), str(output_dir)]):
-                with self.assertRaises(SystemExit):
-                    conversion.main()
+            with patch.object(sys, "argv", ["cmd", str(in_dir), str(output_dir)]), self.assertRaises(SystemExit):
+                conversion.main()
 
             (in_dir / "a.pdf").write_text("pdf")
             (in_dir / "b.pdf").write_text("pdf")
@@ -442,6 +532,5 @@ class ConversionMarkdownUnitTest(unittest.TestCase):
                 conversion.main()
             self.assertEqual(mock_save.call_count, 2)
 
-        with patch.object(sys, "argv", ["cmd"]):
-            with self.assertRaises(SystemExit):
-                conversion.main()
+        with patch.object(sys, "argv", ["cmd"]), self.assertRaises(SystemExit):
+            conversion.main()
