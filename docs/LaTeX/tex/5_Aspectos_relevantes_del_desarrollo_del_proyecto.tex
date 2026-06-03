@@ -180,7 +180,9 @@ Otro aspecto importante fue la seguridad y el control de acceso. La aplicación 
 
 También se ha desarrollado un sistema centralizado de control de excepciones para evitar errores no controlados dentro de la aplicación y evitar así caídas del sistema. Concretamente se registran los errores ( mediante \eng{loggers}) mostrándose mensajes de error amigables.
 
-Finalmente, debido al elevado coste computacional de algunas operaciones, se incorporó soporte para tareas asíncronas. Esto fue especialmente importante en procesos como la conversión de \file{PDF} a \file{Markdown}, el \eng{web scraping}, la generación de \eng{embeddings}, la indexación documental y la generación de la respuesta. Permite evitar bloqueos en la interfaz web, ya que los procesos pesados pueden ejecutarse en segundo plano mientras el usuario continua usando la aplicación (ver sección~\ref{rel:asinc}). 
+Debido al elevado coste computacional de algunas operaciones, se incorporó soporte para tareas asíncronas. Esto fue especialmente importante en procesos como la conversión de \file{PDF} a \file{Markdown}, el \eng{web scraping}, la generación de \eng{embeddings}, la indexación documental y la generación de la respuesta. Permite evitar bloqueos en la interfaz web, ya que los procesos pesados pueden ejecutarse en segundo plano mientras el usuario continua usando la aplicación (ver sección~\ref{rel:asinc}). 
+
+Otro aspecto relevante fue la validación de las direcciones de correo electrónico durante el proceso de registro y edición de usuarios. Inicialmente se valoró realizar comprobaciones de formato mediante expresiones regulares, pero este enfoque no permite detectar direcciones inexistentes o dominios incapaces de recibir mensajes. Para solucionar esta limitación se integró la \file{API} de \file{Emailable}. De tal forma que antes de completar el registro de usuario o la actualización del perfil, el servidor consulta la \file{API} para verificar que la dirección introducida posee una sintaxis válida, un dominio existente y que puede recibir correos electrónicos.
 
 \section{Evaluación de la calidad del código}
 
