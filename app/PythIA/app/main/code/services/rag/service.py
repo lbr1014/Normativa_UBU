@@ -292,6 +292,40 @@ def resolve_numero_expediente(question: str) -> str | None:
 
     return candidate
 
+DOC_TYPE_MARKERS = {
+    "[doc_type=administrativo]": "administrativo",
+    "[doc_type = administrativo]": "administrativo",
+    "[doc_type=tecnico]": "tecnico",
+    "[doc_type = tecnico]": "tecnico",
+}
+
+
+def extract_doc_type_override(text: str) -> tuple[str, str | None]:
+    """
+    Extrae una posible selección de tipo de documento desde la pregunta.
+    Permite que el usuario indique explícitamente el tipo de documento (administrativo o técnico)
+
+    Args:
+        text (str): texto de la pregunta que puede contener un marcador de tipo de documento.
+
+    Returns:
+        tuple[str, str | None]: Una tupla con el texto de la pregunta limpio de marcadores y el tipo de documento indicado ("administrativo" o "tecnico") o None si no se indicó ningún tipo.
+    """
+
+    cleaned = (text or "").strip()
+    lower_text = cleaned.lower()
+
+    for marker, doc_type in DOC_TYPE_MARKERS.items():
+        pos = lower_text.find(marker)
+        if pos >= 0:
+            cleaned = (
+                cleaned[:pos]
+                + " "
+                + cleaned[pos + len(marker):]
+            ).strip()
+            return cleaned, doc_type
+
+    return cleaned, None
 
 async def rag_answer(
     question: str,
@@ -328,19 +362,8 @@ async def rag_answer(
         QueryCancelledError: Si should_cancel retorna True durante el procesamiento.
     """
 
-    question = (question or "").strip()
-    tipo_override: str | None = None
-    marker = re.search(r"\[doc_type\s*=\s*(administrativo|tecnico)\s*\]", question, re.IGNORECASE)
-    if marker:
-        tipo_override = marker.group(1).strip().lower()
-        # Evita regex con cuantificadores "abiertos" alrededor de un patrón variable:
-        # eliminamos el marcador y su whitespace adyacente de forma determinista.
-        left, right = marker.span()
-        while left > 0 and question[left - 1].isspace():
-            left -= 1
-        while right < len(question) and question[right].isspace():
-            right += 1
-        question = (question[:left] + " " + question[right:]).strip()
+    
+    question, tipo_override = extract_doc_type_override(question)
     invalid = validate_question(question, lang=lang)
 
     if invalid:
@@ -352,11 +375,17 @@ async def rag_answer(
     tipo_documento = tipo_override or detect_tipo_documento(question)
     query_profile, retrieval_k = detect_guided_query_profile(question)
 
-    try:
+    async def _run_query() -> dict[str, Any]:
+        """
+        Ejecuta la consulta al sistema RAG con los parámetros adecuados.
+        Muestra un mensaje de preparación si se proporciona on_status.
+
+        Returns:
+            dict[str, Any]: Diccionario con la respuesta del sistema RAG o un mensaje de error si ocurre una excepción durante la consulta.
+        """
         if on_status:
             on_status(translate_for(lang, "rag.preparing"))
-
-        data = await obtener_mejor_chunk(
+        return await obtener_mejor_chunk(
             question,
             model=model,
             should_cancel=should_cancel,
@@ -368,6 +397,8 @@ async def rag_answer(
             min_similarity=QUESTION_MIN_SIMILARITY,
         )
 
+    try:
+        data = await _run_query()
     except QueryCancelledError:
         raise
     except OllamaTimeoutError as e:
@@ -382,7 +413,6 @@ async def rag_answer(
 
     elapsed = time.perf_counter() - start
     # `obtener_mejor_chunk` intenta rellenar `execution_device` con el dispositivo real
-    # (vía /api/ps). Solo usamos fallback si faltase.
     data.setdefault("execution_device", get_ollama_execution_device())
 
     # Guardado en BBDD
@@ -390,12 +420,10 @@ async def rag_answer(
     data["elapsed_s"] = round(elapsed, 4)
 
     # Mejor chunk (ranking 1) para el front
-    best_point_id = ""
     retrieved = data.get("retrieved") or []
-    if retrieved:
-        best_point_id = (retrieved[0].get("qdrant_point_id") or "").strip()
-
-    data["qdrant_point_id"] = best_point_id
+    data["qdrant_point_id"] = (
+        (retrieved[0].get("qdrant_point_id") or "").strip() if retrieved else ""
+    )
     return data
 
 

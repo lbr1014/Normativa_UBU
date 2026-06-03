@@ -124,38 +124,19 @@ def rag_evaluation_detail(job_id: int) -> ResponseReturnValue:
     if job.status != "done" or not job.results_json_path or not job.row_results_json_path:
         abort(404)
 
-    data_dir = Path(current_app.config.get("DATA_DIR") or Path.cwd()).resolve()
-    results_path = Path(job.results_json_path).resolve()
-    rows_path = Path(job.row_results_json_path).resolve()
-    config_path = Path(job.config_json_path).resolve() if job.config_json_path else None
-
-    for path in (results_path, rows_path, config_path):
-        if not path:
-            continue
-        try:
-            path.relative_to(data_dir)
-        except ValueError:
-            abort(400)
+    data_dir = _resolve_data_dir()
+    results_path, rows_path, config_path = _resolve_job_paths(job)
+    _ensure_paths_inside_data_dir(data_dir, results_path, rows_path, config_path)
 
     if not results_path.exists() or not rows_path.exists():
         abort(404)
 
-    try:
-        summary = json.loads(results_path.read_text(encoding="utf-8"))
-    except Exception:
-        abort(500)
-
-    try:
-        rows_payload = json.loads(rows_path.read_text(encoding="utf-8"))
-    except Exception:
-        rows_payload = []
+    summary = _load_json_file(results_path)
+    rows_payload = _load_json_file_or_default(rows_path, [])
 
     config_payload = {}
     if config_path and config_path.exists():
-        try:
-            config_payload = json.loads(config_path.read_text(encoding="utf-8"))
-        except Exception:
-            config_payload = {}
+        config_payload = _load_json_file_or_default(config_path, {})
 
     return render_template(
         "rag_evaluation_detail.html",
@@ -165,6 +146,86 @@ def rag_evaluation_detail(job_id: int) -> ResponseReturnValue:
         config=config_payload,
         back_url=url_for("rag.rag_page"),
     )
+
+
+def _resolve_data_dir() -> Path:
+    """
+    Resuelve la ruta del directorio de datos desde la configuración de la aplicación, asegurándose de que es una ruta absoluta y válida.
+
+    Returns:
+        Path: La ruta absoluta al directorio de datos, o el directorio actual si no se ha configurado.
+    """
+    return Path(current_app.config.get("DATA_DIR") or Path.cwd()).resolve()
+
+
+def _resolve_job_paths(job: RAGEvaluationState) -> tuple[Path, Path, Path | None]:
+    """
+    Resuelve las rutas de los archivos de resultados, filas y configuración asociados a una evaluación RAG, asegurándose de que son rutas absolutas.
+
+    Args:
+        job (RAGEvaluationState): El estado de la evaluación RAG que contiene las rutas relativas a los archivos de resultados, filas y configuración.
+
+    Returns:
+        tuple[Path, Path, Path | None]: Las rutas absolutas a los archivos de resultados, filas y configuración.
+    """
+    results_path = Path(job.results_json_path).resolve()
+    rows_path = Path(job.row_results_json_path).resolve()
+    config_path = Path(job.config_json_path).resolve() if job.config_json_path else None
+    return results_path, rows_path, config_path
+
+
+def _ensure_paths_inside_data_dir(
+    data_dir: Path, results_path: Path, rows_path: Path, config_path: Path | None
+) -> None:
+    """
+Verifica que las rutas proporcionadas para los archivos de resultados, filas y configuración estén dentro del directorio de datos permitido. Si alguna ruta no está dentro del directorio de datos, se aborta la solicitud con un error 400.  
+
+    Args:
+        data_dir (Path): El directorio de datos permitido, resuelto desde la configuración de la aplicación.
+        results_path (Path): La ruta absoluta al archivo de resultados.
+        rows_path (Path): La ruta absoluta al archivo de filas.
+        config_path (Path | None): La ruta absoluta al archivo de configuración, si existe.
+    """
+    for path in (results_path, rows_path, config_path):
+        if not path:
+            continue
+        try:
+            path.relative_to(data_dir)
+        except ValueError:
+            abort(400)
+
+
+def _load_json_file(path: Path) -> object:
+    """
+    Lee un archivo JSON desde la ruta proporcionada y devuelve su contenido como un objeto de Python. Si el archivo no se puede leer o no es un JSON válido, se aborta la solicitud con un error 500.
+
+    Args:
+        path (Path): La ruta absoluta al archivo JSON.
+
+    Returns:
+        object: El contenido del archivo JSON como un objeto de Python.
+    """
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        abort(500)
+
+
+def _load_json_file_or_default(path: Path, default: object) -> object:
+    """
+    Lee un archivo JSON desde la ruta proporcionada y devuelve su contenido como un objeto de Python. Si el archivo no se puede leer o no es un JSON válido, devuelve el valor predeterminado.
+
+    Args:
+        path (Path): La ruta absoluta al archivo JSON.
+        default (object): El valor predeterminado a devolver si el archivo no se puede leer o no es un JSON válido.
+
+    Returns:
+        object: El contenido del archivo JSON como un objeto de Python, o el valor predeterminado si no se puede leer.
+    """
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return default
 
 def build_expediente_type_payload() -> dict[str, list[str]]:
     """
@@ -563,6 +624,28 @@ def get_user_job_or_404(job_id: int) -> RAGQueryState:
         abort(404)
     return job
 
+
+def _get_active_job(user_id: int) -> RAGQueryState | None:
+    """
+    Obtiene la consulta RAG activa (en estado "queued" o "running") para un usuario dado, si existe.
+
+    Args:
+        user_id (int): Identificador del usuario para el cual se busca una consulta RAG activa.
+
+    Returns:
+        RAGQueryState | None: La consulta RAG activa para el usuario dado, o None si no existe.
+    """
+    return (
+        RAGQueryState.query.filter(
+            RAGQueryState.user_id == int(user_id),
+            RAGQueryState.status.in_(["queued", "running"]),
+            RAGQueryState.cancel_requested.is_(False),
+        )
+        .order_by(RAGQueryState.created_at.desc())
+        .first()
+    )
+
+
 @rag_bp.post("/ask")
 @login_required
 def rag_ask() -> ResponseReturnValue:
@@ -589,16 +672,7 @@ def rag_ask() -> ResponseReturnValue:
     if invalid:
         return jsonify({"error": invalid.get("answer") or t("rag.invalid_question")}), 400
 
-    active_job = (
-        RAGQueryState.query
-        .filter(
-            RAGQueryState.user_id == int(current_user.id),
-            RAGQueryState.status.in_(["queued", "running"]),
-            RAGQueryState.cancel_requested.is_(False),
-        )
-        .order_by(RAGQueryState.created_at.desc())
-        .first()
-    )
+    active_job = _get_active_job(int(current_user.id))
     
     if active_job:
         return jsonify({"job_id": active_job.id, "reused": True}), 202
