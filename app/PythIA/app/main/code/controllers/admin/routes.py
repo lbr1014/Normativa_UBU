@@ -196,6 +196,7 @@ DOC_TYPE_UNKNOWN = "unknown"
 DOC_MARKDOWN_YES = "yes"
 DOC_MARKDOWN_NO = "no"
 JOBS_ALREADY_FINISHED = "jobs.already_finished"
+JOBS_QUEUED_SHORT = "jobs.queued_short"
 MARKDOWN_CANCELLED = "markdown.cancelled"
 SCRAPING_CANCELLED = "scraping.cancelled"
 MARKDOWN_JOB_MESSAGE_MAX_LENGTH = 255
@@ -791,7 +792,7 @@ def convert_documents_to_markdown() -> ResponseReturnValue:
     job = MarkdownConversionState(
         status="queued",
         progress=0,
-        message=translate_for(lang, "jobs.queued_short"),
+        message=translate_for(lang, JOBS_QUEUED_SHORT),
         cancel_requested=False,
         error=None,
     )
@@ -1174,7 +1175,7 @@ def run_rag_evaluation_job() -> ResponseReturnValue:
 
     lang = get_locale()
     job = RAGEvaluationState(status="queued", progress=0, cancel_requested=False, error=None)
-    job.set_message(translate_for(lang, "jobs.queued_short"))
+    job.set_message(translate_for(lang, JOBS_QUEUED_SHORT))
     db.session.add(job)
     db.session.commit()
 
@@ -1746,7 +1747,7 @@ def web_scraping_documents() -> ResponseReturnValue:
     job = WebScrapingSate(
         status="queued",
         progress=0,
-        message=translate_for(lang, "jobs.queued_short"),
+        message=translate_for(lang, JOBS_QUEUED_SHORT),
         cancel_requested=False,
         error=None,
     )

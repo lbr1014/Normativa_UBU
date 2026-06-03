@@ -38,6 +38,8 @@ from app.main.code.inetrnacionalizacion.tarduccion import get_locale, t
 from app.main.code.services.rag.PrototipoRAG import qdrant_get_payloads
 
 from ...model.consulta import Consulta
+
+STATS_COMPARISON_GLOBAL = "stats.comparison_global"
 from ...model.rag_query_state import RAGQueryState
 from ...model.user import User
 from . import main_bp
@@ -1044,7 +1046,7 @@ def build_user_comparison_payload(user_counter: dict[str, int]) -> dict:
     Returns:
         dict: Payload con la comparación de usuarios y estadísticas agregadas.
     """
-    global_label = t("stats.comparison_global")
+    global_label = t(STATS_COMPARISON_GLOBAL)
     counts = [
         count
         for name, count in user_counter.items()
@@ -1115,7 +1117,7 @@ def build_selected_user_comparison_payload(
 
     comparison_counter = {}
     if include_global:
-        comparison_counter[t("stats.comparison_global")] = len(consultas)
+        comparison_counter[t(STATS_COMPARISON_GLOBAL)] = len(consultas)
 
     comparison_counter |= {
         f"{users_by_id[user_id].nombre} ({users_by_id[user_id].email})": counts_by_user_id.get(user_id, 0)
@@ -1175,40 +1177,30 @@ def stats_page() -> str:
     Returns:
         str: HTML renderizado de la páginas de estadísticas.
     """
-    selected_user = current_user
-    selected_user_id = None
-    selected_comparison_user_ids = []
-    users = []
+
+    selected_user: User | None = current_user
+    selected_user_id: int | None = None
+    selected_comparison_user_ids: list[int] = []
+    users: list = []
     is_global_scope = False
-    usage_scope = "user"
+    usage_scope: str
 
     if current_user.is_admin:
-        users = User.query.order_by(User.nombre.asc(), User.email.asc()).all()
-        selected_user_id = request.args.get("user_id", type=int)
-        selected_comparison_user_ids = request.args.getlist("comparison_user_ids", type=int)
-        if selected_user_id:
-            selected_user = User.get_by_id(selected_user_id)
-            if not selected_user:
-                abort(404)
-            usage_scope = "user"
-        else:
-            selected_user = None
-            is_global_scope = True
-            usage_scope = "global"
+        (
+            users,
+            selected_user,
+            selected_user_id,
+            selected_comparison_user_ids,
+            is_global_scope,
+            usage_scope,
+        ) = _load_admin_selection()
     else:
-        usage_scope = request.args.get("usage_scope", "user")
-        if usage_scope not in {"user", "global"}:
-            usage_scope = "user"
+        usage_scope = _load_non_admin_scope()
 
     all_consultas = Consulta.query.order_by(Consulta.created_at.asc()).all()
 
-    usage_query = Consulta.query.order_by(Consulta.created_at.asc())
-    if current_user.is_admin:
-        if selected_user is not None:
-            usage_query = usage_query.filter(Consulta.user_id == int(selected_user.id))
-    else:
-        if usage_scope == "user":
-            usage_query = usage_query.filter(Consulta.user_id == int(current_user.id))
+
+    usage_query = _build_usage_query(selected_user, usage_scope)
 
     usage_consultas = usage_query.all() if usage_scope != "global" else all_consultas
 
@@ -1246,7 +1238,7 @@ def stats_page() -> str:
         stats_payload["user_comparison"] = build_user_comparison_payload(
             {
                 f"{t('stats.comparison_current_user', name=current_user.nombre)} ({current_user.email})": current_user_queries,
-                t("stats.comparison_global"): len(all_consultas),
+                t(STATS_COMPARISON_GLOBAL): len(all_consultas),
             }
         )
 
@@ -1280,6 +1272,57 @@ def stats_page() -> str:
         usage_scope=usage_scope,
     )
     
+def _load_admin_selection() -> tuple[list, User | None, int | None, list[int], bool, str]:
+    """
+    Carga la selección de usuarios para el administrador.
+
+    Returns:
+        tuple[list, User | None, int | None, list[int], bool, str]: Devuelve una tupla con la lista de usuarios, el usuario seleccionado, su ID, los IDs de comparación seleccionados, que marca si es alcance global y el alcance de uso.
+        """
+    users_local = User.query.order_by(User.nombre.asc(), User.email.asc()).all()
+    selected_id = request.args.get("user_id", type=int)
+    comparison_ids = request.args.getlist("comparison_user_ids", type=int)
+    if selected_id:
+        selected = User.get_by_id(selected_id)
+        if not selected:
+            abort(404)
+        return users_local, selected, selected_id, comparison_ids, False, "user"
+    return users_local, None, None, comparison_ids, True, "global"
+
+def _load_non_admin_scope() -> str:
+    """
+    Carga el alcance de uso para usuarios no administradores.
+
+    Returns:
+        str: Devuelve el alcance de uso seleccionado para usuarios no administradores, validando que sea "user" o "global", y default a "user" si no es válido.
+    """
+    scope = request.args.get("usage_scope", "user")
+    return scope if scope in {"user", "global"} else "user"
+
+def _build_usage_query(selected_user: User | None, usage_scope: str) -> object:
+    """
+    Construye la consulta de uso filtrada según el usuario seleccionado y el alcance de uso.
+
+    Args:
+        selected_user (User | None): logica de filtrado para el usuario seleccionado, solo se aplica si el alcance de uso es "user". Si no se selecciona ningún usuario, 
+            se ignora este filtro y se muestran todas las consultas (en caso de ser admin) o solo las del usuario actual (en caso de no ser admin).
+        usage_scope (str): alcance de uso seleccionado, puede ser "user" para mostrar solo las consultas del usuario seleccionado o del usuario actual, o 
+            "global" para mostrar todas las consultas sin importar el usuario (solo para admin).
+
+    Returns:
+        object: devuelve la consulta de SQLAlchemy ya filtrada según el usuario seleccionado y el alcance de uso.
+    """
+    query = Consulta.query.order_by(Consulta.created_at.asc())
+    if current_user.is_admin:
+        if selected_user is not None:
+            return query.filter(Consulta.user_id == int(selected_user.id))
+        return query
+    if usage_scope == "user":
+        return query.filter(Consulta.user_id == int(current_user.id))
+    return query
+
+
+
 def best_pid_for_consulta(consulta: Consulta) -> str:
     """
     Obtiene el ID de punto Qdrant del mejor fragmento/chunk de una consulta.

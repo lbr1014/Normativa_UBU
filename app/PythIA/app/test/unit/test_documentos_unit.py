@@ -1,6 +1,10 @@
 """
 Autora: Lydia Blanco Ruiz
-Script con pruebas unitarias de la aplicación.
+Script con pruebas unitarias del servicio de documentos (DocumentosService). Su objetivo es verificar todo el ciclo de vida de los documentos 
+dentro de la aplicación. Carga y validación de archivos PDF, sincronización con el sistema de archivos, conversión a Markdown, 
+gestión de metadatos, indexación vectorial, almacenamiento de fragmentos y embeddings, eliminación de documentos y 
+mantenimiento de la consistencia entre la base de datos, el almacenamiento local y la base de datos vectorial. 
+Las pruebas cubren tanto escenarios normales de funcionamiento como situaciones de error, cancelación y actualización de documentos ya existentes.
 """
 
 from io import BytesIO
@@ -27,6 +31,9 @@ from app.test.support import BaseAppTestCase
 
 class DocumentosServiceUnitTest(BaseAppTestCase):
     def _service(self) -> DocumentosService:
+        """
+        Crea una instancia del servicio de documentos con dependencias simuladas para pruebas unitarias.
+        """
         return DocumentosService(
             self._docs_dir,
             index_pliegos_dir=lambda path: {},
@@ -35,6 +42,9 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         )
 
     def test_infer_document_metadata_from_filename(self):
+        """
+        Verifica la extracción de metadatos documentales a partir del nombre del archivo y la normalización del texto asociado.
+        """
         expediente, tipo = infer_document_metadata_from_filename("EXP-123__Pliego_de_clausulas_administrativas_1.pdf")
         self.assertEqual(expediente, "EXP-123")
         self.assertEqual(tipo, "administrativo")
@@ -48,6 +58,9 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         self.assertEqual(_normalize_text("  Ágil   Técnico  "), "agil   tecnico")
 
     def test_resolve_pdf_path_rejects_empty_or_non_pdf_names(self):
+        """
+        Comprueba que únicamente se aceptan nombres válidos de archivos PDF al resolver rutas documentales.
+        """
         service = self._service()
 
         with self.assertRaises(ValueError):
@@ -56,6 +69,9 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
             service.resolve_pdf_path("documento.txt")
 
     def test_is_pdf_upload_rejects_missing_stream_but_accepts_non_seekable(self):
+        """
+        Verifica la validación de documentos PDF cuando faltan flujos de datos o cuando estos no permiten reposicionamiento.
+        """
         service = self._service()
         no_stream = SimpleNamespace(filename="archivo.pdf")
         non_seekable = MagicMock()
@@ -66,6 +82,9 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         self.assertTrue(service._is_pdf_upload(bad_storage))
 
     def test_save_uploads_persists_only_pdf_files(self):
+        """
+        Comprueba que únicamente los archivos PDF válidos son almacenados e incorporados a la base de datos.
+        """
         service = self._service()
         pdf = FileStorage(stream=BytesIO(b"%PDF-1.4 data"), filename="uno.pdf")
         txt = FileStorage(stream=BytesIO(b"hola"), filename="dos.txt")
@@ -78,6 +97,9 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         self.assertTrue((self._docs_dir / "uno.pdf").exists())
 
     def test_save_uploads_skips_empty_items_and_empty_filenames(self):
+        """
+        Verifica que se ignoran correctamente elementos vacíos o archivos sin nombre durante la carga documental.
+        """
         service = self._service()
         empty_name = FileStorage(stream=BytesIO(b"%PDF-1.4 data"), filename="")
 
@@ -87,6 +109,9 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         self.assertEqual(Documento.query.count(), 0)
 
     def test_list_documents_paginated_and_markdown_helpers(self):
+        """
+        Comprueba el funcionamiento de la paginación documental y de las utilidades relacionadas con el estado de conversión Markdown.
+        """
         service = self._service()
         first = self.create_document(nombre="first.pdf")
         second = self.create_document(nombre="second.pdf")
@@ -102,6 +127,9 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         self.assertEqual(service.count_pending_markdown(), 1)
 
     def test_delete_document_removes_record_and_files(self):
+        """
+        Verifica la eliminación completa de documentos, incluyendo registros de base de datos, archivos físicos y fragmentos asociados.
+        """
         service = self._service()
         doc = self.create_document(nombre="borrar.pdf")
         doc.markdown_content = "contenido"
@@ -115,6 +143,9 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         service.delete_chunks.assert_called_once_with("borrar.pdf")
 
     def test_clear_markdown_content_delegates_to_document(self):
+        """
+        Comprueba la eliminación del contenido Markdown asociado a un documento.
+        """
         service = self._service()
         doc = self.create_document(nombre="markdown-clear.pdf", status="markdown_generado")
         doc.markdown_content = "# contenido"
@@ -124,6 +155,9 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         self.assertIsNone(doc.markdown_content)
 
     def test_delete_document_handles_missing_doc_and_cleanup_errors(self):
+        """
+        Verifica la gestión de errores durante la eliminación de documentos inexistentes o con problemas de limpieza asociados.
+        """
         service = self._service()
         service.delete_document(9999)
 
@@ -136,6 +170,9 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         self.assertIsNone(db.session.get(Documento, doc.id))
 
     def test_has_markdown_uses_document_attribute(self):
+        """
+        Comprueba la detección de documentos que disponen de contenido Markdown generado.
+        """
         service = self._service()
         doc = self.create_document(nombre="detectable.pdf")
         self.assertFalse(service.has_markdown(doc))
@@ -144,6 +181,9 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         self.assertTrue(service.has_markdown(doc))
 
     def test_convert_document_to_markdown_persists_content_in_same_row(self):
+        """
+        Verifica la conversión de documentos a Markdown y el almacenamiento persistente del contenido generado.
+        """
         service = self._service()
         doc = self.create_document(nombre="restaurar.pdf")
         service.markdown_converter = MagicMock(return_value="# Markdown")
@@ -155,6 +195,9 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         self.assertEqual(doc.status, "con markdown")
 
     def test_convert_document_to_markdown_skips_existing_markdown_and_keeps_indexed_status(self):
+        """
+        Comprueba que no se vuelve a convertir un documento que ya dispone de contenido Markdown y se preserva su estado de indexación.
+        """
         service = self._service()
         doc = self.create_document(nombre="ya-indexado.pdf", status="indexado")
         doc.markdown_content = "# Ya"
@@ -168,6 +211,9 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         self.assertIsNone(doc.error_message)
 
     def test_convert_document_to_markdown_marks_existing_non_indexed_markdown(self):
+        """
+        Verifica la actualización del estado documental cuando ya existe contenido Markdown pero el documento aún no está indexado.
+        """
         service = self._service()
         doc = self.create_document(nombre="ya-con-markdown.pdf", status="cargado")
         doc.markdown_content = "# Ya"
@@ -179,12 +225,18 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         self.assertEqual(doc.status, STATUS_WITH_MARKDOWN)
 
     def test_status_for_existing_markdown_keeps_indexed_or_empty_markdown_status(self):
+        """
+        Comprueba la determinación correcta del estado documental en función de la existencia de contenido Markdown e indexación previa.
+        """
         service = self._service()
 
         self.assertEqual(service._status_for_existing_markdown("indexado", "# Markdown"), "indexado")
         self.assertEqual(service._status_for_existing_markdown("cargado", None), "cargado")
 
     def test_convert_document_to_markdown_raises_without_converter_or_missing_pdf(self):
+        """
+        Verifica la gestión de errores cuando no existe conversor Markdown configurado o falta el archivo PDF asociado.
+        """
         service = self._service()
         doc = self.create_document(nombre="sin-converter.pdf")
         service.markdown_converter = None
@@ -198,6 +250,11 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
             service.convert_document_to_markdown(doc)
 
     def test_sync_from_folder_creates_or_updates_document_metadata(self):
+        """
+        Comprueba la sincronización de documentos desde el sistema de archivos y la actualización de sus metadatos.
+        Verifica que los documentos se crean o actualizan correctamente en la base de datos según su presencia en el directorio y 
+        cambios detectados en el archivo PDF, incluyendo la gestión del contenido Markdown asociado.
+        """
         service = self._service()
         pdf_path = self._docs_dir / "EXP-9__Pliego_de_prescripciones_tecnicas_1.pdf"
         pdf_path.parent.mkdir(parents=True, exist_ok=True)
@@ -218,6 +275,9 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         self.assertIsNone(doc.markdown_content)
 
     def test_sync_from_folder_preserves_indexed_and_marks_existing_markdown(self):
+        """
+        Verifica la conservación de estados de indexación y Markdown durante procesos de sincronización documental.
+        """
         service = self._service()
         indexed_path = self._docs_dir / "indexed.pdf"
         indexed_path.write_bytes(b"%PDF-1.4 indexed")
@@ -242,6 +302,9 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         self.assertEqual(markdown.status, STATUS_WITH_MARKDOWN)
 
     def test_upsert_existing_document_with_markdown_uses_markdown_status_for_non_indexed_base(self):
+        """
+        Comprueba la actualización de documentos existentes manteniendo correctamente los estados asociados al contenido Markdown.
+        """
         service = self._service()
         pdf_path = self._docs_dir / "existing-markdown.pdf"
         pdf_path.write_bytes(b"%PDF-1.4 same")
@@ -259,6 +322,9 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         self.assertIsNone(doc.error_message)
 
     def test_purge_missing_files_removes_records_relations_and_remote_chunks(self):
+        """
+        Verifica la eliminación de registros y relaciones asociadas a documentos cuyos archivos físicos ya no existen.
+        """
         service = self._service()
         doc = self.create_document(nombre="missing.pdf")
         chunk = self.create_chunk(document=doc)
@@ -280,6 +346,9 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         service.delete_chunks.assert_called_once_with("missing.pdf")
 
     def test_purge_missing_files_ignores_remote_delete_errors_and_existing_files(self):
+        """
+        Comprueba la gestión de errores durante la eliminación remota de fragmentos y la preservación de documentos válidos.
+        """
         service = self._service()
         existing = self.create_document(nombre="existing.pdf")
         missing = self.create_document(nombre="missing-error.pdf")
@@ -293,6 +362,9 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         self.assertIsNone(db.session.get(Documento, missing.id))
 
     def test_collect_pending_markdown_docs_updates_stale_existing_status(self):
+        """
+        Verifica la identificación de documentos pendientes de conversión Markdown y la actualización de estados obsoletos.
+        """
         service = self._service()
         stale = self.create_document(nombre="stale.pdf", status="cargado")
         stale.markdown_content = "# Stale"
@@ -307,6 +379,9 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         self.assertIsNone(stale.error_message)
 
     def test_build_markdown_page_callback_wraps_progress_arguments(self):
+        """
+        Comprueba la construcción de callbacks utilizados para informar del progreso durante la conversión Markdown.
+        """
         service = self._service()
         calls = []
 
@@ -317,14 +392,19 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         self.assertEqual(calls, [(2, 5, 3, 9)])
 
     def test_process_pending_markdown_doc_propagates_cancellation(self):
+        """
+        Verifica la propagación correcta de cancelaciones durante el procesamiento de documentos pendientes.
+        """
         service = self._service()
         doc = self.create_document(nombre="cancel-process.pdf")
 
-        with patch.object(service, "convert_document_to_markdown", side_effect=JobCancelledError("cancelado")):
-            with self.assertRaises(JobCancelledError):
-                service._process_pending_markdown_doc(doc, 1, 1)
+        with patch.object(service, "convert_document_to_markdown", side_effect=JobCancelledError("cancelado")), self.assertRaises(JobCancelledError):
+            service._process_pending_markdown_doc(doc, 1, 1)
 
     def test_convert_pending_to_markdown_reports_converted_failed_and_skipped(self):
+        """
+        Comprueba la generación de estadísticas sobre documentos convertidos, fallidos y omitidos durante conversiones masivas.
+        """
         service = self._service()
         ready = self.create_document(nombre="ready.pdf")
         ready.markdown_content = "# Ready"
@@ -345,8 +425,11 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         self.assertEqual(progress_calls[0], (0, 2))
 
     def test_convert_pending_to_markdown_counts_skipped_from_existing_doc_during_processing(self):
+        """
+        Verifica el recuento correcto de documentos omitidos cuando ya disponen de contenido Markdown válido.
+        """
         service = self._service()
-        doc = self.create_document(nombre="skipped-during-processing.pdf")
+        self.create_document(nombre="skipped-during-processing.pdf")
 
         with patch.object(service, "convert_document_to_markdown", return_value=False):
             stats = service.convert_pending_to_markdown()
@@ -354,6 +437,9 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         self.assertEqual(stats, {"converted": 0, "failed": 0, "skipped": 1, "total": 1})
 
     def test_convert_pending_to_markdown_honors_cancellation(self):
+        """
+        Comprueba que las conversiones masivas respetan las solicitudes de cancelación.
+        """
         service = self._service()
         self.create_document(nombre="cancel.pdf")
 
@@ -361,6 +447,9 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
             service.convert_pending_to_markdown(should_cancel=lambda: True)
 
     def test_prepare_document_for_vector_update_clears_relations_and_tolerates_remote_errors(self):
+        """
+        Verifica la preparación de documentos para su reindexación eliminando relaciones previas y gestionando errores remotos.
+        """
         service = self._service()
         doc = self.create_document(nombre="prepare-vector.pdf", status="fallido", error_message="old")
         chunk = self.create_chunk(document=doc)
@@ -378,6 +467,9 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         self.assertEqual(Embedding.query.count(), 0)
 
     def test_prepare_document_for_vector_update_raises_when_pdf_missing(self):
+        """
+        Comprueba la generación de errores cuando se intenta indexar un documento cuyo PDF ya no existe.
+        """
         service = self._service()
         doc = self.create_document(nombre="missing-vector.pdf")
         Path(doc.path).unlink()
@@ -386,6 +478,9 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
             service._prepare_document_for_vector_update(doc)
 
     def test_index_vector_document_updates_status_and_rejects_empty_chunks(self):
+        """
+        Verifica la indexación vectorial de documentos y la validación de fragmentos generados.
+        """
         service = self._service()
         doc = self.create_document(nombre="index-vector.pdf", numero_expediente="EXP-1", tipo_documento="tecnico")
         vector_doc = SimpleNamespace(id="qid-new", content="Texto", metadata={"segment_index": 0, "sha256": "sha-new"})
@@ -408,6 +503,9 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
             service._index_vector_document(empty_doc, MagicMock(return_value=[]))
 
     def test_index_vector_document_uses_markdown_when_available(self):
+        """
+        Comprueba que la indexación utiliza el contenido Markdown cuando está disponible en lugar del PDF original.
+        """
         service = self._service()
         doc = self.create_document(
             nombre="index-md.pdf",
@@ -430,6 +528,9 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         index_pdf.assert_not_called()
 
     def test_mark_vector_update_failed_rolls_back_and_stores_error(self):
+        """
+        Verifica la actualización del estado documental y el almacenamiento de errores cuando falla la indexación vectorial.
+        """
         service = self._service()
         doc = self.create_document(nombre="failed-vector.pdf")
 
@@ -439,6 +540,9 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         self.assertEqual(doc.error_message, "boom")
 
     def test_update_vector_db_indexes_fails_reports_progress_and_honors_cancellation(self):
+        """
+        Comprueba el proceso completo de actualización de la base de datos vectorial, incluyendo progreso, errores y cancelaciones.
+        """
         service = self._service()
         ok = self.create_document(nombre="ok-vector.pdf")
         failing = self.create_document(nombre="failing-vector.pdf", status=STATUS_WITH_MARKDOWN)
@@ -466,11 +570,14 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         self.assertEqual(failing.status, "fallido")
         self.assertEqual(ignored.status, "indexado")
 
-        cancel_doc = self.create_document(nombre="cancel-vector.pdf")
+        self.create_document(nombre="cancel-vector.pdf")
         with self.assertRaises(JobCancelledError):
             service.update_vector_db(should_cancel=lambda: True)
 
     def test_update_sql_creates_chunks_and_embedding_metadata(self):
+        """
+        Verifica la creación de fragmentos documentales y embeddings durante la actualización de la base de datos relacional.
+        """
         doc = self.create_document(nombre="vector.pdf")
         vector_doc = SimpleNamespace(
             id="qid-vector",
@@ -492,6 +599,9 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         self.assertEqual(Embedding.query.filter_by(chunk_id=chunk.id).count(), 1)
 
     def test_update_sql_skips_invalid_vectors_and_updates_existing_chunk_without_duplicate_embedding(self):
+        """
+        Comprueba la actualización de fragmentos existentes evitando duplicidades y descartando vectores inválidos.
+        """
         doc = self.create_document(nombre="vector-existing.pdf")
         chunk = self.create_chunk(document=doc, qdrant_point_id="old-qid", doc_sha256="sha-existing", segment_index=5)
         db.session.add(
@@ -523,6 +633,9 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
 
     @patch("app.main.code.controllers.main.routes.qdrant_get_payloads", return_value={"legacy-qid": {"metadata": {"filename": "legacy.pdf"}, "content": "texto"}})
     def test_build_meta_by_consulta_uses_fragmentos_and_legacy_qdrant(self, mock_qdrant):
+        """
+        Verifica la construcción de metadatos asociados a consultas utilizando tanto la información almacenada como datos recuperados desde Qdrant.
+        """
         from app.main.code.controllers.main.routes import build_meta_by_consulta
 
         user = self.create_user()

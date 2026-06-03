@@ -17,11 +17,14 @@ Configuration (via variables de entorno):
     ARES_QAS_PER_CHUNK: Número de pares Q&A a solicitar por chunk.
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import os
 import random
 import re
+import secrets
 from pathlib import Path
 
 from app.main.code.services.rag.PrototipoRAG import VectorBaseDocument, ask_ollama
@@ -116,9 +119,7 @@ def good_chunk(text: str) -> bool:
         return False
     if len(text) > 4000:
         return False
-    if text.count("Pagina") > 5 or text.count("Pág") > 5:
-        return False
-    return True
+    return not (text.count("Pagina") > 5 or text.count("Pág") > 5)
 
 
 def generate_qas_for_chunk(chunk: str, n: int = 2, model: str | None = None) -> list[dict]:
@@ -142,7 +143,7 @@ def generate_qas_for_chunk(chunk: str, n: int = 2, model: str | None = None) -> 
     raw = asyncio.run(ask_ollama(prompt, model=model))
     try:
         data = json.loads(raw)
-    except Exception:
+    except json.JSONDecodeError:
         return []
 
     if not isinstance(data, list):
@@ -172,9 +173,129 @@ def pass_quality(question: str, answer: str, evidence: str, chunk: str) -> bool:
         return False
     if len(question.split()) < 6:
         return False
-    if evidence not in chunk:
-        return False
-    return True
+    return evidence in chunk
+
+
+def _build_shuffle_rng() -> secrets.SystemRandom | random.Random:
+    """
+    Construye un generador de números aleatorios para mezclar los chunks.
+    
+    Returns:
+        secrets.SystemRandom: Si no se especifica una semilla, se utiliza un generador criptográficamente seguro.
+        random.Random: Si se especifica una semilla a través de ARES_SHUFFLE_SEED, se utiliza un generador determinista con esa semilla.
+    """
+    shuffle_seed_raw = os.getenv("ARES_SHUFFLE_SEED")
+    if shuffle_seed_raw is None or shuffle_seed_raw == "":
+        print(
+            "Shuffling chunks with a cryptographically secure RNG (ARES_SHUFFLE_SEED not set)"
+        )
+        return secrets.SystemRandom()
+
+    print(f"Shuffling chunks with a deterministic seed (ARES_SHUFFLE_SEED={shuffle_seed_raw})")
+    return random.Random(int(shuffle_seed_raw))
+
+
+def _load_good_chunks() -> list[str]:
+    """
+    Recupera y filtra los chunks de la base de datos para obtener solo aquellos adecuados para generar preguntas.
+
+    Returns:
+        list[str]: Lista de chunks filtrados.
+    """
+    docs = iter_chunks(limit_total=3000)
+    print(f"Retrieved {len(docs)} chunks from database")
+    chunks_local = [clean_chunk(d.content) for d in docs]
+    chunks_local = [c for c in chunks_local if good_chunk(c)]
+    print(f"After filtering, {len(chunks_local)} good chunks remain")
+    return chunks_local
+
+
+def _accumulate_questions_config() -> tuple[int, int, int]:
+    """
+    Lee la configuración para la acumulación de preguntas desde variables de entorno.
+
+    Returns:
+        tuple[int, int, int]: Devuelve los parámetros necesarios para controlar el proceso de generación de preguntas:
+            - target_questions: Número objetivo de preguntas a generar.
+            - max_chunks: Número máximo de chunks a procesar para generar preguntas.
+            - qas_per_chunk: Número de pares pregunta-respuesta a solicitar por cada chunk.
+
+    """
+    target_questions = int(os.getenv("ARES_NUM_QUESTIONS", "10"))
+    max_chunks = int(os.getenv("ARES_MAX_SOURCE_CHUNKS", "200"))
+    qas_per_chunk = int(os.getenv("ARES_QAS_PER_CHUNK", "2"))
+    return target_questions, max_chunks, qas_per_chunk
+
+
+def _try_add_question(
+    *,
+    questions: list[dict],
+    seen: set[str],
+    chunk: str,
+    item: dict,
+) -> None:
+    """
+    Intenta agregar una pregunta generada a la lista acumulada de preguntas, aplicando filtros de calidad y evitando duplicados.
+
+    Args:
+        questions (list[dict]): Lista acumulada de preguntas validadas a las que se intentará agregar la nueva pregunta si pasa los filtros.
+        seen (set[str]): Conjunto de preguntas ya vistas (para evitar duplicados).
+        chunk (str): El chunk de texto del que se generó la pregunta.
+        item (dict): El par pregunta-respuesta generado.
+    """
+    question = (item.get("question") or "").strip()
+    answer = (item.get("answer") or "").strip()
+    evidence = (item.get("evidence") or "").strip()
+
+    key = question.lower()
+    if key in seen:
+        return
+    if not pass_quality(question, answer, evidence, chunk):
+        return
+
+    seen.add(key)
+    questions.append(
+        {
+            "question": question,
+            "ground_truth": answer,
+            "evidence": evidence,
+        }
+    )
+
+
+def _accumulate_questions(chunks_local: list[str]) -> list[dict]:
+    """
+    Procesa los chunks de texto para generar y acumular preguntas, aplicando filtros de calidad y evitando duplicados.
+
+    Args:
+        chunks_local (list[str]): Lista de chunks de texto limpios y filtrados que se usarán como contexto para generar preguntas.
+
+    Returns:
+        list[dict]: Lista de preguntas generadas y validadas.
+    """
+    questions_local: list[dict] = []
+    seen_local: set[str] = set()
+    target_questions, max_chunks, qas_per_chunk = _accumulate_questions_config()
+    print(f"Target: generate {target_questions} questions")
+
+    for idx, chunk in enumerate(chunks_local[:max_chunks], start=1):
+        if idx % 10 == 0:
+            print(f"Processed {idx} chunks, generated {len(questions_local)} questions so far")
+
+        qas = generate_qas_for_chunk(chunk, n=qas_per_chunk)
+        print(f"Generated {len(qas)} Q&A pairs from chunk {idx}")
+
+        for item in qas:
+            _try_add_question(
+                questions=questions_local,
+                seen=seen_local,
+                chunk=chunk,
+                item=item,
+            )
+            if len(questions_local) >= target_questions:
+                return questions_local
+
+    return questions_local
 
 
 def main() -> None:
@@ -199,58 +320,10 @@ def main() -> None:
         return
 
     print("Starting question generation...")
-    random.seed(7)
-
-    docs = iter_chunks(limit_total=3000)
-    print(f"Retrieved {len(docs)} chunks from database")
-    chunks = [clean_chunk(d.content) for d in docs]
-    chunks = [c for c in chunks if good_chunk(c)]
-    print(f"After filtering, {len(chunks)} good chunks remain")
-    random.shuffle(chunks)
-
-    questions = []
-    seen = set()
-    target_questions = int(os.getenv("ARES_NUM_QUESTIONS", "10"))
-    max_chunks = int(os.getenv("ARES_MAX_SOURCE_CHUNKS", "200"))
-    qas_per_chunk = int(os.getenv("ARES_QAS_PER_CHUNK", "2"))
-    print(f"Target: generate {target_questions} questions")
-
-    processed_chunks = 0
-    for chunk in chunks[:max_chunks]:
-        processed_chunks += 1
-        if processed_chunks % 10 == 0:
-            print(
-                f"Processed {processed_chunks} chunks, generated {len(questions)} questions so far"
-            )
-
-        qas = generate_qas_for_chunk(chunk, n=qas_per_chunk)
-        print(f"Generated {len(qas)} Q&A pairs from chunk {processed_chunks}")
-
-        for item in qas:
-            question = (item.get("question") or "").strip()
-            answer = (item.get("answer") or "").strip()
-            evidence = (item.get("evidence") or "").strip()
-
-            key = question.lower()
-            if key in seen:
-                continue
-            if not pass_quality(question, answer, evidence, chunk):
-                continue
-
-            seen.add(key)
-            questions.append(
-                {
-                    "question": question,
-                    "ground_truth": answer,
-                    "evidence": evidence,
-                }
-            )
-
-            if len(questions) >= target_questions:
-                break
-
-        if len(questions) >= target_questions:
-            break
+    rng = _build_shuffle_rng()
+    chunks = _load_good_chunks()
+    rng.shuffle(chunks)
+    questions = _accumulate_questions(chunks)
 
     if not questions:
         raise SystemExit("No se pudieron generar preguntas automaticamente.")
