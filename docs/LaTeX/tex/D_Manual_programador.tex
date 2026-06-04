@@ -593,6 +593,8 @@ Para levantar el entorno \file{Docker} hay que ejecutar el siguiente comando:
 	}
 \end{tcolorbox}
 
+Durante el despliegue de la aplicación se exponen únicamente los servicios necesarios para la interacción con el exterior. \file{Nginx} publica la interfaz \eng{web} a través de los puertos \file{7000 (HTTP)} y \file{443 (HTTPS)}, actuando como punto de entrada al sistema. \file{PostgreSQL} expone el puerto \file{5432} para la gestión de la base de datos relacional, mientras que las instancias de \file{Ollama} utilizadas para la generación de respuestas y el procesamiento \file{OCR} se encuentran disponibles en los puertos \file{11435} y \file{11437}, respectivamente. El servicio \file{Qdrant} permanece accesible únicamente dentro de la red interna de \file{Docker} mediante el puerto \file{6333}, no siendo expuesto directamente al exterior.
+
 
 \section{Compilación, instalación y ejecución del proyecto}
 \label{prog:comp}
@@ -758,6 +760,9 @@ Una vez instalado \file{Docker} y \file{Git}, descargado el repositorio y genera
 		\texttt{\# por primera vez se debe ejecutar: }\\
 		\texttt{docker compose up --build}\\
 		\\
+		\texttt{\# Si se desea reconstruir las imagenes ejecutando los comandos en segundo plano:}\\
+		\texttt{docker compose up -d --build}\\
+		\\
 		\texttt{\# Si se desea reconstruir las imágenes sin reutilizar la caché}\\
 		\texttt{\# de Docker se puede usar:}\\
 		\texttt{docker compose build --no-cache}\\
@@ -770,6 +775,56 @@ Una vez instalado \file{Docker} y \file{Git}, descargado el repositorio y genera
 
 Estos comandos van a construir las imágenes \file{Docker}, descargando las dependencias necesarias, levantando \file{PostgreSQL}, \file{Qdrant}, \file{Ollama}, inicializando la aplicación \file{Flask} y configurando \file{Nginx} y \file{Gunicorn}.
 
+Si solo se desea levantar la aplicación sin reconstruir el código, es decir, si se desea desplegar utilizando las imágenes construidas previamente se usa el comando:
+\begin{tcolorbox}[
+	colback=black!3,
+	colframe=black!30,
+	boxrule=0.5pt,
+	arc=2mm,
+	title= Terminal,
+	fonttitle=\bfseries,
+	breakable 
+]
+	{\footnotesize
+		\noindent
+		\texttt{docker compose up}\\
+	}
+\end{tcolorbox}
+
+Una vez desplegada la aplicación en local se puede acceder a la \eng{web} a través del navegador \eng{web} escribiendo cualquiera de las siguientes direcciones:
+
+\begin{tcolorbox}[
+	colback=cyan!5,
+	colframe=cyan!50!black,
+	title=navegador web,
+	fonttitle=\bfseries,
+	breakable
+]
+	{\footnotesize
+		\noindent
+		\texttt{\href{http://127.0.0.1:7000}{http://127.0.0.1:7000}}\\
+		\texttt{\href{http://localhost:7000/}{http://localhost:7000}}\\
+		\texttt{	http://IP\_del\_dispositivo:7000}
+	}
+\end{tcolorbox}
+
+Al levantar la aplicación en local se ha creado un usuario por defecto con permisos de administración para poder acceder a sus funcionalidades completas, las credenciales de dicho usuario son: 
+
+\begin{tcolorbox}[
+	colback=yellow!8,
+	colframe=orange!60!black,
+	title=Credenciales por defecto,
+	fonttitle=\bfseries,
+	breakable
+]
+	{\footnotesize
+		\noindent
+		\texttt{email: admin@gmail.com}\\
+		\texttt{contraseña: contraseña}
+	}
+\end{tcolorbox}
 
 \section{Pruebas del sistema}
 \label{prog:prueb}
+
+
