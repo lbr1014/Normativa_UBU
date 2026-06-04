@@ -911,14 +911,281 @@ Además, de las pruebas automáticas del \eng{backend} se realizaron pruebas fun
 Para cada caso de prueba se verificó tanto la correcta navegación entre páginas como la aparición de los mensajes de confirmación y error correspondientes. La automatización mediante \file{Katalon Recorder} permite repetir las pruebas de forma sistemática tras la incorporación de nuevas funcionalidades o modificaciones en la interfaz. Los casos de prueba definidos fueron los siguientes:
 \begin{enumerate}
 \tightlist
-	\item CU-01 Registro: Registro de un nuevo usuario verificando la creación correcta de la cuenta.
-	\item CU-02 Inicio de sesión: Inicio de sesión con credenciales válidas y acceso a la página principal.
-	\item CU-03 Recuperación contraseña: Recuperación de contraseña mediante correo electrónico.
-	\item CU-04 Indexación documental: Carga de un documento y comprobación de su incorporación al sistema.
-	\item CU-05 Consulta: Realización de una consulta RAG y verificación de la generación de una respuesta.
-	\item CU-06 Historial: Consulta del historial y visualización de preguntas previamente realizadas.
-	\item CU-07 Administración: Acceso al panel de administración y comprobación de las funcionalidades de gestión disponibles para usuarios administradores.
+	\item \textbf{CP-01} Registro: registro de un nuevo usuario verificando la creación correcta de la cuenta~\ref{prueb-01}. 
+	\item \textbf{CP-02} Inicio de sesión: inicio de sesión con credenciales válidas y acceso a la página principal~\ref{prueb-02}.
+	\item \textbf{CP-03} Recuperación contraseña: recuperación de contraseña mediante correo electrónico~\ref{prueb-03}.
+	\item \textbf{CP-04} Indexación documental: carga de un documento y comprobación de su incorporación al sistema~\ref{prueb-04}.
+	\item \textbf{CP-05} Consulta: realización de una consulta RAG y verificación de la generación de una respuesta~\ref{prueb-05}.
+	\item \textbf{CP-06} Historial: consulta del historial y visualización de preguntas previamente realizadas~\ref{prueb-06}.
+	\item \textbf{CP-07} Navegación por la aplicación: acceso a las distintas páginas de la aplicación~\ref{prueb-07}.
 \end{enumerate}
+
+
+\begin{table}[p]
+	\centering
+	\begin{tabularx}{\linewidth}{ p{0.21\columnwidth} p{0.71\columnwidth} }
+		\toprule
+		\textbf{CP-01}    & \textbf{Registro de usuario}\\
+		\toprule
+		\textbf{Versión}              & 1.0    \\
+		\textbf{Autor}                & Lydia Blanco Ruiz \\
+		\textbf{Objetivo}			 & Verificar que un nuevo usuario puede registrarse correctamente en la aplicación.\\
+		\textbf{Caso de uso asociado} &  CU-01 Registro de usuarios~\ref{req-01}\\
+		\textbf{Prioridad}          & Alta. \\
+		\textbf{\mbox{Tipo de} \mbox{prueba}}         & Prueba funcional de interfaz. \\
+		\textbf{\mbox{Nivel de} \mbox{prueba}}        & Sistema\\
+		\textbf{Precondición}        & El usuario no debe estar registrado previamente. \\
+		\textbf{\mbox{Datos de} \mbox{entrada}} 		& 
+		\begin{itemize}
+		\tightlist
+			\item Nombre de usaurio válido, correo electrónico válido y contraseña válida.
+			\item Campos incompletos.
+			\item \eng{Email} erroneo.
+			\item Contraseñas no coinciden.
+		\end{itemize}				
+		\\
+		\textbf{\mbox{Pasos de} \mbox{ejecución}}		&
+		\begin{enumerate}
+		\tightlist
+			\item Acceder a la aplicación \eng{web} PythIA.
+			\item Acceder a la página de registro.
+			\item Introducir los datos solicitados.
+			\item Pulsar el botón <<Crear cuenta>>.
+			\item Verificar que la cuenta se crea correctamente.
+			\item Comprobar que se redirige a la página principal.
+		\end{enumerate} \\
+		\bottomrule
+	\end{tabularx}
+	\caption{\textbf{CP-01} Registro de usuario.}
+	\label{prueb-01}
+\end{table}
+
+
+\begin{table}[p]
+	\centering
+	\begin{tabularx}{\linewidth}{ p{0.21\columnwidth} p{0.71\columnwidth} }
+		\toprule
+		\textbf{CP-02}    & \textbf{Inicio de sesión}\\
+		\toprule
+		\textbf{Versión}              & 1.0    \\
+		\textbf{Autor}                & Lydia Blanco Ruiz \\
+		\textbf{Objetivo}			 & Verificar que un usuario registrado puede iniciar sesión y acceder a la página principal.\\
+		\textbf{Caso de uso asociado} &  CU-02 Iniciar sesión~\ref{req-02}\\
+		\textbf{Prioridad}          & Alta. \\
+		\textbf{\mbox{Tipo de} \mbox{prueba}}         & Prueba funcional de interfaz. \\
+		\textbf{\mbox{Nivel de} \mbox{prueba}}        & Sistema\\
+		\textbf{Precondición}        & Existencia de una cuenta de usuario válida. \\
+		\textbf{\mbox{Datos de} \mbox{entrada}} 		& 
+		\begin{itemize}
+		\tightlist
+			\item Correo electrónico válido y contraseña válida.
+			\item Campos incompletos.
+			\item \eng{Email} erroneo.
+			\item Contraseñas no coincide con la almacenada para el usuario.
+		\end{itemize}				
+		\\
+		\textbf{\mbox{Pasos de} \mbox{ejecución}}		&
+		\begin{enumerate}
+		\tightlist
+			\item Acceder a la aplicación \eng{web} PythIA.
+			\item Acceder a la página de inicio de sesión.
+			\item Introducir los datos solicitados.
+			\item Pulsar el botón <<Iniciar sesión>>.
+			\item Verificar la autenticación.
+			\item Comprobar que se redirige a la página principal.
+		\end{enumerate} \\
+		\bottomrule
+	\end{tabularx}
+	\caption{\textbf{CP-02} Inicio de sesión.}
+	\label{prueb-02}
+\end{table}
+
+
+\begin{table}[p]
+	\centering
+	\begin{tabularx}{\linewidth}{ p{0.21\columnwidth} p{0.71\columnwidth} }
+		\toprule
+		\textbf{CP-03}    & \textbf{Recuperación de contraseña}\\
+		\toprule
+		\textbf{Versión}              & 1.0    \\
+		\textbf{Autor}                & Lydia Blanco Ruiz \\
+		\textbf{Objetivo}			 & Verificar que un usuario puede solicitar el restablecimiento de su contraseña mediante correo electrónico.\\
+		\textbf{Caso de uso asociado} &  CU-04 Recuperar contraseña~\ref{req-04}\\
+		\textbf{Prioridad}          & Media. \\
+		\textbf{\mbox{Tipo de} \mbox{prueba}}         & Prueba funcional de interfaz. \\
+		\textbf{\mbox{Nivel de} \mbox{prueba}}        & Sistema\\
+		\textbf{Precondición}        & Existencia de una cuenta registrada con correo electrónico válido. \\
+		\textbf{\mbox{Datos de} \mbox{entrada}} 		& 
+		\begin{itemize}
+		\tightlist
+			\item Dirección de correo registrada
+			\item Dirección de correo sin registrar.
+		\end{itemize}				
+		\\
+		\textbf{\mbox{Pasos de} \mbox{ejecución}}		&
+		\begin{enumerate}
+		\tightlist
+			\item Acceder a la aplicación \eng{web} PythIA.
+			\item Acceder a la página de inicio de sesión.
+			\item Pulsar en <<¿Olvidaste tu contraseña?>>
+			\item Introducir el correo electrónico.
+			\item Pulsar el botón <<Recuperar contraseña>>.
+			\item Verificar que se muestra el mensaje del sistema.
+		\end{enumerate} \\
+		\bottomrule
+	\end{tabularx}
+	\caption{\textbf{CP-03} Recuperación de contraseña.}
+	\label{prueb-03}
+\end{table}
+
+
+\begin{table}[p]
+	\centering
+	\begin{tabularx}{\linewidth}{ p{0.21\columnwidth} p{0.71\columnwidth} }
+		\toprule
+		\textbf{CP-04}    & \textbf{Indexación documental}\\
+		\toprule
+		\textbf{Versión}              & 1.0    \\
+		\textbf{Autor}                & Lydia Blanco Ruiz \\
+		\textbf{Objetivo}			 & Verificar que un documento puede cargarse e incorporarse correctamente al sistema \eng{RAG}.\\
+		\textbf{Caso de uso asociado} &  CU-08 Gestión de documentos~\ref{req-08}, CU-12 Indexar documentos~\ref{req-12}\\
+		\textbf{Prioridad}          & Alta. \\
+		\textbf{\mbox{Tipo de} \mbox{prueba}}         & Prueba funcional. \\
+		\textbf{\mbox{Nivel de} \mbox{prueba}}        & Sistema\\
+		\textbf{Precondición}        & Usuario autenticado con permisos para gestionar documentos. \\
+		\textbf{\mbox{Datos de} \mbox{entrada}} 		& 
+		\begin{itemize}
+		\tightlist
+			\item Documento \file{PDF} válido.
+			\item Documento con formato inválido.
+		\end{itemize}				
+		\\
+		\textbf{\mbox{Pasos de} \mbox{ejecución}}		&
+		\begin{enumerate}
+		\tightlist
+			\item Acceder a la aplicación \eng{web} PythIA.
+			\item Iniciar sesión en la aplicación.
+			\item Acceder a la gestión documental.
+			\item Subir un documento.
+			\item Iniciar el proceso de indexación.
+			\item Consultar el estado del documento.
+		\end{enumerate} \\
+		\bottomrule
+	\end{tabularx}
+	\caption{\textbf{CP-04} Indexación documental.}
+	\label{prueb-04}
+\end{table}
+
+
+\begin{table}[p]
+	\centering
+	\begin{tabularx}{\linewidth}{ p{0.21\columnwidth} p{0.71\columnwidth} }
+		\toprule
+		\textbf{CP-05}    & \textbf{Consulta \eng{RAG}}\\
+		\toprule
+		\textbf{Versión}              & 1.0    \\
+		\textbf{Autor}                & Lydia Blanco Ruiz \\
+		\textbf{Objetivo}			 & Verificar que el sistema recupera información relevante y genera una respuesta contextualizada.\\
+		\textbf{Caso de uso asociado} &  CU-05 Realizar consulta al \eng{RAG}~\ref{req-05}\\
+		\textbf{Prioridad}          & Alta. \\
+		\textbf{\mbox{Tipo de} \mbox{prueba}}         & Prueba funcional. \\
+		\textbf{\mbox{Nivel de} \mbox{prueba}}        & Sistema\\
+		\textbf{Precondición}        & Existencia de documentos previamente indexados. \\
+		\textbf{\mbox{Datos de} \mbox{entrada}} 		& 
+		\begin{itemize}
+		\tightlist
+			\item Pregunta relacionada con los documentos previamente indexados
+			\item Pregunta sin relación con los documentos.
+		\end{itemize}				
+		\\
+		\textbf{\mbox{Pasos de} \mbox{ejecución}}		&
+		\begin{enumerate}
+		\tightlist
+			\item Acceder a la aplicación \eng{web} PythIA.
+			\item Iniciar sesión en la aplicación.
+			\item Acceder a la página de las consultas.
+			\item Ejecutar una consulta.
+			\item Verificar la obtención de una respuesta.
+		\end{enumerate} \\
+		\bottomrule
+	\end{tabularx}
+	\caption{\textbf{CP-05} Consulta \eng{RAG}.}
+	\label{prueb-05}
+\end{table}
+
+
+\begin{table}[p]
+	\centering
+	\begin{tabularx}{\linewidth}{ p{0.21\columnwidth} p{0.71\columnwidth} }
+		\toprule
+		\textbf{CP-06}    & \textbf{Consulta de historial}\\
+		\toprule
+		\textbf{Versión}              & 1.0    \\
+		\textbf{Autor}                & Lydia Blanco Ruiz \\
+		\textbf{Objetivo}			 & Verificar que las consultas realizadas se almacenan y pueden visualizarse posteriormente.\\
+		\textbf{Caso de uso asociado} &  CU-06 Consultar historial de consulta~\ref{req-06}\\
+		\textbf{Prioridad}          & Media. \\
+		\textbf{\mbox{Tipo de} \mbox{prueba}}         & Prueba funcional. \\
+		\textbf{\mbox{Nivel de} \mbox{prueba}}        & Sistema\\
+		\textbf{Precondición}        & Existencia de consultas previas realizadas por un usuario. \\
+		\textbf{\mbox{Datos de} \mbox{entrada}} 		& 
+		\begin{itemize}
+		\tightlist
+			\item Ninguno
+		\end{itemize}				
+		\\
+		\textbf{\mbox{Pasos de} \mbox{ejecución}}		&
+		\begin{enumerate}
+		\tightlist
+			\item Acceder a la aplicación \eng{web} PythIA.
+			\item Iniciar sesión en la aplicación.
+			\item Acceder al historial de consultas.
+			\item Seleccionar una consulta anterior.
+		\end{enumerate} \\
+		\bottomrule
+	\end{tabularx}
+	\caption{\textbf{CP-06} Consulta de historial.}
+	\label{prueb-06}
+\end{table}
+
+
+\begin{table}[p]
+	\centering
+	\begin{tabularx}{\linewidth}{ p{0.21\columnwidth} p{0.71\columnwidth} }
+		\toprule
+		\textbf{CP-07}    & \textbf{Navegación por la aplicación}\\
+		\toprule
+		\textbf{Versión}              & 1.0    \\
+		\textbf{Autor}                & Lydia Blanco Ruiz \\
+		\textbf{Objetivo}			 & Verificar que el usuario puede desplazarse correctamente entre las principales páginas y funcionalidades de la aplicación mediante los elementos de navegación disponibles.\\
+		\textbf{Caso de uso asociado} &  CU-05 Realizar consulta al RAG~\ref{req-05}, CU-06 Consultar historial de consultas~\ref{req-06}, CU-08 Gestión de documentos~\ref{req-08}, CU-23 Cambiar idioma~\ref{req-23}, CU-24 Cambiar tema visual~\ref{req-24}\\
+		\textbf{Prioridad}          & Alta. \\
+		\textbf{\mbox{Tipo de} \mbox{prueba}}         & Prueba de navegación. \\
+		\textbf{\mbox{Nivel de} \mbox{prueba}}        & Sistema\\
+		\textbf{Precondición}        & Usuario autenticado en la aplicación. \\
+		\textbf{\mbox{Datos de} \mbox{entrada}} 		& 
+		\begin{itemize}
+		\tightlist
+			\item Ninguno.
+		\end{itemize}				
+		\\
+		\textbf{\mbox{Pasos de} \mbox{ejecución}}		&
+		\begin{enumerate}
+		\tightlist
+			\item Acceder a la aplicación \eng{web} PythIA.
+			\item Iniciar sesión en la aplicación.
+			\item Desplegar el menú lateral.
+			\item Acceder a las distintas páginas disponibles desde el menú.
+			\item Cambiar el idioma de la interfaz.
+			\item Cambiar el tema visual.
+			\item Volver a la página principal pulsando sobre el logo de la cabecera.
+			\item Acceder a la página de consulta.
+		\end{enumerate} \\
+		\bottomrule
+	\end{tabularx}
+	\caption{\textbf{CP-07} Navegación por la aplicación.}
+	\label{prueb-07}
+\end{table}
 
 \subsection{Ejecución automática de las pruebas}
 
@@ -952,3 +1219,7 @@ La ejecución completa de la batería de pruebas puede realizarse mediante el si
 		\texttt{docker compose --profile test up test}
 	}
 \end{tcolorbox}
+
+En la imagen~\ref{img:Anexos/informe_coverage_terminal} se puede observar el resultado de ejecutar el comando \file{docker compose --profile test up test}.
+
+\imagendiagram{Anexos/informe_coverage_terminal}{Informe de \eng{coverage} de la aplicación mostrado en la terminal tras ejecución de los \eng{test}.}{1.2}
