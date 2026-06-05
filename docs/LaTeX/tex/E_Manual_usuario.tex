@@ -2,10 +2,89 @@
 
 \section{Introducción}
 
+En este manual se incluye una guía destinada a que el usuario final conozca el funcionamiento de la \eng{web} PythIA. Concretamente se van a describir los requisitos que debe cumplir el usuario para utilizar la aplicación (ver sección~\ref{usu:req}) así como el método de instalación de la aplicación para el usuario final (ver sección~\ref{usu:inst}). Finalmente, se incluye un manual explicando todas las funcionalidades de la aplicación (ver sección~\ref{usu:manual}).
+
 \section{Requisitos de usuarios}
+\label{usu:req}
+
+Para utilizar la aplicación PythIA, el usuario únicamente necesita disponer de acceso a Internet y de un navegador \eng{web} moderno compatible con los estándares actuales~\cite{usuario:webStandards}. Se recomienda utilizar un navegador con visor \file{PDF} integrado para visualizar o descargar los documentos \file{PDF} de las licitaciones, 
+
+La aplicación ha sido probada satisfactoriamente en los navegadores \file{Google Chrome}, \file{Mozilla Firefox} y \file{Microsoft Edge}. Concretamente se han probado en las siguientes versiones de los navegadores:
+\begin{itemize}
+\tightlist
+	\item \file{Google Chrome} 137.0 a  148.0.
+	\item \file{Mozilla Firefox} 139.0 a 150.0.
+	\item \file{Microsoft Edge} 137.0 a 148.0.
+\end{itemize}
+
+Para acceder a las funcionalidades del sistema es necesario tener una cuenta de usuario registrada y autenticarse mediante correo electrónico y contraseña.
+
+Respecto al \eng{hardware} no existen requisitos específicos, puesto que PythIA ha sido desarrollada siguiendo un diseño \eng{responsive}. Esto permite su utilización desde diferentes tipos de dispositivos, incluyendo ordenadores de sobremesa, ordenadores portátiles, tabletas y teléfonos móviles, adaptando automáticamente la interfaz al tamaño de pantalla disponible. 
 
 \section{Instalación}
+\label{usu:inst}
+
+No es necesario instalar ningún \eng{software} adicional, ya que la aplicación se ejecuta a través del navegador \eng{web}. Solo se tiene que acceder a la dirección \url{https://pythia.es/} e iniciar sesión con sus credenciales. En caso de no disponer de una cuenta, deberá registrarse.
+
+Las actualizaciones de la aplicación se realizan de forma centralizada en el servidor, por lo que los usuarios siempre acceden a la versión más reciente sin necesidad de efectuar ninguna acción adicional en sus dispositivos.
 
 \section{Manual del usuario}
+\label{usu:manual}
 
+En este manual se describen las funcionalidades que pueden llevarse a cabo en la aplicación. Se va a explicar tanto los elementos generales del sistema como cada una de las páginas de la aplicación describiendo sus componentes y funcionalidades. Además se va a explicar la navegabilidad.
 
+\subsection{Página de inicio}
+\label{manual:inicio}
+
+Es la primera página que se ve al acceder a la página \eng{web} de \href{https://pythia.es/}{PythIA} (ver imagen~\ref{fig:Manual_usuario/Pagina_inicio})
+
+\imagendiagram{Manual_usuario/Pagina_inicio}{Página de inicio de la aplicación \eng{web} PythIA.}{1.2}
+
+Desde ella se puede acceder a la página de <<Inicio de sesión>> (ver sección~\ref{manual:inicioSesion}) y a la página de <<Registro>> (ver sección~\ref{manual:registro})
+
+\subsection{Inicio de sesión}
+\label{manual:inicioSesion}
+
+Si el usuario ya tiene cuenta en la aplicación debe acceder a está página para introducir su correo electrónico y su contraseña y acceder a las funcionalidades de la aplicación. 
+
+Desde esta página se puede acceder a la <<Página principal>> (ver sección~\ref{manual:pagPrincipal}), <<Registro>> (ver sección~\ref{manual:registro}), <<Recuperar contraseña>> (ver sección~\ref{manual:recuperar}) y <<Página de inicio>> (ver sección~\ref{manual:inicioSesion}).
+
+Además permite ver un tutorial interactivo que muestra las funcionalidades de la página.
+
+\subsection{Recuperar contraseña}
+\label{manual:recuperar}
+
+\subsection{Registro}
+\label{manual:registro}
+
+\subsection{Página principal}
+\label{manual:pagPrincipal}
+
+\subsection{Página de consultas}
+\label{manual:pagConsulta}
+
+\subsection{Comparar modelos}
+\label{manual:compararModelos}
+
+\subsection{Evaluar modelos}
+\label{manual:evaluar}
+
+\subsection{Historial de consultas}
+\label{manual:historial}
+
+\subsection{Perfil de usuario}
+\label{manual:perfil}
+
+\subsection{Estadísticas}
+\label{manual:estad}
+
+\subsection{Administrar documentos}
+\label{manual:documentos}
+
+Solo administradores
+
+\subsection{Administrar usuarios}
+
+Solo administradores
+
+\subsection{Navegabilidad}
