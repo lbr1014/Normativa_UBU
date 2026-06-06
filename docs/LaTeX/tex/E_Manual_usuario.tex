@@ -482,7 +482,7 @@ También, se pueden descargar los resultados completos de la evaluación en form
 
 Además, la sección <<Detalle por pregunta>> ofrece un análisis individual para cada una de las preguntas utilizadas durante la evaluación (ver figura~\ref{fig:Manual_usuario/Detalles_evalaucion2}). Mediante un sistema desplegable, el usuario puede consultar la pregunta evaluada, la respuesta generada por el sistema, la respuesta de referencia (\eng{ground truth}), la evidencia utilizada para la evaluación, los fragmentos recuperados como contexto y las métricas obtenidas específicamente para dicha consulta (ver figura~\ref{fig:detalles_evaluacion_pregunta}).
 
-\imagendiagram{Manual_usuario/Detalles_evalaucion2}{Sección <<Detalle por pregunta>> de la pantalla de Evaluación del \eng{RAG} .}{1}
+\imagendiagram{Manual_usuario/Detalles_evalaucion2}{Sección <<Detalle por pregunta>> de la pantalla de Evaluación del \eng{RAG}.}{1}
 
 \begin{figure}
 \centering
@@ -510,6 +510,88 @@ Además, la sección <<Detalle por pregunta>> ofrece un análisis individual par
 
 \subsection{Historial de consultas}
 \label{manual:historial}
+
+El historial permite al usuario consultar las interacciones realizadas previamente con el sistema \eng{RAG}. Cuando no existen consultas registradas se mustra un mensaje informativo indicándolo (ver figura~\ref{fig:historial}). Los usuarios con permisos de administración pueden ver las consultas de todos los usuarios del sistema, mientras que los usuarios estándar solo pueden ver sus consultas.
+
+\begin{figure}
+\centering
+\begin{minipage}[c]{0.33\textwidth}
+	\begin{subfigure}[t]{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{Manual_usuario/responsive/Historial}
+        \caption{Pantalla del historial desde le móvil.}
+    \end{subfigure}
+\end{minipage}
+\centering
+\hfill
+\begin{minipage}[c]{0.63\textwidth}
+    \centering
+    \begin{subfigure}[t]{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{Manual_usuario/Historial}
+        \caption{Pantalla del historial para un usuario estándar con consultas desde el ordenador.}
+    \end{subfigure}
+    \begin{subfigure}[t]{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{Manual_usuario/Historial_vacio}
+        \caption{Pantalla del historial para un usuario estándar sin consultas desde el ordenador.}
+    \end{subfigure}
+\end{minipage}
+\caption{Pantallas del historial de la aplicación \eng{web} PythIA para un usuario estándar en diferentes dispositivos.}
+\label{fig:historial}
+\end{figure}
+
+
+Por cada consulta realizada se muestra una tarjeta, donde se incluye la pregunta realizada junto con la información relevante de la ejecución, como la fecha y hora de realización, el tiempo de respuesta obtenido, el \eng{LLM} utilizado y si la consulta se ejecutó mediante \file{GPU} o \file{CPU}. Además, por cada consulta se puede ver la respuesta generada por el sistema y los detalles de los \eng{chunk} recuperados (ver figura~\ref{fig:tarjeta}).
+\begin{figure}
+\centering
+\begin{minipage}[c]{0.8\textwidth}
+    \centering
+    \begin{subfigure}[t]{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{Manual_usuario/Historial_tarjeta}
+        \caption{Tarjeta para mostrar una consulta.}
+    \end{subfigure}
+    \begin{subfigure}[t]{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{Manual_usuario/Historial_respuesta}
+        \caption{Modal con la respuesta que dio el modelo para la consulta.}
+    \end{subfigure}
+        \begin{subfigure}[t]{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{Manual_usuario/Historial_detalles}
+        \caption{Modal con los detalles de los fragmentos usados para generar la respuesta.}
+    \end{subfigure}
+\end{minipage}
+\caption{Tarjeta para mostrar una consulta en el historial y sus diferentes vistas.}
+\label{fig:tarjeta}
+\end{figure}
+
+La interfaz incorpora un sistema de filtrado que facilita la localización de consultas concretas dentro del historial. Se permiten distintos criterios de filtrado, como la fecha de ejecución, el \eng{LLM} utilizado para generar la respuesta o el tipo de procesamiento (\file{CPU/GPU}). Los administradores además pueden filtrar por usuario (ver figura~\ref{fig:filtro_historial}).
+
+\begin{figure}
+\centering
+\begin{minipage}[c]{0.8\textwidth}
+    \centering
+    \begin{subfigure}[t]{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{Manual_usuario/Historial_filtro}
+        \caption{Filtro del historial para un usuario estándar.}
+    \end{subfigure}
+    \begin{subfigure}[t]{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{Manual_usuario/administrador/Historial_filtro}
+        \caption{Filtro del historial para un administrador.}
+    \end{subfigure}
+\end{minipage}
+\caption{Diferencias entre el filtro del historial de un administrador y un usuario estándar.}
+\label{fig:filtro_historial}
+\end{figure}
+
+Se pueden eliminar una o varias consultas del historial. Para ello se dispone de un modo de selección múltiple que permite marcar una o varias consultas y eliminarlas de forma conjunta. Antes de completar la operación, el sistema solicita una confirmación explícita mediante una ventana emergente para evitar borrados accidentales (ver figura~\ref{fig:Manual_usuario/Historial_borrar}).
+
+\imagendiagram{Manual_usuario/Historial_borrar}{Modal para borrar una consulta del historial de la aplicación \eng{web} PythIA.}{1}
+
 
 \subsection{Perfil de usuario}
 \label{manual:perfil}
