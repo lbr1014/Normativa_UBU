@@ -10,12 +10,15 @@
 \usepackage{array}
 \usepackage{longtable}
 \usepackage{titlesec}
+\usepackage{subcaption}
+\usepackage{enumitem}
 
 %Cabeceras
 \copypagestyle{capitulo-en-cab}{headings}
 \makeoddhead{capitulo-en-cab}{\itshape\leftmark}{}{\thepage}
 \makeevenhead{capitulo-en-cab}{\thepage}{}{\itshape\leftmark} 
 \pagestyle{capitulo-en-cab}
+
 
 
 % Castellano
@@ -31,12 +34,17 @@
 \RequirePackage[table]{xcolor}
 \RequirePackage{xtab}
 \RequirePackage{multirow}
+\usepackage{subcaption}
 
 % Links
 \PassOptionsToPackage{hyphens}{url}\usepackage[colorlinks]{hyperref}
 \hypersetup{
 	allcolors = {red}
 }
+
+% Listas
+\setlist{itemsep=0pt,parsep=0pt,topsep=3pt}
+\raggedbottom
 
 % Hipervínculos 
 \newcommand{\req}[1]{
