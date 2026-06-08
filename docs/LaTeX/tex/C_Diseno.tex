@@ -14,7 +14,7 @@ Este diseño busca facilitar tanto el desarrollo y mantenimiento de la aplicaci�
 
 \section{Diseño de datos} \label{dis:dtos}
 
-Para llevar a cabo la aplicación se han definido las siguientes entidades principales (ver figura~\ref{fig:Diagramas/Entidades}):
+Para llevar a cabo la aplicación se han definido las siguientes entidades principales (ver figura~\ref{fig:Diagramas/Entidades})\footnote{Esta figura se ha generado utilizando la aplicación DBeaver (\href{https://dbeaver.io/}{https://dbeaver.io/})}
 \begin{itemize}
 	\item \textbf{Usuario}: esta entidad representa a cada persona registrada en la aplicación. Distingue entre usuario normal y administrador, al cual se le permite realizar la gestión de documentos y usuarios. Esta entidad maneja un identificador (id) que es la clave primaria, un nombre, un \eng{email} que debe ser único, una contraseña que se almacena cifrada, el último inicio de sesión, el rol, el número de inicios de sesión realizados, el país, el idioma preferido, el modelo de lenguaje seleccionado por defecto y el modo visual de la interfaz.
 	\item \textbf{Consulta}: esta entidad guarda las preguntas que realizan los usuarios, así como las respuestas que da el \eng{LLM} alimentado por el \textit{RAG}. Es la base para el historial de consultas. Cada consulta registra la pregunta formulada, la respuesta obtenida, los fragmentos documentales utilizados como contexto, el tiempo de respuesta, el dispositivo empleado para la ejecución y la fecha de realización de la consulta.
@@ -24,9 +24,9 @@ Para llevar a cabo la aplicación se han definido las siguientes entidades princ
 	\item \textbf{ConsultaChunk}: esta entidad modela la relación entre las consultas y los \textit{chunks} recuperados durante la búsqueda semántica. Permite registrar qué fragmentos fueron utilizados para generar cada respuesta. Además de los identificadores de la consulta y del fragmento, almacena la puntuación de similitud obtenida durante la recuperación y la posición ocupada por cada fragmento dentro del \eng{ranking} de relevancia.
 \end{itemize}
 
-\imagendiagram{Diagramas/Entidades}{Diagrama Entidad/Relación de las entidades principales generado por \myhref{https://dbeaver.io/}{DBeaver}.}{1.1}
+\imagendiagram{Diagramas/Entidades}{Diagrama Entidad/Relación de las entidades principales generado por DBeaver.}{1.1}
 
-Además de las entidades principales del sistema, se han definido varias entidades destinadas a gestionar y monitorizar la ejecución de tareas realizadas de forma asíncrona (ver figura~\ref{fig:Diagramas/Entidades_asincronas}). La mayoría de ellas heredan de la clase abstracta \textbf{State}, mientras que la entidad \textbf{RAGQueryState} implementa una estructura equivalente mediante la clase auxiliar \textbf{JobStateMixin}. En ambos casos se reutiliza un conjunto común de atributos y métodos destinados a registrar el estado de ejecución de una tarea:
+Además de las entidades principales del sistema, se han definido varias entidades destinadas a gestionar y monitorizar la ejecución de tareas realizadas de forma asíncrona (ver figura~\ref{fig:Diagramas/Entidades_asincronas})\footnote{Esta figura se ha generado utilizando la aplicación DBeaver (\href{https://dbeaver.io/}{https://dbeaver.io/})}. La mayoría de ellas heredan de la clase abstracta \textbf{State}, mientras que la entidad \textbf{RAGQueryState} implementa una estructura equivalente mediante la clase auxiliar \textbf{JobStateMixin}. En ambos casos se reutiliza un conjunto común de atributos y métodos destinados a registrar el estado de ejecución de una tarea:
 
 \begin{itemize}
 	\item \textbf{RAGQueryState}: esta entidad permite gestionar las consultas en ejecución de forma asíncrona. Almacena la pregunta enviada, el modelo seleccionado,  el estado de ejecución, los resultados obtenidos y los errores producidos (si los hubiese). 
@@ -36,7 +36,7 @@ Además de las entidades principales del sistema, se han definido varias entidad
 	\item \textbf{RAGEvaluationState}: esta entidad almacena la información asociada a las evaluaciones automáticas del sistema \eng{RAG}. Registra el progreso de la evaluación, los resultados obtenidos y las rutas de los distintos archivos generados durante el proceso, incluyendo configuraciones, conjuntos de datos y métricas calculadas.
 \end{itemize}
 
-\imagendiagram{Diagramas/Entidades_asincronas}{Diagrama Entidad/Relación de las entidades asíncronas generado por \myhref{https://dbeaver.io/}{DBeaver}.}{1.1}
+\imagendiagram{Diagramas/Entidades_asincronas}{Diagrama Entidad/Relación de las entidades asíncronas generado por DBeaver.}{1.1}
 
 
 Las relaciones entre las entidades del sistema son (ver figura~\ref{fig:entidad_relacion}):
