@@ -14,35 +14,64 @@ Este diseño busca facilitar tanto el desarrollo y mantenimiento de la aplicaci�
 
 \section{Diseño de datos} \label{dis:dtos}
 
-Para llevar a cabo la aplicación se han definido las siguientes entidades:
+Para llevar a cabo la aplicación se han definido las siguientes entidades principales (ver figura~\ref{fig:Diagramas/Entidades}):
 \begin{itemize}
-\tightlist
-	\item Usuario: esta entidad representa a la persona que usa la aplicación. Distingue entre usuario normal y administrador, al cual se le permite realizar la gestión de documentos y usuarios. Esta entidad maneja un identificador (id) que es la clave primaria, un nombre, un email que debe ser único, una contraseña que se almacena encriptada, el último inicio de sesión y el rol.
-	\item Consulta: esta entidad guarda las preguntas que realizan los usuarios, así como las respuestas que da el \eng{LLM} alimentado por el \textit{RAG}. Es la base para el historial de consultas donde se van a listar y borrar. Esta entidad maneja un identificador (id) que es la clave primaria, el identificador del usuario que realiza la consulta, la pregunta del usuario, la respuesta, los fragmentos utilizados, el tiempo de respuesta, y la fecha en la que se preguntó al modelo.
-	\item Documento: esta entidad representa un PDF cargado en la aplicación. Maneja un identificador (id) como clave primaria, el nombre del fichero, el tamaño, la fecha de modificación, el número de \eng{chunks} en la base de datos vectorial, el \textit{hash} del documento y el estado del documento (cargado, procesado, indexado, fallido). 
-	\item \eng{Chunk}: esta entidad representa cada trozo de texto en el que se dividen los documentos para poder generar los \textit{embeddings}. Maneja el texto que forma al propio \textit{chunk}, el \textit{embedding} y los metadatos del \textit{chunk} (nombre del archivo, título y posición dentro del documento).
-	\item \eng{Embedding}: esta entidad se corresponde con la representación vectorial utilizada para la base de datos vectorial. Va a permitir recuperar \textit{chunks} por similitud. La entidad maneja un vector asociado al \textit{chunk}.
-	\item \eng{ConsultaChunk}: esta entidad modela la relación entre las consultas y los \textit{chunks} permitiendo que una consulta tenga varios \textit{chunk} y que un \textit{chunk} pueda servir para varias consultas. La entidad maneja el identificador de la consulta, el identificador del \textit{chunk}, la similitud con la consulta del usuario y el \textit{ranking}. El \eng{ranking} hace referencia a la relevancia que tiene un \eng{chunk} entre los recuperados para aumentar el \eng{prompt} del \eng{LLM}. La posición del \eng{chunk} en el \eng{ranking} se determina ordenándolos descendentemente según su similitud.
+	\item \textbf{Usuario}: esta entidad representa a cada persona registrada en la aplicación. Distingue entre usuario normal y administrador, al cual se le permite realizar la gestión de documentos y usuarios. Esta entidad maneja un identificador (id) que es la clave primaria, un nombre, un \eng{email} que debe ser único, una contraseña que se almacena cifrada, el último inicio de sesión, el rol, el número de inicios de sesión realizados, el país, el idioma preferido, el modelo de lenguaje seleccionado por defecto y el modo visual de la interfaz.
+	\item \textbf{Consulta}: esta entidad guarda las preguntas que realizan los usuarios, así como las respuestas que da el \eng{LLM} alimentado por el \textit{RAG}. Es la base para el historial de consultas. Cada consulta registra la pregunta formulada, la respuesta obtenida, los fragmentos documentales utilizados como contexto, el tiempo de respuesta, el dispositivo empleado para la ejecución y la fecha de realización de la consulta.
+	\item \textbf{Documento}: esta entidad representa un PDF cargado en la aplicación. Su función es mantener la trazabilidad completa del ciclo de vida documental, desde su carga inicial hasta su conversión e indexación. Además de almacenar el nombre del fichero, la ruta y el tamaño, registra el \eng{hash}, el estado de procesamiento, el contenido Markdown generado y diversos metadatos asociados como el número de expediente o el tipo documental. En caso de que sucedan, también almacena los errores ocurridos durante el procesamiento. 
+	\item \textbf{Chunk}: esta entidad representa cada trozo de texto en el que se dividen los documentos para poder generar los \textit{embeddings}. Cada fragmento almacena información sobre el documento al que pertenece, su posición dentro del mismo, el identificador asociado en la base de datos vectorial, el \eng{hash} de la versión del documento, el número de expediente, el tipo documental y otros metadatos necesarios para la recuperación semántica de información.
+	\item \textbf{Embedding}: esta entidad almacena los metadatos asociados a la respresentación vectorial de un fragmento (\eng{chunks}). A diferencia del vector numérico propiamente dicho, que se almacena en Qdrant, esta entidad conserva información de trazabilidad necesaria para gestionar el proceso de indexación. Concretamente almacena el modelo utilizado para generar el \eng{embedding}, la dimensionalidad del vector, la métrica de similitud empleada y la fecha de creación.
+	\item \textbf{ConsultaChunk}: esta entidad modela la relación entre las consultas y los \textit{chunks} recuperados durante la búsqueda semántica. Permite registrar qué fragmentos fueron utilizados para generar cada respuesta. Además de los identificadores de la consulta y del fragmento, almacena la puntuación de similitud obtenida durante la recuperación y la posición ocupada por cada fragmento dentro del \eng{ranking} de relevancia.
 \end{itemize}
 
-Las relaciones entre las entidades son:
+\imagendiagram{Diagramas/Entidades}{Diagrama Entidad/Relación de las entidades principales generado por \myhref{https://dbeaver.io/}{DBeaver}.}{1.1}
+
+Además de las entidades principales del sistema, se han definido varias entidades destinadas a gestionar y monitorizar la ejecución de tareas realizadas de forma asíncrona (ver figura~\ref{fig:Diagramas/Entidades_asincronas}). La mayoría de ellas heredan de la clase abstracta \textbf{State}, mientras que la entidad \textbf{RAGQueryState} implementa una estructura equivalente mediante la clase auxiliar \textbf{JobStateMixin}. En ambos casos se reutiliza un conjunto común de atributos y métodos destinados a registrar el estado de ejecución de una tarea:
+
 \begin{itemize}
-\tightlist
-	\item Un usuario puede hacer cero o varias consultas.
-	\item Cada consulta pertenece a un usuario.
-	\item Un documento tiene cero (si está cargado pero no indexado) o varios \eng{chunks}.
-	\item Cada \eng{chunk} pertenece a un documento.
-	\item Un \eng{chunk} tiene un \textit{embedding}.
-	\item Cada \eng{embedding} pertenece a un \textit{chunk}.
-	\item Una consulta usa uno o varios \eng{chunk}.
-	\item Un \eng{chunk} puede ser usado por cero o varias consultas.
+	\item \textbf{RAGQueryState}: esta entidad permite gestionar las consultas en ejecución de forma asíncrona. Almacena la pregunta enviada, el modelo seleccionado,  el estado de ejecución, los resultados obtenidos y los errores producidos (si los hubiese). 
+	\item \textbf{MarkdownConversionState}: esta entidad registra el estado de los procesos de conversión de documentos PDF a Markdown. Permite conocer el proceso de la tarea, los mensajes informativos generados y los posibles errores.
+	\item \textbf{VectorUpdateState}: esta entidad controla los procesos de actualización de la base de datos vectorial. Almacena información sobre el documento que se está procesando en cada momento y los posibles errores producidos.
+	\item \textbf{WebScrapingState}: esta entidad registra el estado de los procesos de \eng{web scraping}. Esta entidad permite monitorizar la ejecución, conocer le progreso alcanzado y registrar incidencias durante la descarga de documentos.
+	\item \textbf{RAGEvaluationState}: esta entidad almacena la información asociada a las evaluaciones automáticas del sistema \eng{RAG}. Registra el progreso de la evaluación, los resultados obtenidos y las rutas de los distintos archivos generados durante el proceso, incluyendo configuraciones, conjuntos de datos y métricas calculadas.
 \end{itemize}
 
-El diagrama entidad relación se muestra en la imagen ~\ref{fig:Diagramas/Entidad_Relacion} y el diagrama relacional se muestra en la imagen ~\ref{fig:Diagramas/Relacional}
- 
-\imagendiagram{Diagramas/Entidad_Relacion}{Diagrama Entidad/Relación.}{1.2}
-\imagendiagram{Diagramas/Relacional}{Diagrama relacional.}{1.1}
+\imagendiagram{Diagramas/Entidades_asincronas}{Diagrama Entidad/Relación de las entidades asíncronas generado por \myhref{https://dbeaver.io/}{DBeaver}.}{1.1}
 
+
+Las relaciones entre las entidades del sistema son (ver figura~\ref{fig:entidad_relacion}):
+
+\begin{itemize}
+	\item Un \textbf{usuario} puede realizar cero o muchas \textbf{consultas}, mientras que cada consulta pertenece a un único usuario. Esta relación permite mantener el historial de consultas asociado a cada cuenta.
+	\item Un \textbf{usuario} puede tener cero o muchas instancias de \textbf{RAGQueryState}, utilizadas para gestionar consultas ejecutadas de forma asíncrona. Cada estado de consulta pertenece a un único usuario.
+	\item Un \textbf{documento} puede contener cero o muchos \textbf{chunks}. La cardinalidad mínima es cero porque un documento puede encontrarse cargado en el sistema pero todavía no haber sido procesado ni fragmentado. Cada \eng{chunk} pertenece a un único documento.
+	\item Cada \textbf{chunk} tiene asociado un único \textbf{embedding}, que almacena la información necesaria para gestionar su representación vectorial. Del mismo modo, cada \eng{embedding} pertenece a un único \eng{chunk}.
+	\item La relación entre \textbf{consultas} y \textbf{chunks} es de muchos a muchos. Una consulta puede utilizar múltiples fragmentos documentales para generar una respuesta, mientras que un mismo fragmento puede participar en diferentes consultas realizadas por distintos usuarios. Esta relación se implementa mediante la entidad intermedia \textbf{ConsultaChunk}.
+\end{itemize}
+
+\begin{figure}
+\centering
+\begin{minipage}[c]{\textwidth}
+    \centering
+    \begin{subfigure}[t]{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{Diagramas/Entidad_Relacion}
+        \caption{Diagrama Entidad/Relación simplificado.}
+    \end{subfigure}
+\end{minipage}
+\hfill
+\begin{minipage}[c]{\textwidth}
+    \centering
+	\vspace*{0.2cm}
+    \begin{subfigure}[t]{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{Diagramas/herencia_tareas_asincronas}
+        \caption{Diagrama Entidad/Relación de las tareas asíncronas.}
+    \end{subfigure}
+\end{minipage}
+\caption{Diagramas Entidad/Relación del sistema.}
+\label{fig:entidad_relacion}
+\end{figure}
 
 \section{Diseño arquitectónico} \label{dis:arc}
 El objetivo del diseño arquitectónico es garantizar la modularidad, la escalabilidad, la mantenibilidad, la portabilidad y la reproducibilidad del sistema desarrollado. Es decir, se busca tener una separación clara de responsabilidades entre la interfaz, la lógica, la persistencia y los servicios de Inteligencia Artificial con una organización del código en componentes cohesivos (\eng{Blueprints}, servicios y modelos), pudiendo replicarse los servicios de manera sencilla. Además, sustituir los componentes debe tener un impacto mínimo en el resto del código. 
@@ -52,7 +81,6 @@ Este sistema se basa en una arquitectura cliente–servidor multicapa, combinada
 \subsection{Arquitectura general del sistema y despliegue}
 El sistema sigue una arquitectura distribuida basada en servicios (\eng{service-oriented}~\cite{diseño:SOA}), donde cada componente tiene una responsabilidad claramente definida. La aplicación se compone de los siguientes elementos principales:
 \begin{itemize}
-\tightlist
 	\item Cliente \eng{web}: se corresponde con el navegador del usuario.
 	\item Servidor de \eng{proxy} inverso \eng{Nginx}: el cual se encarga del protocolo de seguridad a través del certificado SSL/TLS, las redirecciones HTTP a HTTPS y el encaminamiento hacia la aplicación .
 	\item Capa de aplicación: aplicación \eng{Flask} desplegada tras un servidor WSGI \eng{Gunicorn}.
@@ -78,7 +106,6 @@ Desde el punto de vista lógico el sistema se estructura siguiendo una arquitect
 \imagendiagram{Arquitectura/ArquitecturaLogica}{Arquitectura cliente-servidor multicapa.}{1.2}
 
 \begin{itemize}
-\tightlist
 	\item \textbf{Capa de presentación}: es la interfaz de usuario (IU) del sistema y es accesible a través del navegador web. Se sigue un enfoque SSR (\eng{Server-Side Rendering}), en el que las páginas HTML se generan en el servidor mediante plantillas (usando las plantillas \file{Jinja2} en \eng{Flask}) y se envían al navegador (cliente) ya renderizadas. Esto reduce la complejidad en el cliente, simplifica el control de acceso y la validación en el servidor. Mejora la trazabilidad y el registro de las interacciones y simplifica la integración del \eng{pipeline RAG}.
 	\item \textbf{Capa de aplicación}: se implementa en el contenedor \eng{web}, que es donde se ejecuta la aplicaicón \eng{Flask} servida pro \eng{Gunicorn}. Esta capa es responsable de coordinar la lógica funcional del sistema y actúa como núcleo del procesamiento. Esta compuesta por los controladores (rutas) organizados en \eng{Blueprints} encargados de gestionar las peticiones HTTP, la lógica de negocio (gestión de usuarios, documentos, consultas, etc) y el \eng{pipeline RAG}.
 	\item \textbf{Capa de persistencia} y \textbf{servicios externos}: en esta capa se agrupan los sistemas encargados del almacenamiento y procesamiento de los datos. Se incluyen las bases de datos, tanto la relacional \eng{PostgreSQL} como la vectorial \eng{Qdrant}. También, se incluye \eng{Ollama} como proveedor del modelo \eng{LLM}. Todos estos servicios se ejecutan como contenedores independientes dentro de la red interna de \eng{Docker}, garantizando aislamiento, modularidad y facilidad de despliegue.
@@ -92,7 +119,6 @@ El modelo vista intención (MVC)~\cite{diseño:MVC} es un patrón arquitectónic
 \imagendiagram{Arquitectura/ModeloVistaControlador}{Diagrama de la arquitectura Modelo-Vista-Controlador (MVC) del sistema.}{1.2}
 
 \begin{itemize}
-\tightlist
 	\item La \textbf{vista}: está compuesta por las platillas \file{HTML} renderizadas mediante el motor de plantillas \file{Jinja2}, responsables de presentar la interfaz y capturar las interacciones del usuario. Además, incorpora los recursos estáticos (\file{css} y \file{JavaScript}). Aunque, la aplicación incorpora \eng{JavaScript} para mejorar la experiencia de usuario, la generación principal del contenido es \eng{server-side}, por lo que la arquitectura sigue siendo fundamentalmente SSR.
 	\item El \textbf{controlador}: se implementa mediante rutas \eng{Flask} organizadas en \eng{Blueprints}. El uso de \eng{Blueprints} permite mantener alta cohesión dentro de cada módulo y bajo acoplamiento entre funcionalidades. Se encarga de gestionar las peticiones HTTP, realizar validaciones básicas (como las de los formularios), así como controlar de acceso por rol. También, tiene la responsabilidad de invocar los servicios donde se encuentra la lógica, coordinar el \eng{pipeline} \eng{RAG} y generar las respuestas HTTP (renderizando la vista adecuada) . 
 	\item El \textbf{modelo}: esta compuesto por las entidades de datos persistentes (Usuario, Consulta, Documento, \eng{Chunk}, \eng{Embedding} y la relación \eng{ConsultaChunk}) y por la lógica de negocio asociada (gestión de usuarios, administración documental, \eng{pipelines} de consulta e indexación \eng{RAG}, control de estados de procesos largos, etc). Se usa una base de datos relacional (\eng{PostgresSQL}) para asegurar la persistencia de los datos de la aplicación y una base de datos vectorial (\eng{Qdrant}) para la recuperación semántica. Esta capa permite desacoplar la lógica de negocio de la base de datos subyacente.
