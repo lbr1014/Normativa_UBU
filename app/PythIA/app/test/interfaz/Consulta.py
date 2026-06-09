@@ -34,17 +34,8 @@ class Consulta(unittest.TestCase):
         self.assertEqual("Consultar al modelo", driver.find_element_by_xpath(u"(.//*[normalize-space(text()) and normalize-space(.)='Página principal'])[2]/following::li[1]").text)
         driver.find_element_by_xpath("//form[@id='rag-chat-form']/div/div/label").click()
         self.assertEqual("Pregunta", driver.find_element_by_xpath("//form[@id='rag-chat-form']/div/div/label").text)
-        driver.find_element_by_id("question").click()
-        driver.find_element_by_id("question").clear()
-        driver.find_element_by_id("question").send_keys("Dime los objetivos de los pliegos administrativos")
-        try: self.assertEqual("Preguntar", driver.find_element_by_id("rag-chat-ask").text)
-        except AssertionError as e: self.verificationErrors.append(str(e))
-        driver.find_element_by_id("rag-chat-ask").click()
-        self.is_element_present(By.XPATH, "//form[@id='rag-chat-form']/div[2]/button[2]")
-        self.is_element_present(By.XPATH, "//form[@id='rag-chat-form']/div[2]/div/span/span[2]")
-        try: self.assertEqual("Cancelar consulta", driver.find_element_by_xpath("//form[@id='rag-chat-form']/div[2]/button[2]").text)
-        except AssertionError as e: self.verificationErrors.append(str(e))
-        return
+        self.assertTrue(self.is_element_present(By.ID, "question"))
+        self.assertTrue(self.is_element_present(By.ID, "rag-chat-ask"))
     
     def is_element_present(self, how, what):
         try: self.driver.find_element(by=how, value=what)

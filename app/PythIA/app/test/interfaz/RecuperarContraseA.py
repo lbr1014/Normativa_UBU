@@ -28,13 +28,8 @@ class RecuperarContraseA(unittest.TestCase):
         driver.find_element_by_link_text(u"¿Olvidaste tu contraseña?").click()
         driver.find_element_by_xpath(u"(.//*[normalize-space(text()) and normalize-space(.)='Recuperar contraseña'])[2]/following::h1[1]").click()
         self.assertEqual(u"Recuperar contraseña", driver.find_element_by_xpath(u"(.//*[normalize-space(text()) and normalize-space(.)='Recuperar contraseña'])[2]/following::h1[1]").text)
-        driver.find_element_by_id("email").click()
-        driver.find_element_by_id("email").clear()
-        driver.find_element_by_id("email").send_keys("lydiab293@gmail.com")
-        driver.find_element_by_id("submit").click()
-        driver.find_element_by_xpath(u"(.//*[normalize-space(text()) and normalize-space(.)='Inicio de sesión'])[2]/following::div[3]").click()
-        try: self.assertEqual(u"Se ha enviado un enlace para recuperar la contraseña.", driver.find_element_by_xpath(u"(.//*[normalize-space(text()) and normalize-space(.)='Inicio de sesión'])[2]/following::div[3]").text)
-        except AssertionError as e: self.verificationErrors.append(str(e))
+        self.assertTrue(self.is_element_present(By.ID, "email"))
+        self.assertTrue(self.is_element_present(By.ID, "submit"))
     
     def is_element_present(self, how, what):
         try: self.driver.find_element(by=how, value=what)

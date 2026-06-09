@@ -30,6 +30,7 @@ class AuthRoutesIntegrationTest(BaseAppTestCase):
             data={
                 "nombre": "Nuevo",
                 "email": "lydiablanco71@gmail.com",
+                "country_code": "ES",
                 "password": DEFAULT_PASSWORD,
                 "confirm_password": DEFAULT_PASSWORD,
             },
@@ -52,6 +53,7 @@ class AuthRoutesIntegrationTest(BaseAppTestCase):
             data={
                 "nombre": "Duplicado",
                 "email": existing.email,
+                "country_code": "ES",
                 "password": DEFAULT_PASSWORD,
                 "confirm_password": DEFAULT_PASSWORD,
             },

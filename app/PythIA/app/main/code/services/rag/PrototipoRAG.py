@@ -2683,3 +2683,7 @@ def cli_main(pliegos_dir: Path | None = None) -> dict:
 
     summary = index_pliegos_dir(pliegos_dir)
     logger.info("Resumen indexado: %s", summary)
+    return summary
+
+if __name__ == "__main__":
+    cli_main()
