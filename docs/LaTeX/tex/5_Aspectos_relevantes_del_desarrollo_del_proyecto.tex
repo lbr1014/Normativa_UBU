@@ -281,7 +281,71 @@ Tras la conversión inicial, el Markdown generado pasa por una fase adicional de
 	\item Conservación de la estructura documental: las transformaciones se aplican únicamente sobre líneas situadas al nivel principal del documento, evitando alterar el contenido interno de listas, tablas o bloques especiales.
 \end{itemize}
 
-Durante el desarrollo se observó que esta aproximación mejora considerablemente la calidad del texto utilizado posteriormente por el sistema RAG, especialmente frente a OCR tradicionales basados únicamente en extracción plana de texto. Sin embargo, también se detectaron varias limitaciones importantes. La principal es el elevado tiempo de procesamiento, ya que cada página debe renderizarse como imagen y posteriormente analizarse mediante un modelo multimodal. Además, aunque el sistema consigue detectar correctamente gran parte de la estructura documental, no siempre identifica de forma precisa todas las secciones, tablas o jerarquías debido a que los formatos de los documentos son poco homogéneos. 
+Durante el desarrollo se observó que esta aproximación mejora considerablemente la calidad del texto utilizado posteriormente por el sistema RAG, especialmente frente a OCR tradicionales basados únicamente en extracción plana de texto. Sin embargo, también se detectaron varias limitaciones importantes. La principal es el elevado tiempo de procesamiento, ya que cada página debe renderizarse como imagen y posteriormente analizarse mediante un modelo multimodal. Para cuantificar este coste computacional se analizaron los datos reales obtenidos durante la utilización de la aplicación PythIA. En total se convirtieron 132 documentos que sumaban un total de 22.544 páginas. La conversión a Markdown estuvo activa durante 244.030,29 minutos, por lo cual cada página tardó 244.030,29 minutos $/$ 22.544 páginas = 10,82 minutos (ver figura~\ref{fig:datos_conversion}). Este valor incluye tanto la generación de la imagen a partir del PDF como la inferencia realizada por el modelo OCR multimodal y las fases posteriores de normalización del Markdown.
+
+\begin{tcolorbox}[
+	colback=black!3,
+	colframe=black!30,
+	boxrule=0.5pt,
+	arc=2mm,
+	title=Terminal,
+	fonttitle=\bfseries,
+	breakable
+]
+{\footnotesize
+\noindent
+\texttt{SELECT}\\
+	\hspace*{1em}\texttt{ROUND(}\\
+		\hspace*{2em}\texttt{SUM(EXTRACT(EPOCH FROM (finished\_at - started\_at))) / 60,}\\
+		\hspace*{2em}\texttt{2}\\
+	\hspace*{1em}\texttt{) AS minutos\_totales}\\
+\texttt{FROM markdown\_conversion\_state}\\
+\texttt{WHERE progress > 0}\\
+	\hspace*{1em}\texttt{AND started\_at IS NOT NULL}\\
+	\hspace*{1em}\texttt{AND finished\_at IS NOT NULL;}\\
+	\\
+\texttt{\# Comando SQL utilizado para conocer el número total}\\
+\texttt{\# de documentos convertidos a Markdown}\\
+\texttt{SELECT COUNT(*) AS documentos\_convertidos}\\
+\texttt{FROM documents}\\
+\texttt{WHERE markdown\_content IS NOT NULL}\\
+	\hspace*{1em}\texttt{AND length(markdown\_content) > 0;}\\
+	\\
+\texttt{\# Script Python utilizado para obtener el número total}\\
+\texttt{\# de páginas de los documentos convertidos}\\
+\texttt{from pathlib import Path}\\
+\texttt{from pypdf import PdfReader}\\
+\texttt{total\_pages = 0}\\
+\texttt{for pdf in Path('/data/pliegos').glob('*.pdf'):}\\
+	\hspace*{1em}\texttt{try:}\\
+		\hspace*{2em}\texttt{pages = len(PdfReader(str(pdf)).pages)}\\
+		\hspace*{2em}\texttt{total\_pages += pages}\\
+	\hspace*{1em}\texttt{except Exception as e:}\\
+		\hspace*{2em}\texttt{print(f'ERROR \{pdf.name\}: \{e\}') }\\
+\texttt{print('TOTAL PAGINAS:', total\_pages)}
+}
+\end{tcolorbox}
+
+\begin{figure}
+\centering
+    \begin{subfigure}[t]{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{Memoria/Conversion_markdown_paginas_total}
+        \caption{Total de páginas convertidas a Markdown.}
+    \end{subfigure}
+	
+	\vspace{0.5cm}	
+	
+    \begin{subfigure}[t]{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{Memoria/Conversion_markdown_minutos}
+        \caption{Datos temporales totales de la conversión y número de expedientes convertidos.}
+    \end{subfigure}
+\caption{Datos obtenidos de la conversión a Markdown del sistema.}
+\label{fig:datos_conversion}
+\end{figure}
+
+Además, aunque el sistema consigue detectar correctamente gran parte de la estructura documental, no siempre identifica de forma precisa todas las secciones, tablas o jerarquías debido a que los formatos de los documentos son poco homogéneos. 
 
 \section{Evaluación RAG}
 
@@ -322,11 +386,72 @@ Desde el punto de vista arquitectónico, la aplicación se divide en \eng{fronte
 
 \subsection{\eng{Frontend}}
 
-El \eng{frontend} de PythIA ha evolucionado respecto a los primeros prototipos desarrollados durante el proyecto. Las primeras interfaces eran simples y estaban centradas en validar el funcionamiento técnico del sistema RAG. Sin embargo, conforme el proyecto avanzó, se comenzó a trabajar en el diseño de una interfaz más moderna, usable y adaptada a distintos tipos de usuarios. En la cual la \textbf{complejidad} del sistema RAG es \textbf{transparente para el usuario}.
+El \eng{frontend} de PythIA ha evolucionado respecto a los primeros prototipos desarrollados durante el proyecto (ver figura~\ref{fig:evolucion_interfaz}). Las primeras interfaces eran simples y estaban centradas en validar el funcionamiento técnico del sistema RAG. Sin embargo, conforme el proyecto avanzó, se comenzó a trabajar en el diseño de una interfaz más moderna, usable y adaptada a distintos tipos de usuarios. En la cual la \textbf{complejidad} del sistema RAG es \textbf{transparente para el usuario}.
+
+\begin{figure}
+\centering
+\begin{minipage}[c]{0.45\textwidth}
+	\centering
+    \begin{subfigure}[t]{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{Memoria/Interfaz/Pagina_inicio_prototipo_inicial}
+		
+		\vspace{1cm}
+        
+        \includegraphics[width=\textwidth]{Memoria/Interfaz/Historial_prototipo_inicial}
+        \caption{Diseño de los prototipos iniciales de la aplicación.}
+    \end{subfigure}
+
+\end{minipage}
+\hfill
+\begin{minipage}[c]{0.45\textwidth}
+    \centering
+    \begin{subfigure}[t]{\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{Memoria/Interfaz/Cabecera_prototipo}
+        
+		\vspace{0.1cm}	        
+        
+        \includegraphics[width=\textwidth]{Memoria/Interfaz/Historial_prototipo}
+        \caption{Primeras iteraciones en el diseño de la interfaz.}
+    \end{subfigure}
+	
+\end{minipage}
+
+	\vspace{0.5cm}
+	
+\begin{subfigure}[t]{\textwidth}
+   	\centering
+    \includegraphics[width=0.45\textwidth]{Memoria/Interfaz/Pagina_inicio_final}
+	\hfill
+    \includegraphics[width=0.45\textwidth]{Memoria/Interfaz/Pagina_principal_final}
+	\caption{Interfaz final de la aplicación.}
+\end{subfigure}
+
+\caption{Evolución de la interfaz desde los prototipos iniciales hasta el diseño final.}
+\label{fig:evolucion_interfaz}
+\end{figure}
+
 
 El diseño visual de la aplicación se ha ido desarrollando a lo largo de todo el proyecto mediante distintas iteraciones de las páginas. Uno de los cambios más importantes respecto a los primeros prototipos fue la incorporación de soporte completo para modo claro y modo oscuro (dejando por defecto el modo del sistema salvo que el usuario indique otra preferencia en su perfil) mejorando así la accesibilidad y la experiencia de usuario. 
 
-Para implementar la interfaz se utilizó Bootstrap como \eng{framework} CSS principal. Bootstrap permitió acelerar el desarrollo del \eng{frontend} gracias a su sistema de componentes reutilizables, facilitando mantener una coherencia visual entre todas las páginas de la aplicación. La utilización de Bootstrap también permitió implementar un \textbf{diseño \eng{responsive}} para que los usuarios puedan usar la aplicación desde distintos dispositivos. 
+Para implementar la interfaz se utilizó Bootstrap como \eng{framework} CSS principal. Bootstrap permitió acelerar el desarrollo del \eng{frontend} gracias a su sistema de componentes reutilizables, facilitando mantener una coherencia visual entre todas las páginas de la aplicación. La utilización de Bootstrap también permitió implementar un \textbf{diseño \eng{responsive}} para que los usuarios puedan usar la aplicación desde distintos dispositivos (ver figura~\ref{}). 
+
+\begin{figure}
+\centering
+    \begin{subfigure}[t]{\textwidth}
+        \centering      
+        \includegraphics[width=0.22\textwidth]{Memoria/Interfaz/Pagina_inicio_responsive}
+        \hfill
+		\includegraphics[width=0.22\textwidth]{Memoria/Interfaz/Pagina_principal_responsive}
+		\hfill
+		\includegraphics[width=0.22\textwidth]{Memoria/Interfaz/Historial_responsive}
+		\hfill
+		\includegraphics[width=0.22\textwidth]{Memoria/Interfaz/Consulta_responsive}
+    \end{subfigure}
+\caption{Distintas pantallas de la aplicación vistas desde un teléfono móvil.}
+\label{fig:interfaz_responsive}
+\end{figure}
 
 Otro aspecto importante del \eng{frontend} fue la \textbf{internacionalización} de la aplicación. Para esto se ha desarrollado un sistema de traducción basado en diccionarios de claves y funciones auxiliares que permiten traducir los textos de la interfaz, los formularios, los mensajes de error, las validaciones, las notificaciones y los componentes dinámicos del JavaScript. Esto permitió desacoplar completamente los textos de la interfaz del código HTML y Python.
 
