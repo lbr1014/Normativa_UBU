@@ -202,9 +202,84 @@ La implementación final se basa en un sistema de \textbf{OCR multimodal} que ut
 
 El procesamiento se realiza de forma \textbf{asíncrona página a página}. Primero, cada página del PDF se convierte individualmente en una imagen utilizando \file{pdf2image}, evitando cargar el documento completo en memoria y reduciendo así el consumo de recursos. Posteriormente, las páginas se procesan concurrentemente mediante tareas asíncronas controladas con semáforos, permitiendo paralelizar parcialmente el OCR y mejorar el rendimiento global del sistema. Esta arquitectura resulta especialmente importante debido al elevado tiempo de procesamiento de los documentos administrativos extensos.
 
-Además, la implementación está preparada para utilizar aceleración por GPU cuando está disponible. El sistema detecta automáticamente la configuración de GPU y solicita a Ollama la ejecución del modelo visual utilizando todas las capas posibles en GPU. También se incorporaron mecanismos de \eng{fallback} a CPU en caso de error, así como reintentos automáticos reduciendo progresivamente la resolución de las imágenes cuando el modelo produce fallos de memoria o errores internos. Estas optimizaciones fueron necesarias debido al elevado consumo computacional del OCR multimodal, especialmente en documentos con muchas páginas o tablas complejas.
+Además, la implementación está preparada para utilizar aceleración por GPU cuando está disponible. El sistema detecta automáticamente la configuración de GPU y solicita a Ollama la ejecución del modelo visual utilizando todas las capas posibles en GPU. También se incorporaron mecanismos de \eng{fallback} a CPU en caso de error, así como reintentos automáticos reduciendo progresivamente la resolución de las imágenes cuando el modelo produce fallos de memoria o errores internos. Estas optimizaciones fueron necesarias debido al elevado consumo computacional del OCR multimodal (ver Tabla~\ref{tabla:consumoOCR}), especialmente en documentos con muchas páginas o tablas complejas.
 
-Tras la conversión inicial, el Markdown generado pasa por una fase adicional de normalización automática. En esta etapa se corrigen índices con puntos suspensivos, se detectan encabezados numerados y se transforman en títulos Markdown jerárquicos, incluso cuando el modelo OCR no los reconoce correctamente. Para ello se desarrollaron reglas específicas adaptadas a la estructura habitual de los pliegos.
+\begin{longtable}{p{0.22\linewidth} p{0.16\linewidth} p{0.12\linewidth} p{0.45\linewidth}}
+\caption{Fuentes de consumo computacional durante la conversión de PDF a Markdown mediante OCR multimodal.}
+\label{tabla:consumoOCR}\\
+
+\toprule
+\textbf{Etapa} &
+\textbf{Recurso principal} &
+\textbf{Impacto} &
+\textbf{Motivo del consumo computacional} \\
+\midrule
+\endfirsthead
+
+\multicolumn{4}{l}{Continúa desde la página anterior}\\
+\toprule
+\textbf{Etapa} &
+\textbf{Recurso principal} &
+\textbf{Impacto} &
+\textbf{Motivo del consumo computacional} \\
+\midrule
+\endhead
+
+\midrule
+\multicolumn{4}{r}{Continúa en la siguiente página}\\
+\endfoot
+
+\bottomrule
+\endlastfoot
+
+Conversión PDF a imagen &
+CPU y memoria RAM &
+Alto &
+Cada página del documento debe renderizarse individualmente a 200 DPI antes de poder ser procesada por el modelo OCR multimodal. Cuanto mayor es el número de páginas, mayor es el tiempo de renderizado y el uso de memoria. \\
+
+Almacenamiento temporal de imágenes &
+Memoria RAM y disco &
+Medio &
+Las páginas renderizadas se almacenan temporalmente como imágenes PNG, lo que incrementa el consumo de memoria y espacio durante el procesamiento. \\
+
+Redimensionado de imágenes &
+CPU y memoria RAM &
+Medio &
+Las imágenes se redimensionan para limitar su tamaño máximo a 1600 píxeles por lado y evitar errores de memoria en el modelo visual. \\
+
+Inferencia OCR multimodal &
+GPU (o CPU) y VRAM &
+Muy alto &
+Cada página se analiza mediante el modelo visual \file{Nanonets-OCR-s}, que debe interpretar simultáneamente texto, tablas, imágenes y estructura documental para generar Markdown estructurado. Es la fase más costosa del proceso. \\
+
+Codificación y envío a Ollama &
+CPU y memoria &
+Medio &
+Las imágenes deben convertirse a formato Base64 y enviarse al servicio Ollama para su procesamiento, incrementando el volumen de datos transferidos. \\
+
+Reintentos automáticos &
+CPU, GPU y tiempo de ejecución &
+Variable &
+Cuando se producen errores de memoria o fallos internos del modelo, el sistema vuelve a procesar la página utilizando resoluciones progresivamente menores (1600, 1280, 1024, 896 y 768 píxeles). \\
+
+Postprocesado del Markdown &
+CPU &
+Bajo &
+Se aplican reglas para normalizar encabezados, corregir índices y mejorar la estructura del Markdown generado por el modelo OCR. \\
+
+\end{longtable}
+
+Tras la conversión inicial, el Markdown generado pasa por una fase adicional de \textbf{normalización automática} para corregir errores frecuentes del OCR multimodal. Se aplican diversas reglas heurísticas diseñadas específicamente para los documentos de licitación pública:
+\begin{itemize}
+	\item Corrección de índices: se detectan las entradas del índice que contienen secuencias de puntos suspensivos utilizadas como separadores visuales entre el título y el número de página, eliminando dichos caracteres para conservar únicamente la información relevante.
+	\item Eliminación de líneas de relleno: se descartan líneas formadas exclusivamente por puntos u otros caracteres utilizados para maquetar los índices.
+	\item Detección de secciones principales: las líneas con numeración del tipo \texttt{1. TÍTULO} se convierten automáticamente en encabezados Markdown de primer nivel cuando el texto asociado aparece mayoritariamente en mayúsculas.
+	\item Detección de subsecciones: las estructuras numeradas del tipo \texttt{1.1. Título} se transforman en encabezados Markdown de segundo nivel.
+	\item Detección de subsubsecciones: las estructuras del tipo \texttt{1.1.1. Título} se convierten en encabezados Markdown de tercer nivel.
+	\item Reconocimiento de códigos alfanuméricos: se detectan identificadores frecuentes en los pliegos administrativos, como \texttt{G.2.2.} o \texttt{A.1.3.}, transformándolos también en encabezados jerárquicos.
+	\item Preservación de elementos Markdown válidos: las líneas que ya han sido reconocidas correctamente por el modelo OCR como títulos Markdown, listas, tablas, citas o elementos HTML no se modifican durante el proceso de normalización.
+	\item Conservación de la estructura documental: las transformaciones se aplican únicamente sobre líneas situadas al nivel principal del documento, evitando alterar el contenido interno de listas, tablas o bloques especiales.
+\end{itemize}
 
 Durante el desarrollo se observó que esta aproximación mejora considerablemente la calidad del texto utilizado posteriormente por el sistema RAG, especialmente frente a OCR tradicionales basados únicamente en extracción plana de texto. Sin embargo, también se detectaron varias limitaciones importantes. La principal es el elevado tiempo de procesamiento, ya que cada página debe renderizarse como imagen y posteriormente analizarse mediante un modelo multimodal. Además, aunque el sistema consigue detectar correctamente gran parte de la estructura documental, no siempre identifica de forma precisa todas las secciones, tablas o jerarquías debido a que los formatos de los documentos son poco homogéneos. 
 
