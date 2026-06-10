@@ -6,6 +6,11 @@
 
 **PythIA** es una aplicación que permite realizar consultas sobre las licitaciones del estado, concretamente de la **Junta de Gobierno de la Diputación Provincial de Burgos**. Las respuestas se generan usando un ***LLM***  (*Large Lenguaje Model*) alimentado por un modelo ***RAG*** (*Retrieval-Augmented Generation*) que busca información concreta de los pliegos de la Junta.
 
+En la siguiente imagen se puede ibservar la arquitectura general del sistema RAG:
+
+<img width="1024" height="744" alt="ArquitecturaRAG" src="https://github.com/user-attachments/assets/e3f1335d-5501-487a-b3dd-ed9efc298ece" />
+
+
 Se puede **acceder a la aplicación** desde cualquier navegador accediendo a la dirección:
 > [https://pythia.es](https://pythia.es/)
 
