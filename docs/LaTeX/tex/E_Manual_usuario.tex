@@ -114,7 +114,7 @@ Para iniciar sesión, el usuario debe introducir el correo electrónico asociado
 Desde esta página también se puede acceder a las siguientes funcionalidades:
 
 \begin{itemize}
-    \item \textbf{Registro}: pulsando en <<¿No tienes cuenta? Registrate>>. Permite crear una nueva cuenta de usuario en la plataforma (ver sección~\ref{manual:registro}).
+    \item \textbf{Registro}: pulsando en <<¿No tienes cuenta? Regístrate>>. Permite crear una nueva cuenta de usuario en la plataforma (ver sección~\ref{manual:registro}).
     \item \textbf{Recuperar contraseña}: pulsando <<¿Olvidaste tu contraseña?>>. Permite solicitar el restablecimiento de la contraseña mediante correo electrónico en caso de haberla olvidado (ver sección~\ref{manual:recuperar}).
     \item \textbf{Volver al inicio}: pulsando en <<Volver al inicio>> o en el logotipo de PythIA de la cabecera. Redirige al usuario a la página de inicio pública de la aplicación (ver sección~\ref{manual:inicio}).
     \item \textbf{Tutorial interactivo}: pulsando sobre la interrogación que aparece e la parte inferior derecha. Muestra una guía paso a paso con una explicación de los elementos y funcionalidades disponibles en esta página.
@@ -343,7 +343,7 @@ La página de consultas constituye la funcionalidad principal de PythIA, ya que 
 \label{fig:pagina_consulta}
 \end{figure}
 
-En la parte superior de la página se muestran diferentes indicadores y estadísticas relacionadas con el funcionamiento del sistema. Entre ellos se incluyen las métricas globales de evaluación del sistema \eng{RAG}, obtenidas mediante herramientas como \eng{RAGAS}, que permiten conocer aspectos como la fidelidad de las respuestas, la relevancia de la información recuperada o la cobertura del contexto utilizado. Pulsando el botón <<Ver detalles>> se puede acceder a la pantalla de \textbf{Evaluar modelos} (ver sección~\ref{manual:evaluar}). También se presentan estadísticas de uso de los distintos \eng{LLM} (\eng{Long Large Models}) disponibles en la aplicación, así como un selector que permite elegir el modelo con el que se desea realizar las consultas. Pulsando el botón <<Comparar los modelos>> que se muestra debajo del selector se puede acceder a la página de \textbf{Comparar modelos} (ver sección~\ref{manual:compararModelos}).
+En la parte superior de la página se muestran diferentes indicadores y estadísticas relacionadas con el funcionamiento del sistema. Entre ellos se incluyen las métricas globales de evaluación del sistema \eng{RAG}, obtenidas mediante herramientas como \eng{RAGAS}, que permiten conocer aspectos como la fidelidad de las respuestas, la relevancia de la información recuperada o la cobertura del contexto utilizado. Pulsando el botón <<Ver detalles>> se puede acceder a la pantalla de <<Evaluar modelos>> (ver sección~\ref{manual:evaluar}). También se presentan estadísticas de uso de los distintos \eng{LLM} (\eng{Long Large Models}) disponibles en la aplicación, así como un selector que permite elegir el modelo con el que se desea realizar las consultas. Pulsando el botón <<Comparar los modelos>> que se muestra debajo del selector se puede acceder a la página de <<Comparar modelos>> (ver sección~\ref{manual:compararModelos}).
 
 La página dispone de dos modos diferentes de consulta, \texttt{Chat} (ver figura~\ref{fig:Manual_usuario/Consulta_chat}) y \texttt{Formulario}(ver figura~\ref{fig:Manual_usuario/Consulta_formulario}). El \texttt{Chat} permite realizar consultas en lenguaje natural de forma libre. Para ello, el usuario únicamente debe introducir su pregunta en el cuadro de texto y pulsar el botón <<Preguntar>>. El sistema procesará la consulta, recuperará los fragmentos documentales más relevantes y generará una respuesta utilizando el modelo de lenguaje seleccionado. Por su parte el \texttt{Formulario} está orientado a usuarios que desean realizar consultas guiadas sin necesidad de redactar preguntas manualmente. En primer lugar, se debe seleccionar el expediente sobre el que desea realizar la consulta mediante la lista desplegable disponible. Se puede cribar entre documentos administrativos o técnicos desde el desplegable inferior. También existe la posibilidad de realizar una consulta global sobre todos los expedientes seleccionando la opción correspondiente. A continuación, el usuario puede indicar el tipo de consulta que desea realizar. Es posible activar la opción <<Solicitar resumen del documento>>, mediante la cual el sistema genera automáticamente un resumen completo del expediente seleccionado sin necesidad de seleccionar una pregunta específica (ver figura~\ref{fig:formulario_opciones}). Una vez configurados los parámetros deseados, el usuario debe pulsar el botón <<Preguntar>>. 
 
@@ -360,6 +360,9 @@ La página dispone de dos modos diferentes de consulta, \texttt{Chat} (ver figur
         \includegraphics[width=\textwidth]{Manual_usuario/Consulta_formulario_despegable_expediente}
         \caption{Despegable para seleccionar el \mbox{expediente}.}
     \end{subfigure}
+    
+	\vspace{0.5cm} 
+    
     \begin{subfigure}[t]{\textwidth}
         \centering
         \includegraphics[width=\textwidth]{Manual_usuario/Consulta_formulario_tipo_documento}
@@ -374,6 +377,9 @@ La página dispone de dos modos diferentes de consulta, \texttt{Chat} (ver figur
         \includegraphics[width=\textwidth]{Manual_usuario/Consulta_formulario_resumen}
         \caption{Selector para solicitar resumen de un \mbox{documento}.}
     \end{subfigure}
+    
+	\vspace{0.5cm}     
+    
     \begin{subfigure}[t]{\textwidth}
         \centering
         \includegraphics[width=\textwidth]{Manual_usuario/Consulta_formulario_tipo_pregunta}
@@ -493,11 +499,17 @@ Además, la sección <<Detalle por pregunta>> ofrece un análisis individual par
         \includegraphics[width=\textwidth]{Manual_usuario/Detalles_evalaucion_pregunta}
         \caption{I. Desplegable de la primera pregunta (pregunta y respuesta).}
     \end{subfigure}
+
+	\vspace{0.5cm}     
+    
     \begin{subfigure}[t]{\textwidth}
         \centering
         \includegraphics[width=\textwidth]{Manual_usuario/Detalles_evalaucion_pregunta2}
         \caption{II. Desplegable de la primera pregunta (respuesta correcta, evidencia y contexto).}
     \end{subfigure}
+
+	\vspace{0.5cm}     
+    
     \begin{subfigure}[t]{\textwidth}
         \centering
         \includegraphics[width=\textwidth]{Manual_usuario/Detalles_evalaucion_pregunta3}
@@ -511,7 +523,7 @@ Además, la sección <<Detalle por pregunta>> ofrece un análisis individual par
 \subsection{Historial de consultas}
 \label{manual:historial}
 
-El historial permite al usuario consultar las interacciones realizadas previamente con el sistema \eng{RAG}. Cuando no existen consultas registradas se mustra un mensaje informativo indicándolo (ver figura~\ref{fig:historial}). Los usuarios con permisos de administración pueden ver las consultas de todos los usuarios del sistema, mientras que los usuarios estándar solo pueden ver sus consultas.
+El historial permite al usuario consultar las interacciones realizadas previamente con el sistema \eng{RAG}. Cuando no existen consultas registradas se muestra un mensaje informativo indicándolo (ver figura~\ref{fig:historial}). Los usuarios con permisos de administración pueden ver las consultas de todos los usuarios del sistema, mientras que los usuarios estándar solo pueden ver sus consultas.
 
 \begin{figure}
 \centering
@@ -551,12 +563,18 @@ Por cada consulta realizada se muestra una tarjeta, donde se incluye la pregunta
         \includegraphics[width=\textwidth]{Manual_usuario/Historial_tarjeta}
         \caption{Tarjeta para mostrar una consulta.}
     \end{subfigure}
+
+	\vspace{0.5cm}     
+    
     \begin{subfigure}[t]{\textwidth}
         \centering
         \includegraphics[width=\textwidth]{Manual_usuario/Historial_respuesta}
         \caption{Modal con la respuesta que del modelo para la consulta.}
     \end{subfigure}
-        \begin{subfigure}[t]{\textwidth}
+    
+    \vspace{0.5cm} 
+    
+    \begin{subfigure}[t]{\textwidth}
         \centering
         \includegraphics[width=\textwidth]{Manual_usuario/Historial_detalles}
         \caption{Modal con los detalles de los fragmentos usados para la generación de la respuesta.}
@@ -577,6 +595,9 @@ La interfaz incorpora un sistema de filtrado que facilita la localización de co
         \includegraphics[width=\textwidth]{Manual_usuario/Historial_filtro}
         \caption{Filtro del historial para un usuario estándar.}
     \end{subfigure}
+
+	\vspace{0.5cm}     
+    
     \begin{subfigure}[t]{\textwidth}
         \centering
         \includegraphics[width=\textwidth]{Manual_usuario/administrador/Historial_filtro}
@@ -637,6 +658,7 @@ En la parte izquierda de la pantalla se muestra el resumen de la información b�
     \end{subfigure}
 \end{minipage}
 \centering
+\hfill
 \begin{minipage}[c]{0.46\textwidth}
     \centering
         \begin{subfigure}[t]{\textwidth}

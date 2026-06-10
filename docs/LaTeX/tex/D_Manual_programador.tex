@@ -11,6 +11,7 @@ A lo largo de este anexo se presenta la organización del proyecto, describiendo
 
 El proyecto se organiza en tres bloques principales, la aplicación final (PythIA), los prototipos desarrollados durante la fase experimental y la documentación del Trabajo de Fin de Grado.
 
+\vspace{0.5cm} 
 {\footnotesize
 \dirtree{%
 	.1 /.
@@ -29,6 +30,7 @@ El proyecto se organiza en tres bloques principales, la aplicación final (PythI
 
 El directorio \file{app/PythIA} contiene la versión final de la aplicación. En él se encuentra tanto el código fuente de la aplicación como todos los elementos necesarios para su despliegue y mantenimiento. La estructura principal se divide en cuatro grandes bloques correspondientes a la aplicación Flask (\file{app}), los archivos necesarios para la contenerización mediante Docker (\file{docker}), las migraciones de la base de datos (\file{migrations}) y diversos archivos de configuración y documentación.
 
+\vspace{0.5cm} 
 {\footnotesize
 \dirtree{%
 .1 app/PythIA/.
@@ -43,9 +45,11 @@ El directorio \file{app/PythIA} contiene la versión final de la aplicación. En
 }}
 
 En el directorio \file{docker} se incluye la configuración necesaria para ejecutar la aplicación en contenedores \file{Docker}, usando \file{Gunicorn} como servidor de aplicación y \file{Nginx} como \eng{proxy} inverso.
+
+\vspace{0.5cm} 
 {\footnotesize
 \dirtree{%
-	.1 docker/.
+	.1 app/PythIA/docker/.
 	.2 entrypoint.sh $\rightarrow$ script de arranque del contenedor.
 	.2 requirements\_docker.txt $\rightarrow$ dependencias Python necesarias para ejecutar la aplicación en Docker.
 	.2 Dockerfile $\rightarrow$ define la imagen Docker de la aplicación.
@@ -53,30 +57,19 @@ En el directorio \file{docker} se incluye la configuración necesaria para ejecu
 	.2 nginx/.
 	.3 nginx.conf.template $\rightarrow$ plantilla de configuración de Nginx como proxy inverso.
 }}
-
+\vspace{0.2cm}
 
 La aplicación Flask se organiza implementando una separación entre controladores, modelos, servicios, recursos estáticos y plantillas \file{HTML}. 
 
 Además, esta carpeta contiene los \eng{test} unitarios y de integración, que permiten comprobar el correcto funcionamiento de las rutas, modelos, servicios y funcionalidades principales. Las migraciones permiten mantener actualizada la estructura de la base de datos en los distintos entornos.
 
+\vspace{0.6cm} 
 {\footnotesize
 \dirtree{%
 	.1 app/PythIA/app/.
 	.2 main/.
 	.3 code/ $\rightarrow$ código Python principal de la aplicación Flask.
-	.4 controllers/ $\rightarrow$ rutas y controladores organizados por blueprints.
-	.4 model/ $\rightarrow$ modelos de datos de la aplicación.
-	.4 services/ $\rightarrow$ lógica de negocio de la aplicación.
-	.4 internacionalizacion/ $\rightarrow$ textos y funciones para la traducción de la interfaz.
-	.4 forms.py $\rightarrow$ formularios utilizados por la aplicación.
- 	.4 decorators.py $\rightarrow$ decoradores para controlar permisos y acceso a rutas.
-	.4 extensions.py $\rightarrow$ inicialización de extensiones de Flask.
- 	.4 error\_handling.py $\rightarrow$ gestión de errores de la aplicación.
- 	.4 countries.py $\rightarrow$ healpers con países.
-	.4 run.py $\rightarrow$ punto de entrada de la aplicación Flask.
-	.3 resources/.
-	.4 static/ $\rightarrow$ archivos estáticos CSS, JavaScript e imágenes.
-	.4 templates/ $\rightarrow$ plantillas HTML renderizadas por Flask mediante Jinja2.
+	.3 resources/ $\rightarrow$ archivos estáticos.
 	.2 test/.
 	.3 integration/ $\rightarrow$ pruebas de integración de las rutas y funcionalidades principales.
 	.3 unit/ $\rightarrow$ pruebas unitarias de modelos, servicios, formularios, controladores y funciones auxiliares.
@@ -85,11 +78,37 @@ Además, esta carpeta contiene los \eng{test} unitarios y de integración, que p
 	.3 run\_tests.sh $\rightarrow$ script para ejecutar las pruebas.
 }}
 
-El directorio \file{controllers} contiene las rutas de Flask, organizadas mediante \eng{Blueprints}. Esta organización permite dividir la aplicación en módulos funcionales independientes, manteniendo alta cohesión dentro de cada módulo y reduciendo el acoplamiento entre funcionalidades.
-
+\vspace{0.6cm} 
 {\footnotesize
 \dirtree{%
-	.1 controllers/.
+	.1 app/PythIA/app/main/resources/.
+	.2 static/ $\rightarrow$ archivos estáticos CSS, JavaScript e imágenes.
+	.2 templates/ $\rightarrow$ plantillas HTML renderizadas por Flask mediante Jinja2.
+}}
+
+\vspace{0.8cm} 
+{\footnotesize
+\dirtree{%
+	.1 app/PythIA/app/main/code/.
+	.2 controllers/ $\rightarrow$ rutas y controladores organizados por blueprints.
+	.2 model/ $\rightarrow$ modelos de datos de la aplicación.
+	.2 services/ $\rightarrow$ lógica de negocio de la aplicación.
+	.2 internacionalizacion/ $\rightarrow$ textos y funciones para la traducción de la interfaz.
+	.2 forms.py $\rightarrow$ formularios utilizados por la aplicación.
+ 	.2 decorators.py $\rightarrow$ decoradores para controlar permisos y acceso a rutas.
+	.2 extensions.py $\rightarrow$ inicialización de extensiones de Flask.
+ 	.2 error\_handling.py $\rightarrow$ gestión de errores de la aplicación.
+ 	.2 countries.py $\rightarrow$ healpers con países.
+	.2 run.py $\rightarrow$ punto de entrada de la aplicación Flask.
+}}
+\vspace{0.5cm} 
+
+El directorio \file{controllers} contiene las rutas de Flask, organizadas mediante \eng{Blueprints}. Esta organización permite dividir la aplicación en módulos funcionales independientes, manteniendo alta cohesión dentro de cada módulo y reduciendo el acoplamiento entre funcionalidades.
+
+\vspace{0.5cm} 
+{\footnotesize
+\dirtree{%
+	.1 app/PythIA/app/main/code/controllers/.
 	.2 admin/ .
 	.3 routes.py $\rightarrow$ registro, inicio de sesión, cierre de sesión y recuperación de contraseña.
 	.2 auth/ .
@@ -99,12 +118,14 @@ El directorio \file{controllers} contiene las rutas de Flask, organizadas median
 	.2 rag/ .
 	.3 routes.py $\rightarrow$ interfaz de consulta al RAG y la gestión de respuestas.
 }}
+\vspace{0.5cm} 
 
 El directorio \file{model} contiene las entidades persistentes de la aplicación. Estas clases representan los datos almacenados en PostgreSQL. Permiten gestionar usuarios, documentos, conslutas, \eng{chunks}, \eng{embeddings} y estados de procesos asíncronos.
 
+\clearpage 
 {\footnotesize
 \dirtree{%
-	.1 model/.
+	.1 app/PythIA/app/main/code/model/.
 	.2 user.py $\rightarrow$ define la entidad de usuarios del sistema (autenticación, roles y gestión de cuentas).
 	.2 documento.py $\rightarrow$ representa los documentos de licitaciones almacenados, incluyendo metadatos y estado de procesamiento.
 	.2 consulta.py $\rightarrow$ modela las consultas realizadas por los usuarios al sistema RAG y sus resultados.
@@ -120,42 +141,63 @@ El directorio \file{model} contiene las entidades persistentes de la aplicación
 
 El directorio \file{services} agrupa la lógica de negocio de la aplicación. A diferencia de los controladores, que reciben las peticiones HTTP, los servicios ejecutan las operaciones internas. 
 
+\vspace{0.5cm} 
 {\footnotesize
 \dirtree{%
-	.1 services/.
+	.1 app/PythIA/app/main/code/services/.
 	.2 async\_tasks.py $\rightarrow$ ejecución de procesos largos en segundo plano.
 	.2 documentos.py $\rightarrow$ gestión de documentos cargados en el sistema.
-	.2 markdown/.
-	.3 Conversion\_markdown.py $\rightarrow$ implementa la conversión de documentos PDF a formato Markdown, incluyendo limpieza y estructuración del texto.
-	.2 rag/.
-	.3 PrototipoRAGpy $\rightarrow$ implementación del pipeline RAG (recuperación de chunks relevantes y generación de respuestas con el LLM).
-	.3 default\_prompts.py $\rightarrow$ define los prompts por defecto utilizados para interactuar con los modelos de lenguaje.
-	.3 service.py $\rightarrow$ orquesta el funcionamiento del sistema RAG integrando recuperación, generación y gestión de respuestas.
-	.2 web\_scraping/.
-	.3 DescargarPliegos.py $\rightarrow$ script encargado de descargar los documentos PDF de licitaciones.
-	.3 PliegosPlaywrightAsincrono.py $\rightarrow$ implementa el web scraping asíncrono mediante Playwright para obtener datos de licitaciones.
-	.3 pliegos\_pdfs.json $\rightarrow$ almacena los enlaces y metadatos de los documentos PDF obtenidos.
-	.3 resultados\_playwright\_asincrono\_servidor.json $\rightarrow$ contiene los resultados del scraping (enlaces, información extraída, etc.).
-	.2 evaluation/.
-	.3 config.env $\rightarrow$ variables para definir la evaluación RAG.
-	.3 evaluacion\_RAGAS.py $\rightarrow$ script para evaluar el sistema RAG (RAGAS + embeddings). 
-	.3 generar\_dataset\_ARES.py $\rightarrow$ script para generar el dataset para ARES.
-	.3 generar\_preguntas\_ARES.py $\rightarrow$ script para generar pares pregunta-respuesta.
-	.3 rag\_evaluation\_service.py $\rightarrow$ script para generar los archivos JSON de salida.
-	.3 requirements.txt $\rightarrow$ dependencias necesarias para ejecutar la evaluación RAG.
+	.2 markdown/Conversion\_markdown.py $\rightarrow$ implementa la conversión de documentos PDF a formato Markdown, incluyendo limpieza y estructuración del texto.
+	.2 rag/ $\rightarrow$ gestión de las funcionalidades del sistema RAG.
+	.2 web\_scraping/ $\rightarrow$ obtención de los documentos de forma automática.
+	.2 evaluation/ funcionalidades para evaluar el sistema RAG.
 	.2 email\_verification.py $\rightarrow$ verifica los correos electrónicos usando la API Emailable.
 	.2 markdown\_conversion\_state.py $\rightarrow$ control de estado de las tareas de conversión a Markdown.
 	.2 vector\_update\_state.py $\rightarrow$ control de estado de las tareas de actualización de la base de datos vectorial.
 	.2 web\_scraping\_state.py $\rightarrow$ control de estado de las tareas del web scraping.
 }}
 
+\vspace{0.5cm} 
+{\footnotesize
+\dirtree{%
+	.1 app/PythIA/app/main/code/services/rag/.
+	.2 PrototipoRAGpy $\rightarrow$ implementación del pipeline RAG (recuperación de chunks relevantes y generación de respuestas con el LLM).
+	.2 default\_prompts.py $\rightarrow$ define los prompts por defecto utilizados para interactuar con los modelos de lenguaje.
+	.2 service.py $\rightarrow$ orquesta el funcionamiento del sistema RAG integrando recuperación, generación y gestión de respuestas.
+}}
+
+
+\vspace{0.5cm} 
+{\footnotesize
+\dirtree{%
+	.1 app/PythIA/app/main/code/services/web\_scraping/.
+	.2 DescargarPliegos.py $\rightarrow$ script encargado de descargar los documentos PDF de licitaciones.
+	.2 PliegosPlaywrightAsincrono.py $\rightarrow$ implementa el web scraping asíncrono mediante Playwright para obtener datos de licitaciones.
+	.2 pliegos\_pdfs.json $\rightarrow$ almacena los enlaces y metadatos de los documentos PDF obtenidos.
+	.2 resultados\_playwright\_asincrono\_servidor.json $\rightarrow$ contiene los resultados del scraping (enlaces, información extraída, etc.).
+}}
+
+\vspace{0.5cm} 
+{\footnotesize
+\dirtree{%
+	.1 app/PythIA/app/main/code/services/evaluation/.
+	.2 config.env $\rightarrow$ variables para definir la evaluación RAG.
+	.2 evaluacion\_RAGAS.py $\rightarrow$ script para evaluar el sistema RAG (RAGAS + embeddings). 
+	.2 generar\_dataset\_ARES.py $\rightarrow$ script para generar el dataset para ARES.
+	.2 generar\_preguntas\_ARES.py $\rightarrow$ script para generar pares pregunta-respuesta.
+	.2 rag\_evaluation\_service.py $\rightarrow$ script para generar los archivos JSON de salida.
+	.2 requirements.txt $\rightarrow$ dependencias necesarias para ejecutar la evaluación RAG.
+}}
+\vspace{0.2cm} 
+
 En el directorio \file{resources} se encuentran los elementos de la capa de presentación de la aplicación. Incluye tanto las plantillas HTML renderizadas dinámicamente como los recursos estáticos utilizados por la interfaz web.
 
 Dentro de él se encuentra el directorio \file{tempaltes} y el \file{static}. En el directorio \file{tempaltes} se encuentran las plantillas HTML renderizadas por Flask mediante el motor de plantillas Jinja2, las cuales forman la capa de vista de la aplicación. En el directorio \file{static} se encuentran los recursos estáticos que utiliza la aplicación web. Estos archivos no son procesados por el servidor y se envían directamente al navegador.
 
+\vspace{0.5cm} 
 {\footnotesize
 \dirtree{%
-	.1 templates/.
+	.1 app/PythIA/app/main/resources/templates/.
 	.2 components/ $\rightarrow$ fragmentos reutilizables de interfaz compartidos entre distintas páginas.
 	.2 rag/ $\rightarrow$ chatbot y formulario para consultar al modelo.
 	.2 base.html $\rightarrow$ plantilla base que define la estructura común (cabecera, navegación, estilos), reutilizada por el resto mediante herencia de Jinja2.
@@ -180,10 +222,10 @@ Dentro de él se encuentra el directorio \file{tempaltes} y el \file{static}. En
 	.2 view\_markdown.html $\rightarrow$ interfaz para visualizar documentos convertidos a formato Markdown.
 }}
 
-
+\clearpage
 {\footnotesize
 \dirtree{%
-	.1 static/.
+	.1 app/PythIA/app/main/resources/static/.
 	.2 css/ $\rightarrow$ hojas de estilo utilizadas para definir el diseño visual de la aplicación.
 	.2 js/ $\rightarrow$ scripts JavaScript que aportan interactividad a la interfaz (gestión de eventos, peticiones asíncronas, validaciones, gráficas, etc.).
 	.2 img/$\rightarrow$ imágenes utilizadas en la interfaz.
@@ -193,6 +235,7 @@ Esta separación de la aplicación permite tener tres módulos separados clarame
 
 La carpeta prototipos recoge las pruebas y versiones iniciales desarrolladas antes de llegar a la aplicación final. En ella se encuentran los primeros experimentos con RAG, la creación de la base de datos vectorial, la consulta mediante terminal, la descarga automática de pliegos, la conversión de documentos PDF a Markdown y las primeras versiones de la aplicación web.
 
+\vspace{0.5cm} 
 {\footnotesize
 \dirtree{%
 	.1 prototipos/.
@@ -263,7 +306,7 @@ Por otra parte, la aplicación implementa un sistema de \file{Blueprints} de \fi
 
 En la figura~\ref{fig:Diagramas/manual_programador_organizacion_codigo.pdf} se muestra la organización general de los principales componentes \eng{software} de la aplicación y las relaciones existentes entre ellos. El hecho de que se implemente una arquitectura modular permite añadir nuevas funcionalidades de manera sencilla. Para añadir una nueva funcionalidad se recomienda crear un nuevo \file{Blueprint} encargado de gestionar las rutas y peticiones \file{HTTP} asociadas. La lógica de negocio debe implementarse en la capa de servicios, manteniendo desacoplados los controladores de la funcionalidad interna. Si la nueva funcionalidad requiere persistencia, se pueden incorporar nuevos modelos \file{SQLAlchemy} y generar las migraciones correspondientes mediante \file{Flask-Migrate}. Del mismo modo, es posible integrar nuevos servicios externos, modelos de lenguaje, sistemas de procesamiento documental o mecanismos de recuperación de información reutilizando la estructura existente.
 
-\imagendiagram{Diagramas/manual_programador_organizacion_codigo.pdf}{Diagrama de organización del sistema.}{1.2}
+\imagendiagram{Diagramas/manual_programador_organizacion_codigo.pdf}{Diagrama de organización del sistema.}{1}
 
 El flujo de datos del procesamiento documental tras la carga de un documento por parte de un usuario en el sistema es:
 
@@ -345,7 +388,7 @@ La persistencia vectorial se realiza mediante \file{Qdrant}, donde se almacenan 
 
 El proyecto utiliza un amplio conjunto de dependencias organizadas por módulos funcionales. Estas librerías permiten implementar la aplicación \eng{web}, la lógica del sistema \eng{RAG}, la gestión documental, el procesamiento semántico y el despliegue completo del entorno.
 
-Las dependencias del proyecto se encuentran definidas principalmente en el archivo \file{requirements\_docker.txt}, ubicado en el directorio \file{app/PythIA/docker/}. Este archivo recoge las librerías necesarias para ejecutar la aplicación dentro del entorno \file{Docker} utilizado en producción. Para instalar dichas dependencias manualmente puede utilizarse el siguiente comando:
+Las dependencias del proyecto se encuentran definidas principalmente en el archivo \file{requirements\_docker.txt}, ubicado en \file{app/PythIA/docker/}. Este archivo recoge las librerías necesarias para ejecutar la aplicación dentro del entorno \file{Docker} utilizado en producción. Para instalar dichas dependencias manualmente puede utilizarse el siguiente comando:
 
 \begin{tcolorbox}[
 	colback=black!3,
@@ -448,7 +491,7 @@ El sistema \eng{RAG} constituye el núcleo funcional del proyecto y se apoya en 
 	\item \file{Ollama}: ejecución local de modelos \eng{LLM} utilizados durante la generación de respuestas.
 \end{itemize}
 
-El entorno de ejecución completo del sistema se encuentra desacoplado mediante contenedores \file{Docker}. Lo que permite aislar los componentes de la aplicación simplificando el despliegue y garantizando al reproducibilidad del entorno. . La coordinación de los servicios se realiza mediante \file{Docker Compose}, que automatiza la creación de la red interna, la gestión de las dependencias y la configuración a través de las variables de entorno. La aplicación \eng{web} se ejecuta en un contenedor \file{Flask} servido mediante \file{Gunicorn}, mientras que \file{Nginx} actúa como \file{proxy inverso} y punto de entrada para las conexiones externas. La persistencia de los datos relacionales se realiza mediante \file{PostgreSQL} y la información vectorial utilizada por el sistema \eng{RAG} se almacena en \file{Qdrant}. Los modelos de lenguaje y \file{OCR} se ejecutan en instancias independientes de \file{Ollama}, permitiendo separar las cargas de trabajo asociadas a la generación de respuestas y al procesamiento documental. Tambié,, se ha configurado un entorno específico para la ejecución de tareas de \eng{Web Scraping} y de un contenedor destinado a la ejecución de pruebas (Ver imagen~\ref{fig:Diagramas/entorno_ejecucion.pdf}).
+El entorno de ejecución completo del sistema se encuentra desacoplado mediante contenedores \file{Docker}. Lo que permite aislar los componentes de la aplicación simplificando el despliegue y garantizando al reproducibilidad del entorno. . La coordinación de los servicios se realiza mediante \file{Docker Compose}, que automatiza la creación de la red interna, la gestión de las dependencias y la configuración a través de las variables de entorno. La aplicación \eng{web} se ejecuta en un contenedor \file{Flask} servido mediante \file{Gunicorn}, mientras que \file{Nginx} actúa como \file{proxy inverso} y punto de entrada para las conexiones externas. La persistencia de los datos relacionales se realiza mediante \file{PostgreSQL} y la información vectorial utilizada por el sistema \eng{RAG} se almacena en \file{Qdrant}. Los modelos de lenguaje y \file{OCR} se ejecutan en instancias independientes de \file{Ollama}, permitiendo separar las cargas de trabajo asociadas a la generación de respuestas y al procesamiento documental. También,, se ha configurado un entorno específico para la ejecución de tareas de \eng{Web Scraping} y de un contenedor destinado a la ejecución de pruebas (Ver imagen~\ref{fig:Diagramas/entorno_ejecucion.pdf}).
 
 \imagendiagram{Diagramas/entorno_ejecucion.pdf}{Diagrama del entorno de ejecución configurado desde el archivo \file{Docker-compose}.}{0.9}
 
@@ -570,8 +613,8 @@ Estas variables también se utilizan en el archivo \file{docker-compose.yml} par
 	{\footnotesize
 		\noindent
 		\texttt{env\_file:}\\
-		\texttt{	    - .env}\\
-		\texttt{	    - secret.env}
+		\hspace*{1em}\texttt{- .env}\\
+		\hspace*{1em}\texttt{- secret.env}
 	}
 \end{tcolorbox}
 
@@ -816,8 +859,8 @@ Una vez desplegada la aplicación en local se puede acceder a la \eng{web} a tra
 ]
 	{\footnotesize
 		\noindent
-		\texttt{\href{http://127.0.0.1:7000}{http://127.0.0.1:7000}}\\
-		\texttt{\href{http://localhost:7000/}{http://localhost:7000}}\\
+		\texttt{http://127.0.0.1:7000}\\
+		\texttt{http://localhost:7000}\\
 		\texttt{	http://IP\_del\_dispositivo:7000}
 	}
 \end{tcolorbox}

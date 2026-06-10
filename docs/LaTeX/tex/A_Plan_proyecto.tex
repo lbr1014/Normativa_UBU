@@ -720,18 +720,75 @@ Para analizar la viabilidad económica se ha seguido el coste total de propiedad
 	\label{tabla:explicacion_TCO}
 \end{table}
 
-Para llevar a cabo el estudio de la viabilidad económica se va a considerar que el trabajo llevado a cabo por la alumna lo ha realizado un desarrollador contratado durante los 9 meses que ha durado el proyecto. Si se supone un escenario empresarial real en España y se toma como referencia el \myhref{https://www.ufv.es/cuanto-cobra-un-ingeniero-informatico-por-mes-preguntas-grados/}{Salario Medio de un Graduado en Ingeniería Informática}, que se corresponde a unos 25\,000\,€ al año, es decir, 1\,785\,€ al mes (se divide en 14 pagas). Además, a este salario hay que añadirle los gastos por la cotización a la \myhref{https://www.seg-social.es/wps/portal/wss/internet/Trabajadores/CotizacionRecaudacionTrabajadores/36537}{Seguridad Social}. Normalmente la cotización es del 28,30\%, de los cuales 23,60\% se corresponden con gastos de la empresa. Este impuesto se conoce como contingencias comunes. Además, debe sumarse la tasa de desempleo, de la cual la empresa debe pagar un 5,5\% (el empleado paga el otro 1,55\% para completar el 7,05\% de la tasa total). Por último debe pagarse un 0,2\% de FOGASA. Por lo cual el gasto mensual final por la contratación del desarrollado sería:
+Para llevar a cabo el estudio de la viabilidad económica se va a considerar que el trabajo llevado a cabo por la alumna lo ha realizado un desarrollador contratado durante los 9 meses que ha durado el proyecto. 
+
+Para estimar el coste laboral se supone un escenario empresarial real en España, tomando como referencia el \myhref{https://www.ufv.es/cuanto-cobra-un-ingeniero-informatico-por-mes-preguntas-grados/}{Salario Medio de un Graduado en Ingeniería Informática}, que se corresponde a unos 25\,000\,€ brutos al año. Esto equivale a 1\,785\,€ brutos al mes (se divide en 14 pagas). 
+
+Al salario bruto del trabajador debe añadirse la cotización empresarial a la \myhref{https://www.seg-social.es/wps/portal/wss/internet/Trabajadores/CotizacionRecaudacionTrabajadores/36537}{Seguridad Social}. Normalmente la empresa asume diferentes conceptos de cotización, siendo el principal el correspondiente a las contingencias comunes. Además, debe contribuir por desempleo, Fondo de Garantía Salarial (FOGASA), formación profesional y el Mecanismo de Equidad Intergeneracional (MEI). También, se ha considerado una cotización del 1,5\% por accidentes de trabajo y enfermedades profesionales, correspondiente a una actividad de desarrollo de \eng{software} con bajo riesgo laboral. Esta cotización depende de la actividad económica de la empresa y del nivel de riesgo del puesto de trabajo. En conjunto, estos conceptos suponen aproximadamente un 32,15,\% adicional sobre la base de cotización del trabajador (ver Tabla~\ref{tabla:cotizaciones}).
+\begin{table}[p]
+	\centering
+	\begin{tabularx}{\linewidth}{p{0.40\linewidth} *{3}{>{\centering\arraybackslash}X}}
+		\toprule
+		\textbf{Concepto} &
+		\textbf{Empresa (\%)} &
+		\textbf{Trabajador (\%)} &
+		\textbf{Total (\%)} \\
+		\midrule
+		
+		Contingencias comunes &
+		23,60 &
+		4,70 &
+		28,30 \\
+		
+		Desempleo &
+		5,50 &
+		1,55 &
+		7,05 \\
+		
+		FOGASA &
+		0,20 &
+		-- &
+		0,20 \\
+		
+		Formación profesional &
+		0,60 &
+		0,10 &
+		0,70 \\
+		
+		MEI &
+		0,75 &
+		0,15 &
+		0,90 \\
+		
+		Accidentes de trabajo y \mbox{enfermedades profesionales} &
+		1,50 &
+		-- &
+		1,50 \\
+		
+		\midrule
+		
+		\textbf{Total} &
+		\textbf{32,15} &
+		\textbf{6,50} &
+		\textbf{38,65} \\
+		\bottomrule
+	\end{tabularx}
+	\caption{Cotizaciones a la Seguridad Social.}
+	\label{tabla:cotizaciones}
+\end{table}
+
+Teniendo en cuenta el salario bruto y las cotizaciones empresariales a la Seguridad Social el gasto mensual final por la contratación del desarrollado sería:
 
 $$
-1\,785\frac{\,\text{\texteuro}}{\,\text{meses}} \cdot 1,236 \cdot 1,055 \cdot 1,002 
-= 2\,332,26\,\text{\texteuro}
+1\,785\frac{\,\text{\texteuro}}{\,\text{meses}} \cdot 1,3215
+= 2\,358,88\,\text{\texteuro}
 $$
 
 El gasto total tras los 9 meses que ha durado el desarrollo sería:
 
 $$
-1\,785\frac{\,\text{\texteuro}}{\,\text{meses}} \cdot 1,236 \cdot 1,055 \cdot 1,002 \cdot 9\,\text{meses}
-= 20\,990,34\,\text{\texteuro}
+1\,785\frac{\,\text{\texteuro}}{\,\text{meses}} \cdot 1,3215 \cdot 9\,\text{meses}
+= 21\,229,90\,\text{\texteuro}
 $$
 
 
@@ -800,7 +857,7 @@ Los costes totales del proyecto vienen desglosados en la tabla~\ref{tabla:coste}
 		\toprule
 		\textbf{Componentes}    & \textbf{Estimación (\texteuro)}\\
 		\midrule
-		Empleados & 20\,990,34\\
+		Empleados & 21\,229,90\\
 		Adquisición \eng{hardware} & 180  \\
 		Adquisición \eng{software} & 21,75  \\
 		Instalación & 2\,522,92  \\
@@ -810,7 +867,8 @@ Los costes totales del proyecto vienen desglosados en la tabla~\ref{tabla:coste}
 		Infraestructura & 0 \\
 		Tiempo inactivo & 0 \\
 		Espacio y energía & 720 \\
-		Coste total del proyecto & 32\,219,40 \\
+		\midrule
+		Coste total del proyecto & 32\,458,96 \\
 		\bottomrule
 	\end{tabularx}
 	\caption{Coste total del proyecto.}

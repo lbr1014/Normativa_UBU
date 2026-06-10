@@ -14,7 +14,7 @@ Este diseño busca facilitar tanto el desarrollo y mantenimiento de la aplicaci�
 
 \section{Diseño de datos} \label{dis:dtos}
 
-Para llevar a cabo la aplicación se han definido las siguientes entidades principales (ver figura~\ref{fig:Diagramas/Entidades})\footnote{Esta figura se ha generado utilizando la aplicación DBeaver (\href{https://dbeaver.io/}{https://dbeaver.io/})}
+Para llevar a cabo la aplicación se han definido las siguientes entidades principales (ver figura~\ref{fig:Diagramas/Entidades})\footnote{Esta figura se ha generado utilizando la aplicación DBeaver (\href{https://dbeaver.io/}{https://dbeaver.io/}).}
 \begin{itemize}
 	\item \textbf{Usuario}: esta entidad representa a cada persona registrada en la aplicación. Distingue entre usuario normal y administrador, al cual se le permite realizar la gestión de documentos y usuarios. Esta entidad maneja un identificador (id) que es la clave primaria, un nombre, un \eng{email} que debe ser único, una contraseña que se almacena cifrada, el último inicio de sesión, el rol, el número de inicios de sesión realizados, el país, el idioma preferido, el modelo de lenguaje seleccionado por defecto y el modo visual de la interfaz.
 	\item \textbf{Consulta}: esta entidad guarda las preguntas que realizan los usuarios, así como las respuestas que da el \eng{LLM} alimentado por el \eng{RAG}. Es la base para el historial de consultas. Cada consulta registra la pregunta formulada, la respuesta obtenida, los fragmentos documentales utilizados como contexto, el tiempo de respuesta, el dispositivo empleado para la ejecución y la fecha de realización de la consulta.
@@ -36,17 +36,17 @@ Además de las entidades principales del sistema, se han definido varias entidad
 	\item \textbf{RAGEvaluationState}: esta entidad almacena la información asociada a las evaluaciones automáticas del sistema \eng{RAG}. Registra el progreso de la evaluación, los resultados obtenidos y las rutas de los distintos archivos generados durante el proceso, incluyendo configuraciones, conjuntos de datos y métricas calculadas.
 \end{itemize}
 
-\imagendiagram{Diagramas/Entidades_asincronas}{Diagrama Entidad/Relación de las entidades asíncronas generado por DBeaver.}{1.1}
+\imagendiagram{Diagramas/Entidades_asincronas}{Diagrama de las entidades asíncronas generado por DBeaver.}{1.1}
 
 
 Las relaciones entre las entidades del sistema son (ver figura~\ref{fig:entidad_relacion}):
 
 \begin{itemize}
-	\item Un \textbf{usuario} puede realizar cero o muchas \textbf{consultas}, mientras que cada consulta pertenece a un único usuario. Esta relación permite mantener el historial de consultas asociado a cada cuenta.
-	\item Un \textbf{usuario} puede tener cero o muchas instancias de \textbf{RAGQueryState}, utilizadas para gestionar consultas ejecutadas de forma asíncrona. Cada estado de consulta pertenece a un único usuario.
-	\item Un \textbf{documento} puede contener cero o muchos \textbf{chunks}. La cardinalidad mínima es cero porque un documento puede encontrarse cargado en el sistema pero todavía no haber sido procesado ni fragmentado. Cada \eng{chunk} pertenece a un único documento.
-	\item Cada \textbf{chunk} tiene asociado un único \textbf{embedding}, que almacena la información necesaria para gestionar su representación vectorial. Del mismo modo, cada \eng{embedding} pertenece a un único \eng{chunk}.
-	\item La relación entre \textbf{consultas} y \textbf{chunks} es de muchos a muchos. Una consulta puede utilizar múltiples fragmentos documentales para generar una respuesta, mientras que un mismo fragmento puede participar en diferentes consultas realizadas por distintos usuarios. Esta relación se implementa mediante la entidad intermedia \textbf{ConsultaChunk}.
+	\item Un <<usuario>> puede realizar cero o muchas <<consultas>>, mientras que cada <<consulta>> pertenece a un único <<usuario>>. Esta relación permite mantener el historial de consultas asociado a cada cuenta.
+	\item Un <<usuario>> puede tener cero o muchas instancias de  <<RAGQueryState>>, utilizadas para gestionar consultas ejecutadas de forma asíncrona. Cada estado de consulta (<<RAGQueryState>>) pertenece a un único <<usuario>>.
+	\item Un <<documento>> puede contener cero o muchos <<chunks>>. La cardinalidad mínima es cero porque un documento puede encontrarse cargado en el sistema pero todavía no haber sido procesado ni fragmentado. Cada <<chunk>> pertenece a un único <<documento>>.
+	\item Cada <<chunk>> tiene asociado un único <<embedding>>, que almacena la información necesaria para gestionar su representación vectorial. Del mismo modo, cada <<embedding>> pertenece a un único <<chunk>>.
+	\item La relación entre <<consultas>> y <<chunks>> es de muchos a muchos. Una <<consulta>> puede utilizar múltiples fragmentos documentales (<<chunks>>) para generar una respuesta, mientras que un mismo fragmento (<<chunk>>) puede participar en diferentes <<consultas>> realizadas por distintos usuarios. Esta relación se implementa mediante una entidad intermedia <<ConsultaChunk>>.
 \end{itemize}
 
 \begin{figure}
@@ -55,17 +55,19 @@ Las relaciones entre las entidades del sistema son (ver figura~\ref{fig:entidad_
     \centering
     \begin{subfigure}[t]{\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{Diagramas/Entidad_Relacion}
+        \includegraphics[width=\textwidth]{Diagramas/Entidad_Relacion.pdf}
         \caption{Diagrama Entidad/Relación simplificado.}
     \end{subfigure}
 \end{minipage}
-\hfill
+
+\vspace{0.5cm}
+
 \begin{minipage}[c]{\textwidth}
     \centering
-	\vspace*{0.2cm}
+	\vspace{0.2cm}
     \begin{subfigure}[t]{\textwidth}
         \centering
-        \includegraphics[width=\textwidth]{Diagramas/herencia_tareas_asincronas}
+        \includegraphics[width=\textwidth]{Diagramas/herencia_tareas_asincronas.pdf}
         \caption{Diagrama Entidad/Relación de las tareas asíncronas.}
     \end{subfigure}
 \end{minipage}
@@ -125,9 +127,9 @@ La organización general de estas capas puede observarse en la figura~\ref{fig:A
 
 \subsection{Arquitectura de cuatro capas de la aplicación}
 
-Aunque la arquitectura cliente-servidor permite comprender la organización general del sistema, resulta conveniente detallar con mayor precisión la estructura interna de la aplicación. Para ello, PythIA se ha diseñado siguiendo una arquitectura de cuatro capas (ver figura~\ref{fig:Arquitectura/Arquitectura_4capas.pdf})), en la que se separan claramente las responsabilidades asociadas a la interacción con el usuario, la lógica de negocio, la persistencia de la información y la integración con servicios externos. Esta organización facilita el mantenimiento y la evolución del sistema, ya que cada capa puede modificarse de forma relativamente independiente sin afectar significativamente al resto de componentes.
+Aunque la arquitectura cliente-servidor permite comprender la organización general del sistema, resulta conveniente detallar con mayor precisión la estructura interna de la aplicación. Para ello, PythIA se ha diseñado siguiendo una arquitectura de cuatro capas (ver figura~\ref{fig:Arquitectura/Arquitectura_4capas.pdf}), en la que se separan claramente las responsabilidades asociadas a la interacción con el usuario, la lógica de negocio, la persistencia de la información y la integración con servicios externos. Esta organización facilita el mantenimiento y la evolución del sistema, ya que cada capa puede modificarse de forma relativamente independiente sin afectar significativamente al resto de componentes.
 
-\imagendiagram{Arquitectura/Arquitectura_4capas.pdf}{Arquitectura de 4 capas de la aplicación PythIA detallando la interacción entre los controladores, servicios y entidades.}{1}
+\imagendiagram{Arquitectura/Arquitectura_4capas.pdf}{Arquitectura de cuatro capas de la aplicación PythIA detallando la interacción entre los controladores, servicios y entidades.}{1}
 
 \begin{itemize}
 	\item \textbf{Capa de presentación}: es el punto de interacción entre los usuarios y el sistema. Está formada por los controladores implementados mediante \eng{Blueprints} de Flask y por las plantillas HTML generadas mediante Jinja2. Los controladores se encuentran organizados según las funcionalidades de la aplicación. Reciben las peticiones HTTP procedentes del navegador, validan la información recibida y delegan el procesamiento en los servicios correspondientes de la capa de negocio.
@@ -230,9 +232,9 @@ Los pasos para iniciar sesión son:
 
 En la figura ~\ref{fig:Diagramas/secuencia/Inicio_sesion} se puede observar el diagrama de secuencia correspondiente al proceso de inicio de sesión en la aplicación.
 
-\imagendiagram{Diagramas/secuencia/Inicio_sesion}{Diagrama de secuencia del proceso inicio de sesión en la aplicación PythIA.}{1}
+\imagendiagram{Diagramas/secuencia/Inicio_sesion}{Diagrama de secuencia del proceso inicio de sesión.}{1}
 
-Además del inicio de sesión, el sistema permite el registro de nuevos usuarios, aplicando la validación del correo electrónico mediante servicios externos (Emailable).
+Además del inicio de sesión, el sistema permite el registro de nuevos usuarios, aplicando la validación del correo electrónico mediante servicios externos~\footnote{Se utiliza la API de la herramienta Emailable(~\url{https://emailable.com/es/})}.
 
 Los pasos para el registro de un nuevo usuario son:
 \begin{enumerate}
@@ -262,7 +264,7 @@ Los pasos para el registro de un nuevo usuario son:
 
 En la figura~\ref{fig:Diagramas/secuencia/Registro} se puede observar el diagrama de secuencia correspondiente al proceso de registro de usuarios en la aplicación.
 
-\imagendiagram{Diagramas/secuencia/Registro}{Diagrama de secuencia del proceso de registrar un usuario nuevo en la aplicación PythIA (con validación de correo electrónico).}{1}
+\imagendiagram{Diagramas/secuencia/Registro}{Diagrama de secuencia del proceso de registrar un usuario nuevo (con validación de correo electrónico).}{1}
 
 \subsubsection{Proceso de consulta RAG}
 
@@ -284,7 +286,7 @@ Este procedimiento permite combinar la capacidad de razonamiento y generación d
 
 En la figura~\ref{fig:Diagramas/secuencia/Consulta_rag} se puede observar el diagrama de secuencia correspondiente al proceso de consulta mediante el sistema RAG.
 
-\imagendiagram{Diagramas/secuencia/Consulta_rag}{Diagrama de secuencia del proceso de realizar una consulta en la aplicación PythIA.}{1}
+\imagendiagram{Diagramas/secuencia/Consulta_rag}{Diagrama de secuencia del proceso de realizar una consulta.}{1}
 
 \subsubsection{Proceso de carga e indexación documental}
 
@@ -309,7 +311,7 @@ Una vez completado este procedimiento, los documentos quedan disponibles para se
 
 En la figura~\ref{fig:Diagramas/secuencia/Indexar} se puede observar el diagrama de secuencia correspondiente al proceso de cargar e indexar un nuevo documento en la base de conocimiento de la aplicación.
 
-\imagendiagram{Diagramas/secuencia/Indexar}{Diagrama de secuencia del proceso de cargar e indexar un nuevo documento en la aplicación PythIA.}{1}
+\imagendiagram{Diagramas/secuencia/Indexar}{Diagrama de secuencia del proceso de cargar e indexar un nuevo documento.}{1}
 
 \subsubsection{Proceso de actualización de la base documental}
 
@@ -342,7 +344,7 @@ Este procedimiento garantiza la consistencia entre los documentos almacenados, l
 
 En la figura~\ref{fig:Diagramas/secuencia/Actualizar} se puede observar el diagrama de secuencia correspondiente al proceso de actualización de la base documental.
 
-\imagendiagram{Diagramas/secuencia/Actualizar}{Diagrama de secuencia del proceso de actualizar la base documental de la aplicación PythIA.}{1}
+\imagendiagram{Diagramas/secuencia/Actualizar}{Diagrama de secuencia del proceso de actualizar la base documental.}{1}
 
 \subsubsection{Proceso de web scraping}
 
@@ -366,7 +368,7 @@ Este procedimiento permite mantener actualizada la colección documental de form
 
 En la figura~\ref{fig:Diagramas/secuencia/Web_scraping} se puede observar el diagrama de secuencia correspondiente al proceso de obtención de licitaciones a través de \eng{web scraping}.
 
-\imagendiagram{Diagramas/secuencia/Web_scraping}{Diagrama de secuencia del proceso de \eng{web scraping} de la aplicación PythIA.}{1}
+\imagendiagram{Diagramas/secuencia/Web_scraping}{Diagrama de secuencia del proceso de \eng{web scraping}.}{1}
 
 \subsubsection{Proceso de evaluación del sistema RAG}
 
@@ -390,7 +392,7 @@ Este procedimiento permite evaluar de forma sistemática la calidad del sistema 
 
 En la figura~\ref{fig:Diagramas/secuencia/Evaluacion} se puede observar el diagrama de secuencia correspondiente al proceso de evaluación del sistema RAG.
 
-\imagendiagram{Diagramas/secuencia/Evaluacion}{Diagrama de secuencia del proceso de evaluación del sistema RAG de la aplicación PythIA.}{1}
+\imagendiagram{Diagramas/secuencia/Evaluacion}{Diagrama de secuencia del proceso de evaluación del sistema RAG.}{1}
 
 \subsubsection{Gestión de tareas asíncronas}
 
@@ -413,7 +415,7 @@ Este mecanismo permite mejorar significativamente la experiencia de usuario, evi
 
 En la figura~\ref{fig:Diagramas/secuencia/Asincronas} se puede observar el diagrama de secuencia genérico correspondiente a los procesos de las tareas asíncronas del sistema.
 
-\imagendiagram{Diagramas/secuencia/Asincronas}{Diagrama de secuencia del proceso de las tareas asíncronas de la aplicación PythIA.}{1}
+\imagendiagram{Diagramas/secuencia/Asincronas}{Diagrama de secuencia del proceso de las tareas asíncronas.}{1}
 
 Las consultas realizadas por los usuarios constituyen la funcionalidad principal de la aplicación y, por tanto, tienen prioridad sobre el resto de tareas asíncronas del sistema.Se pretende minimizar el tiempo de espera del usuario hasta obtener una respuesta incluso cuando hay procesos largos en segundo plano. 
 
@@ -427,7 +429,7 @@ En la figura~\ref{fig:Diagramas/secuencia/Prioridad_consulta} se muestra el diag
 
 El diseño de las interfaces se ha desarrollado de manera incremental. Inicialmente se hicieron bocetos genéricos para plasmar las principales funcionalidades de la aplicación. Posteriormente se fue iterando sobre esos diseños hasta llegar a las interfaces finales de la \eng{web}.
 
-Los prototipos iniciales que se crearon se ilustran en las figuras ~\ref{fig:Diseño_interfaces/prototipos/Inicio}, ~\ref{fig:Diseño_interfaces/prototipos/Login}, ~\ref{fig:Diseño_interfaces/prototipos/Singup}, ~\ref{fig:Diseño_interfaces/prototipos/Main}, ~\ref{fig:Diseño_interfaces/prototipos/Historial}, ~\ref{fig:Diseño_interfaces/prototipos/Main_details}, ~\ref{fig:Diseño_interfaces/prototipos/RAG}, ~\ref{fig:Diseño_interfaces/prototipos/Users}, ~\ref{fig:Diseño_interfaces/prototipos/Add_user}, ~\ref{fig:Diseño_interfaces/prototipos/Edit_user} y ~\ref{fig:Diseño_interfaces/prototipos/Documents}.
+Los prototipos iniciales que se crearon se ilustran en las figuras~\ref{fig:Diseño_interfaces/prototipos/Inicio}, \ref{fig:Diseño_interfaces/prototipos/Login}, \ref{fig:Diseño_interfaces/prototipos/Singup}, \ref{fig:Diseño_interfaces/prototipos/Main}, \ref{fig:Diseño_interfaces/prototipos/Historial}, \ref{fig:Diseño_interfaces/prototipos/Main_details}, \ref{fig:Diseño_interfaces/prototipos/RAG}, \ref{fig:Diseño_interfaces/prototipos/Users}, \ref{fig:Diseño_interfaces/prototipos/Add_user}, \ref{fig:Diseño_interfaces/prototipos/Edit_user} y~\ref{fig:Diseño_interfaces/prototipos/Documents}.
 
 \imagenflotante{Diseño_interfaces/prototipos/Inicio}{Prototipo de la página de inicio.}
 \imagenflotante{Diseño_interfaces/prototipos/Login}{Prototipo de la página de inicio de sesión.}
@@ -461,11 +463,17 @@ Se definieron dos paletas cromáticas basadas en tonalidades azules, una orienta
         \includegraphics[width=\textwidth]{Diseño_interfaces/Cabecera}
         \caption{Diseño preliminar de la cabecera con nueva información de usuario.}
     \end{subfigure}
+
+	\vspace{0.6cm}    
+    
     \begin{subfigure}[t]{\textwidth}
         \centering
         \includegraphics[width=\textwidth]{Diseño_interfaces/Cabecera_final}
         \caption{Cabecera final de la aplicación PythIA modo oscuro.}
     \end{subfigure}
+
+	\vspace{0.6cm}     
+    
     \begin{subfigure}[t]{\textwidth}
         \centering
         \includegraphics[width=\textwidth]{Diseño_interfaces/Cabecera_final2}
@@ -482,11 +490,17 @@ Se definieron dos paletas cromáticas basadas en tonalidades azules, una orienta
         \includegraphics[width=\textwidth]{Diseño_interfaces/Table_asks}
         \caption{Diseño preliminar del historial en formato tabla.}
     \end{subfigure}
+
+	\vspace{0.5cm}     
+    
     \begin{subfigure}[t]{0.85\textwidth}
         \centering
         \includegraphics[width=\textwidth]{Diseño_interfaces/Historial}
         \caption{Tarjeta final de consulta de la aplicación PythIA modo oscuro.}
     \end{subfigure}
+
+	\vspace{0.5cm}     
+    
     \begin{subfigure}[t]{0.85\textwidth}
         \centering
         \includegraphics[width=\textwidth]{Diseño_interfaces/Historial2}
@@ -503,6 +517,9 @@ Se definieron dos paletas cromáticas basadas en tonalidades azules, una orienta
         \includegraphics[width=\textwidth]{Diseño_interfaces/Table_documents}
         \caption{Diseño preliminar de la tabla documentos.}
     \end{subfigure}
+    
+	\vspace{0.5cm}     
+    
     \begin{minipage}[c]{0.43\textwidth}
     \centering
     \begin{subfigure}[t]{\textwidth}
@@ -510,7 +527,8 @@ Se definieron dos paletas cromáticas basadas en tonalidades azules, una orienta
         \includegraphics[width=\textwidth]{Diseño_interfaces/Table_documents2}
         \caption{Diseño final de la tabla \mbox{documentos} modo oscuro.}
     \end{subfigure}
-    \end{minipage}
+    \end{minipage} 
+    \hfill
     \begin{minipage}[c]{0.43\textwidth}
     \centering
     \begin{subfigure}[t]{\textwidth}
@@ -533,14 +551,16 @@ Se definieron dos paletas cromáticas basadas en tonalidades azules, una orienta
         \caption{Diseño preliminar de la interfaz de consulta.}
     \end{subfigure}
 \end{minipage}
+\hfill
 \begin{minipage}[c]{0.43\textwidth}
     \centering
-	\vspace*{0.2cm}
     \begin{subfigure}[t]{\textwidth}
         \centering
         \includegraphics[width=\textwidth]{Diseño_interfaces/RAG_def2}
         \caption{Diseño final de la interfaz de consulta en modo oscuro.}
     \end{subfigure}
+    
+    \vspace{0.5cm} 
 
     \begin{subfigure}[t]{\textwidth}
         \centering
@@ -561,9 +581,10 @@ Se definieron dos paletas cromáticas basadas en tonalidades azules, una orienta
         \includegraphics[width=\textwidth]{Diseño_interfaces/PythIA_letras}
         \caption{Letrero con el nombre de la palicaicón.}
     \end{subfigure}
-    \begin{subfigure}[t]{\textwidth}
+    \hfill
+    \begin{subfigure}[t]{0.43\textwidth}
         \centering
-        \includegraphics[width=0.43\textwidth]{Diseño_interfaces/PythIA_logo}
+        \includegraphics[width=\textwidth]{Diseño_interfaces/PythIA_logo}
         \caption{Logotipo completo.}
     \end{subfigure}
 \caption{Diseño de interfaz -- Logotipos de la aplicación PythIA.}
