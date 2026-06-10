@@ -3,20 +3,20 @@
 En este apartado se van a definir los conceptos más relevantes a tener en cuenta sobre el proyecto, por lo cual se considera importante definir qué es el \eng{Web Scraping}, qué es un RAG y cuáles son sus aportaciones más significativas a los LLM que ya existen. Además, se considera importante contextualizar su origen, y para ello se va a comenzar explicando qué son los LLM y sus principales limitaciones.
 
 \section{\eng{Web Scraping}}
-\eng{Web Scraping} es el proceso automático de extraer información expuesta en páginas \eng{web} y transformarla en datos estructurados. Se realiza mediante programas que descargan y analizan el código HTML o emulan la navegación de un usuario con un navegador controlado por código. Se apoya en técnicas de rastreo (\eng{crawling}), \eng{parseo} y normalización para preparar el dato para su análisis o integración en sistemas~\cite{webScraping}.
+\eng{Web Scraping} es el \textbf{proceso automático de extraer información} expuesta en páginas \eng{web} y transformarla en datos estructurados. Se realiza mediante programas que descargan y analizan el código HTML o emulan la navegación de un usuario con un navegador controlado por código. Se apoya en técnicas de rastreo (\eng{crawling}), \eng{parseo} y normalización para preparar el dato para su análisis o integración en sistemas~\cite{webScraping}.
 
 Existe una convención estándar, llamada \eng{Robots Exclusion Protocol} (\texttt{robots.txt}), mediante la cual un servidor \eng{web} indica qué URL se deben evitar rastrear. En este archivo se especifica qué partes del sistema están permitidas o prohibidas para cada tipo de \eng{bot}. Aunque, el incumplimiento de este protocolo no siempre implica por sí mismo una infracción legal, respetarlo constituye una buena práctica ética y técnica en procesos de \eng{web scraping}~\cite{rfc9309}. 
 
 \section{LLM}
-Los \eng{Large Language Model} (LLM), que se traduce como los grandes modelos del lenguaje, son modelos de aprendizaje automático que han sido entrenados con grandes conjuntos de datos generados por humanos. Estos datos se usan para encontrar patrones estadísticos y replicar nuestras habilidades lingüísticas. Por lo cual, se puede decir que en esencia son modelos de predicción del siguiente \eng{token} o lo que es lo mismo de la siguiente palabra~\cite{book:RAG_SimpleGuide}.
+Los \eng{Large Language Model} (LLM), que se traduce como los grandes modelos del lenguaje, son modelos de aprendizaje automático que han sido entrenados con grandes conjuntos de datos generados por humanos. Estos datos se usan para \textbf{encontrar patrones estadísticos y replicar nuestras habilidades lingüísticas}. Por lo cual, se puede decir que en esencia son modelos de predicción del siguiente \eng{token} o lo que es lo mismo de la siguiente palabra~\cite{book:RAG_SimpleGuide}.
 
 Algunos ejemplos de LLM son \myhref{https://chat.openai.com}{GPT}, \myhref{https://claude.ai}{Claude}, \myhref{https://gemini.google.com/app?hl=es}{Gemini}, \myhref{https://ai.meta.com/llama/}{LLaMA}, \myhref{https://mistral.ai/}{Mistral} o \myhref{https://qwen.ai/home}{Qwen}. Herramientas como \myhref{https://ollama.com/}{Ollama} permiten ejecutar algunos de estos modelos (o sus versiones de parámetros reducidos) en local.
 
 Las principales características de los LLM son las siguientes:
 \begin{itemize}
 \tightlist
-	\item Naturaleza de predicción del próximo \eng{token}: como se ha mencionado anteriormente, los LLM seleccionan la palabra más probable de una distribución. La elección de esta palabra se basa en los patrones estadísticos que ha aprendido con los datos del entrenamiento.
-	\item Memoria paramétrica: es el conocimiento interno del LLM. Consiste en la información con la que ha sido entrenado y se basa únicamente en sus parámetros. Por lo cual es una memoria limitada y estática.
+	\item \textbf{Naturaleza de predicción del próximo \eng{token}}: como se ha mencionado anteriormente, los LLM seleccionan la palabra más probable de una distribución. La elección de esta palabra se basa en los patrones estadísticos que ha aprendido con los datos del entrenamiento.
+	\item \textbf{Memoria paramétrica}: es el conocimiento interno del LLM. Consiste en la información con la que ha sido entrenado y se basa únicamente en sus parámetros. Por lo cual es una memoria limitada y estática.
 \end{itemize}
 
 Las principales limitaciones de los LLM son las siguientes:
@@ -30,7 +30,7 @@ Las principales limitaciones de los LLM son las siguientes:
 La solución para solventar estas limitaciones es darle al LLM el contexto\footnote{El contexto del LLM es la información no paramétrica que se le proporciona en la consulta o \eng{prompt} para que el modelo genere una respuesta más precisa, actual y fundamentada.} que le falta. Para proporcionar dicho contexto se puede expandir la memoria del LLM mediante generación aumentada, es decir, incorporando un RAG.
 
 \section{RAG}
-\eng{Retrieval Augmented Generation} (RAG), o en español, generación aumentada por recuperación, es una técnica que consiste en recuperar la información más relevante de una fuente externa. Con dicha información se aumenta la entrada al LLM, lo que permite que genere una respuesta mucho más precisa, contextual y confiable (ver pasos en la imagen~\ref{fig:Memoria/Funcionamiento_RAG}). Para ello, el RAG usa tres pasos: recuperar, aumentar y generar. 
+\eng{Retrieval Augmented Generation} (RAG), o en español, generación aumentada por recuperación, es una técnica que consiste en \textbf{recuperar la información más relevante de una fuente externa}. Con dicha información se aumenta la entrada al LLM, lo que permite que genere una respuesta mucho más precisa, contextual y confiable (ver pasos en la imagen~\ref{fig:Memoria/Funcionamiento_RAG}). Para ello, el RAG usa tres pasos: recuperar, aumentar y generar. 
 
 \imagenflotante{Memoria/Funcionamiento_RAG}{Diagrama del funcionamiento del RAG.}{1}
 
@@ -41,7 +41,7 @@ El RAG combina dos tipos de memoria:
 	\item \textbf{La memoria no paramétrica}: es información externa al LLM que se le puede proporcionar. Es un conocimiento externo y dinámico que se puede extender tanto como se desee y que puede contener documentos propietarios.
 \end{itemize}
 
-Por lo cual conociendo esto, se puede decir que la generación aumentada por recuperación (RAG) es una metodología que busca ampliar la memoria paramétrica de un LLM incorporando una memoria no paramétrica explícita. A través de un recuperador, se obtiene información relevante de esta memoria externa, la cual se añade al \eng{prompt} y luego se envía al LLM. De esta forma, el modelo puede producir respuestas más contextuales, confiables y precisas~\cite{book:RAG_SimpleGuide}.
+Por lo cual conociendo esto, se puede decir que la generación aumentada por recuperación (RAG) es una metodología que busca \textbf{ampliar la memoria paramétrica de un LLM} incorporando una memoria no paramétrica explícita. A través de un recuperador, se obtiene información relevante de esta memoria externa, la cual se añade al \eng{prompt} y luego se envía al LLM. De esta forma, el modelo puede producir respuestas más contextuales, confiables y precisas~\cite{book:RAG_SimpleGuide}.
 
 Los objetivos de un sistema RAG son:
 \begin{itemize}
@@ -68,7 +68,7 @@ El primer paso es el de recopilar los documentos externos, convertirlos a vector
 Un sistema RAG se construye en dos \eng{pipelines} complementarios, el de indexación (\eng{offline}/asíncrono), y el de generación (\eng{online}/ tiempo real). El primero crea y mantiene la memoria no paramétrica o base de conocimiento. El segundo gestiona la interacción con el usuario, realizando la recuperación, el aumento del \eng{prompt} y la generación de la respuesta. Esta separación es estructural en el diseño de RAG y permite optimizar la precisión y la latencia del sistema~\cite{book:RAG_SimpleGuide}.
 
 \subsection{\eng{Pipeline} de indexación (\eng{offline})}
-Su objetivo es consolidar y preparar el conocimiento para que el \eng{pipeline} de generación pueda consultarlo eficientemente. Consta de cinco pasos:
+Su objetivo es \textbf{consolidar y preparar el conocimiento} para que el \eng{pipeline} de generación pueda consultarlo eficientemente. Consta de cinco pasos:
 \begin{enumerate}
 \tightlist
 	\item Conectarse a las fuentes externas.
@@ -104,7 +104,7 @@ Los componentes clave del \eng{pipeline} de indexación son:
 Cuando la recuperación se externaliza, es decir, cuando la búsqueda y obtención de información no la realiza el sistema sobre su propia base vectorial, sino que se delega en un tercero (como por ejemplo una API) o en el documento que aporta el usuario, no es imprescindible construir un \eng{pipeline} de indexación ni mantener una base vectorial. En cambio, en un RAG clásico, donde el sistema recupera conocimiento de su repositorio interno, sí se recomienda diseñar el \eng{pipeline} de indexación y mantener una base vectorial propia~\cite{book:RAG_SimpleGuide}.
 
 \subsection{\eng{Pipeline} de generación (\eng{online})}
-Gestiona la consulta del usuario de extremo a extremo. Este \eng{pipeline} recibe la pregunta del usuario, recupera el contexto relevante de la base de datos vectorial, los \eng{chunks}, aumenta el \eng{prompt} con ese contexto y genera la respuesta con el LLM. Se compone de tres fases: \eng{retrieval}, \eng{augmentation} y \eng{generation}~\cite{book:RAG_SimpleGuide}. 
+\textbf{Gestiona la consulta del usuario} de extremo a extremo. Este \eng{pipeline} recibe la pregunta del usuario, recupera el contexto relevante de la base de datos vectorial, los \eng{chunks}, aumenta el \eng{prompt} con ese contexto y genera la respuesta con el LLM. Se compone de tres fases: \eng{retrieval}, \eng{augmentation} y \eng{generation}~\cite{book:RAG_SimpleGuide}. 
 
 Los componentes clave del \eng{pipeline} de generación son:
 \begin{itemize}
@@ -128,7 +128,7 @@ Los componentes clave del \eng{pipeline} de generación son:
 \end{itemize} 
 
 \subsection{Capas de soporte}
-Además de los dos \eng{pipelines}, un sistema en producción requiere orquestación, evaluación y monitorización continua, caché semántico para reducir coste y latencia, controles de seguridad para cumplimiento normativo y seguridad frente a inyecciones en el \eng{prompt}, envenenamiento de dato\footnote{El envenenamiento de datos es un ciberataque que corrompe los conjuntos de datos de entrenamiento utilizados para el proceso de entrenamiento del modelo de Inteligencia Artificial~\cite{concpteo:envdtos}.} o fugas de información. Todo ello se sostiene sobre una infraestructura de servicio y un \eng{RAGOps stack} formado por capas críticas, esenciales y de mejora que aseguran operación, calidad y seguridad extremo a extremo~\cite{book:RAG_SimpleGuide}.
+Además de los dos \eng{pipelines}, un sistema en producción requiere orquestación, evaluación y monitorización continua, caché semántico para reducir coste y latencia, controles de seguridad para cumplimiento normativo y seguridad frente a inyecciones en el \eng{prompt}, envenenamiento de dato\footnote{El envenenamiento de datos es un ciberataque que corrompe los conjuntos de datos de entrenamiento utilizados para el proceso de entrenamiento del modelo de Inteligencia Artificial~\cite{concpteo:envdtos}.} o fugas de información. Todo ello se sostiene sobre una \textbf{infraestructura de servicio y un \eng{RAGOps stack}} formado por capas críticas, esenciales y de mejora que aseguran operación, calidad y seguridad extremo a extremo~\cite{book:RAG_SimpleGuide}.
 \begin{enumerate}
 \tightlist
 	\item \textbf{Capas críticas}: son las capas imprescindibles del \eng{RAGOps stack}.
@@ -152,7 +152,7 @@ Además de los dos \eng{pipelines}, un sistema en producción requiere orquestac
 \end{enumerate}
 
 \section{Evaluación de la calidad del RAG}
-Se suele hacer mediante la tríada de evaluación propuesta por TruEra~\cite{RAG:triad} (ver imagen~\ref{fig:Memoria/Triada}). Estructura la calidad en tres comprobaciones entre consulta (\eng{prompt}), contexto recuperado y respuesta. Complementariamente, se emplean métricas como relevancia, precisión y \eng{recall}, y conjuntos \eng{ground truth} para validación objetiva y monitorización continua en producción~\cite{book:RAG_SimpleGuide}.
+Se suele hacer mediante la \textbf{tríada de evaluación} propuesta por TruEra~\cite{RAG:triad} (ver imagen~\ref{fig:Memoria/Triada}). Estructura la calidad en tres comprobaciones entre consulta (\eng{prompt}), contexto recuperado y respuesta. Complementariamente, se emplean métricas como relevancia, precisión y \eng{recall}, y conjuntos \eng{ground truth} para validación objetiva y monitorización continua en producción~\cite{book:RAG_SimpleGuide}.
 
 \imagenflotante{Memoria/Triada}{Tríada de evaluación TruEra.}{1}
 
@@ -176,6 +176,6 @@ Aparte de las dimensiones de la tríada, otros aspectos relevantes que el sistem
 En este proyecto se han considerado especialmente dos herramientas de evaluación:
 \begin{itemize}
 \tightlist
-	\item \eng{Retrieval-Augmented Generation Assessment} (\myhref{https://github.com/vibrantlabsai/ragas}{RAGAS})~\cite{paper:ragas}: es un \eng{framework} que genera datos sintéticos y calcula métricas de la tríada. Es útil para ciclos rápidos~\cite{ragas:docs}. 
-	\item \eng{Automated RAG Evaluation System} (\myhref{https://github.com/stanford-futuredata/ARES}{ARES})~\cite{saadfalcon2024ares}: es un \eng{framework} con un funcionamiento similar al RAGAS, pero con mayor complejidad y cantidad de datos generados. Es más robusto.
+	\item \textbf{\eng{Retrieval-Augmented Generation Assessment}} (\myhref{https://github.com/vibrantlabsai/ragas}{RAGAS})~\cite{paper:ragas}: es un \eng{framework} que genera datos sintéticos y calcula métricas de la tríada. Es útil para ciclos rápidos~\cite{ragas:docs}. 
+	\item \textbf{\eng{Automated RAG Evaluation System}} (\myhref{https://github.com/stanford-futuredata/ARES}{ARES})~\cite{saadfalcon2024ares}: es un \eng{framework} con un funcionamiento similar al RAGAS, pero con mayor complejidad y cantidad de datos generados. Es más robusto.
 \end{itemize}
