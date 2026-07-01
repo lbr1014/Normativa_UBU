@@ -897,6 +897,19 @@ def save_markdown_to_file(
     return out_path
 
 
+def _resolve_cli_path(raw_path: str, base_dir: Path, label: str) -> Path:
+    """
+    Resuelve una ruta recibida por CLI y verifica que permanece dentro del directorio permitido.
+    """
+    allowed_base = base_dir.resolve()
+    resolved_path = Path(raw_path).expanduser().resolve(strict=False)
+    try:
+        resolved_path.relative_to(allowed_base)
+    except ValueError:
+        raise ValueError(f"{label} debe estar dentro de {allowed_base}") from None
+    return resolved_path
+
+
 def main():
     """
     Función principal para procesar PDFs desde línea de comandos.
@@ -910,8 +923,13 @@ def main():
         logger.error("Uso: python Conversion_markdown.py <carpeta_pdfs> <carpeta_salida>")
         sys.exit(1)
 
-    in_dir = Path(sys.argv[1])
-    out_dir = Path(sys.argv[2])
+    cli_base_dir = Path(os.getenv("MARKDOWN_CLI_BASE_DIR", Path.cwd()))
+    try:
+        in_dir = _resolve_cli_path(sys.argv[1], cli_base_dir, "La carpeta de entrada")
+        out_dir = _resolve_cli_path(sys.argv[2], cli_base_dir, "La carpeta de salida")
+    except ValueError as exc:
+        logger.error("%s", exc)
+        sys.exit(1)
 
     pdf_files = sorted(in_dir.glob("*.pdf"))
     if not pdf_files:

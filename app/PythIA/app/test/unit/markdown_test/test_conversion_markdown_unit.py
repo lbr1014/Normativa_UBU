@@ -521,16 +521,32 @@ class ConversionMarkdownUnitTest(unittest.TestCase):
 
             in_dir = Path(tmp) / "in"
             in_dir.mkdir()
-            with patch.object(sys, "argv", ["cmd", str(in_dir), str(output_dir)]), self.assertRaises(SystemExit):
+            with patch.dict(os.environ, {"MARKDOWN_CLI_BASE_DIR": tmp}), patch.object(
+                sys,
+                "argv",
+                ["cmd", str(in_dir), str(output_dir)],
+            ), self.assertRaises(SystemExit):
                 conversion.main()
 
             (in_dir / "a.pdf").write_text("pdf")
             (in_dir / "b.pdf").write_text("pdf")
-            with patch.object(sys, "argv", ["cmd", str(in_dir), str(output_dir)]), patch(
+            with patch.dict(os.environ, {"MARKDOWN_CLI_BASE_DIR": tmp}), patch.object(
+                sys,
+                "argv",
+                ["cmd", str(in_dir), str(output_dir)],
+            ), patch(
                 "app.main.code.services.markdown.Conversion_markdown.save_markdown_to_file",
             ) as mock_save:
                 conversion.main()
             self.assertEqual(mock_save.call_count, 2)
+
+            outside_dir = Path(tmp).parent / "outside"
+            with patch.dict(os.environ, {"MARKDOWN_CLI_BASE_DIR": tmp}), patch.object(
+                sys,
+                "argv",
+                ["cmd", str(outside_dir), str(output_dir)],
+            ), self.assertRaises(SystemExit):
+                conversion.main()
 
         with patch.object(sys, "argv", ["cmd"]), self.assertRaises(SystemExit):
             conversion.main()
