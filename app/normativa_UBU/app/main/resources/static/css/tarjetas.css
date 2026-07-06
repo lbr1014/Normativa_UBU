@@ -108,10 +108,10 @@
 body[data-theme="light"].landing-page #infoCarousel .info-card{
   background:
     linear-gradient(135deg, rgba(255,255,255,.12), transparent 42%),
-    linear-gradient(145deg, #3f4e70 0%, #53658f 54%, #7280a4 100%);
+    linear-gradient(145deg, #690215 0%, #9e3f3f 54%, #b85656 100%);
   border: 1px solid rgba(255, 255, 255, 0.34);
   box-shadow:
-    0 22px 46px rgba(83, 101, 143, 0.28),
+    0 22px 46px rgba(var(--app-primary-rgb), 0.28),
     inset 0 1px 0 rgba(255, 255, 255, 0.18);
   color: #ffffff;
 }
@@ -127,22 +127,22 @@ body[data-theme="light"].landing-page #infoCarousel .info-card p{
 }
 
 body[data-theme="light"].landing-page .info-carousel-control{
-  background: #53658f;
+  background: var(--app-primary);
   border-color: rgba(255, 255, 255, 0.45);
-  box-shadow: 0 12px 28px rgba(83, 101, 143, 0.22);
+  box-shadow: 0 12px 28px rgba(var(--app-primary-rgb), 0.22);
 }
 
 body[data-theme="light"].landing-page .info-carousel-control:hover,
 body[data-theme="light"].landing-page .info-carousel-control:focus{
-  background: #3f4e70;
+  background: var(--app-primary-hover);
 }
 
 body[data-theme="light"].landing-page #infoCarousel .carousel-indicators [data-bs-target]{
-  background-color: rgba(83, 101, 143, 0.38);
+  background-color: rgba(var(--app-primary-rgb), 0.38);
 }
 
 body[data-theme="light"].landing-page #infoCarousel .carousel-indicators .active{
-  background-color: #53658f;
+  background-color: var(--app-primary);
 }
 
 .home-author{

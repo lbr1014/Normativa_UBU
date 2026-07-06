@@ -41,10 +41,10 @@
 }
 
 body[data-theme="light"].landing-page .hero-badge {
-  background: #53658f;
-  border-color: #53658f;
+  background: var(--app-primary);
+  border-color: var(--app-primary);
   color: #ffffff;
-  box-shadow: 0 10px 26px rgba(83, 101, 143, 0.24);
+  box-shadow: 0 10px 26px rgba(var(--app-primary-rgb), 0.24);
 }
 
 .hero-title {

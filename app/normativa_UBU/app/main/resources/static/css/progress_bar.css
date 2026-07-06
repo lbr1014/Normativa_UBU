@@ -14,7 +14,7 @@
 
 .progress-bar {
   height: 100%;
-  background-color: #3498db;
+  background-color: var(--app-primary);
 }
 
 .progress-bar.is-indeterminate {
@@ -28,12 +28,12 @@ progress.progress-bar::-webkit-progress-bar {
 }
 
 progress.progress-bar::-webkit-progress-value {
-  background-color: #3498db;
+  background-color: var(--app-primary);
   border-radius: 6px;
 }
 
 progress.progress-bar::-moz-progress-bar {
-  background-color: #3498db;
+  background-color: var(--app-primary);
   border-radius: 6px;
 }
 

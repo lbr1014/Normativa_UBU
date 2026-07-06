@@ -150,7 +150,7 @@
   border-radius: 999px;
   display: grid;
   place-items: center;
-  --rag-eval-accent: #a855f7;
+  --rag-eval-accent: var(--app-primary);
   background: conic-gradient(var(--rag-eval-accent) calc(var(--rag-eval-pct, 0) * 1%), rgba(255, 255, 255, 0.14) 0);
 }
 

@@ -29,16 +29,16 @@
             {% endif %}
           </p>
         </div>
-        <div class="app-header-wordmark" aria-label="PythIA">
+        <div class="app-header-wordmark" aria-label="UBU">
           <a {% if request.endpoint != 'main.pag_principal' %} href="{{ url_for('main.pag_principal') }}"{% endif %}>
-            <img id="nav-logo-home" src="{{ url_for('static', filename='img/PythIA_letras.png') }}" alt="PythIA" class="logo-header logo-header-letters">
+            <img id="nav-logo-home" src="{{ url_for('static', filename='img/UBU_letras.png') }}" alt="UBU" class="logo-header logo-header-letters">
           </a>
         </div>
       {% else %}
         <div class="navbar-brand app-brand me-0 app-brand-static" aria-current="page">
           {% if show_guest_logo %}
             <a {% if request.endpoint != 'main.inicio' %} href="{{ url_for('main.inicio') }}"{% endif %}>
-              <img src="{{ url_for('static', filename='img/PythIA_letras.png') }}" alt="PythIA" class="logo-header logo-header-letters">
+              <img src="{{ url_for('static', filename='img/UBU_letras.png') }}" alt="UBU" class="logo-header logo-header-letters">
             </a>
           {% endif %}
           {% if show_guest_text %}
