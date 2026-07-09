@@ -38,12 +38,12 @@ services:
     container_name: flask_ollama
     
     deploy:
-    resources:
-      reservations:
-        devices:
-          - driver: nvidia
-            count: all
-            capabilities: [gpu]
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
     ports:
       - "${OLLAMA_EXTERNAL_PORT}:${OLLAMA_INTERNAL_PORT}"
@@ -66,12 +66,12 @@ services:
     pull_policy: always
     container_name: flask_ollama_ocr
     deploy:
-    resources:
-      reservations:
-        devices:
-          - driver: nvidia
-            count: all
-            capabilities: [gpu]
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     ports:
       - "${OCR_OLLAMA_EXTERNAL_PORT:-11435}:${OLLAMA_INTERNAL_PORT}"
     volumes:
@@ -114,12 +114,12 @@ services:
     init: true
     container_name: flask_web
     deploy:
-    resources:
-      reservations:
-        devices:
-          - driver: nvidia
-            count: all
-            capabilities: [gpu]
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     env_file: 
       - .env
       - secret.env
