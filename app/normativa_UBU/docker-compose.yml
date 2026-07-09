@@ -36,7 +36,15 @@ services:
     image: ${OLLAMA_IMAGE:-ollama/ollama:0.20.7}
     pull_policy: always
     container_name: flask_ollama
-    gpus: all
+    
+    deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: all
+            capabilities: [gpu]
+
     ports:
       - "${OLLAMA_EXTERNAL_PORT}:${OLLAMA_INTERNAL_PORT}"
     volumes:
@@ -57,7 +65,13 @@ services:
     image: ${OLLAMA_IMAGE:-ollama/ollama:0.20.7}
     pull_policy: always
     container_name: flask_ollama_ocr
-    gpus: all
+    deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: all
+            capabilities: [gpu]
     ports:
       - "${OCR_OLLAMA_EXTERNAL_PORT:-11435}:${OLLAMA_INTERNAL_PORT}"
     volumes:
@@ -99,7 +113,13 @@ services:
       dockerfile: docker/Dockerfile
     init: true
     container_name: flask_web
-    gpus: all
+    deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: all
+            capabilities: [gpu]
     env_file: 
       - .env
       - secret.env
