@@ -85,7 +85,7 @@ Una vez que este el comando *git* se debe clonar el repositorio del proyecto. Pa
       ```
   2) Acceder a la carpeta donde se encuentra la aplicación:
      ```bash
-     cd app/PythIA
+     cd app/normativa_UBU
      ```
   3) Crear archivo _secret.env_
      > Este archivo debe tener como mínimo configuradas las siguientes variables:
