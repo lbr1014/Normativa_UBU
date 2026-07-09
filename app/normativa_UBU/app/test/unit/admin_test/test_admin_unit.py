@@ -2,11 +2,10 @@
 Autora: Lydia Blanco Ruiz
 Script con pruebas unitarias de los métodos de administracion.
 Su objetivo es verificar el correcto funcionamiento de los mecanismos de gestión de tareas asíncronas, conversión de documentos a Markdown,
-actualización de la base de datos vectorial, procesos de scraping, validación de formularios, envío de notificaciones y manejo de errores. 
+actualización de la base de datos vectorial, validación de formularios, envío de notificaciones y manejo de errores. 
 Las pruebas cubren tanto escenarios de ejecución normal como situaciones excepcionales, cancelaciones y fallos, garantizando la robustez de los servicios de administración de la aplicación.
 """
 
-import subprocess
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,7 +15,6 @@ from app.main.code.controllers.admin import routes as admin_routes
 from app.main.code.extensions import db
 from app.main.code.model.markdown_conversion_state import MarkdownConversionState
 from app.main.code.model.vector_update_state import VectorUpdateState
-from app.main.code.model.web_scraping_state import WebScrapingSate
 from app.main.code.services.documentos import JobCancelledError
 from app.test.support import BaseAppTestCase
 
@@ -252,149 +250,6 @@ class AdminRoutesUnitTest(BaseAppTestCase):
             "Convirtiendo doc...",
         )
 
-    def test_scraping_context_finish_and_exception_helpers(self):
-        """
-        Verifica la creación del contexto de scraping y la correcta gestión de finalización y errores asociados.
-        """
-        with tempfile.TemporaryDirectory() as tmpdir:
-            self.app.config["DOCS_DIR"] = str(Path(tmpdir) / "docs")
-            self.app.config["DATA_DIR"] = str(Path(tmpdir) / "data")
-            base, scraper_dir, script_1, script_2, root, env, resultados_json, pliegos_json = admin_routes._build_scraping_context()
-
-        self.assertEqual(base.name, "docs")
-        self.assertEqual(scraper_dir.name, "web_scraping")
-        self.assertEqual(script_1.name, "PliegosPlaywrightAsincrono.py")
-        self.assertEqual(script_2.name, "DescargarPliegos.py")
-        self.assertEqual(root, Path(self.app.root_path))
-        self.assertIn("PLIEGOS_DEST", env)
-        self.assertEqual(resultados_json.name, "resultados_playwright_asincrono_servidor.json")
-        self.assertEqual(pliegos_json.name, "pliegos_pdfs.json")
-
-        job = WebScrapingSate(status="running", progress=10)
-        db.session.add(job)
-        db.session.commit()
-        with patch("app.main.code.controllers.admin.routes._send_email_safe") as mock_email, patch(
-            "app.main.code.controllers.admin.routes.translate_for", side_effect=lambda lang, key, **kwargs: key
-        ):
-            admin_routes._finish_scraping_job(job, "admin@example.com", "http://docs", "es", 2, 5)
-
-        self.assertEqual(job.status, "done")
-        mock_email.assert_called_once()
-
-        failed = WebScrapingSate(status="running", progress=10)
-        db.session.add(failed)
-        db.session.commit()
-        with patch.object(self.app.logger, "exception") as mock_logger, patch(
-            "app.main.code.controllers.admin.routes._send_email_safe"
-        ) as mock_email, patch("app.main.code.controllers.admin.routes.translate_for", side_effect=lambda lang, key, **kwargs: key):
-            admin_routes._handle_scraping_exception(
-                self.app,
-                failed.id,
-                "admin@example.com",
-                "http://docs",
-                "es",
-                RuntimeError("scraping boom"),
-            )
-
-        self.assertEqual(failed.status, "failed")
-        self.assertEqual(failed.error, "scraping boom")
-        mock_email.assert_called_once()
-        mock_logger.assert_called_once()
-
-    def test_execute_subprocess_with_cancellation_success_failure_and_cancel(self):
-        """
-        Comprueba la ejecución de procesos externos, incluyendo casos de éxito, error y cancelación controlada.
-        """
-        proc = MagicMock()
-        proc.poll.side_effect = [None, 0]
-        proc.wait.side_effect = [subprocess.TimeoutExpired("cmd", 1), None]
-        with patch("app.main.code.controllers.admin.routes.subprocess.Popen", return_value=proc) as mock_popen:
-            admin_routes._execute_subprocess_with_cancellation(Path("script.py"), Path("."), {}, lambda: False, "es")
-
-        mock_popen.assert_called_once()
-
-        proc = MagicMock()
-        proc.poll.return_value = 7
-        proc.communicate.return_value = ("boom", "traceback")
-        with patch("app.main.code.controllers.admin.routes.subprocess.Popen", return_value=proc):
-            with self.assertRaises(subprocess.CalledProcessError):
-                admin_routes._execute_subprocess_with_cancellation(Path("bad.py"), Path("."), {}, lambda: False, "es")
-
-        proc = MagicMock()
-        proc.wait.side_effect = [subprocess.TimeoutExpired("cmd", 10), None]
-        with patch("app.main.code.controllers.admin.routes.subprocess.Popen", return_value=proc), patch(
-            "app.main.code.controllers.admin.routes.translate_for", return_value="cancelado"
-        ):
-            with self.assertRaises(JobCancelledError):
-                admin_routes._execute_subprocess_with_cancellation(Path("slow.py"), Path("."), {}, lambda: True, "es")
-
-        proc.terminate.assert_called_once()
-        proc.kill.assert_called_once()
-
-    def test_run_scraping_script_updates_job_or_raises_when_cancelled(self):
-        """
-        Verifica que la ejecución de scripts de scraping actualiza correctamente el estado de la tarea o se cancela cuando corresponde.
-        """
-        job = WebScrapingSate(status="running", progress=0, cancel_requested=False)
-        db.session.add(job)
-        db.session.commit()
-
-        with patch("app.main.code.controllers.admin.routes._execute_subprocess_with_cancellation") as mock_execute:
-            admin_routes._run_scraping_script(
-                job,
-                Path("script.py"),
-                Path("."),
-                {},
-                lambda: False,
-                "es",
-                progress=50,
-                message="Ejecutando",
-            )
-
-        self.assertEqual(job.progress, 50)
-        self.assertEqual(job.message, "Ejecutando")
-        mock_execute.assert_called_once()
-
-        with patch("app.main.code.controllers.admin.routes.translate_for", return_value="cancelado"):
-            with self.assertRaises(JobCancelledError):
-                admin_routes._run_scraping_script(job, Path("script.py"), Path("."), {}, lambda: True, "es")
-
-    def test_sync_scraping_results_counts_new_files_and_honors_cancellation(self):
-        """
-        Comprueba la sincronización de resultados obtenidos mediante scraping, contabilizando nuevos documentos y respetando solicitudes de cancelación.
-        """
-        job = WebScrapingSate(status="running", progress=0, cancel_requested=False)
-        db.session.add(job)
-        db.session.commit()
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            base = Path(tmpdir)
-            (base / "old.pdf").write_bytes(b"%PDF")
-
-            fake_service = MagicMock()
-            fake_service.sync_from_folder.side_effect = lambda: (base / "new.pdf").write_bytes(b"%PDF")
-            with patch("app.main.code.controllers.admin.routes.documentos_service", return_value=fake_service), patch(
-                "app.main.code.controllers.admin.routes.translate_for", side_effect=lambda lang, key, **kwargs: key
-            ):
-                extracted, total = admin_routes._sync_scraping_results(job, base, "es", lambda: False)
-
-        self.assertEqual((extracted, total), (1, 2))
-        self.assertEqual(job.progress, 90)
-
-        with patch("app.main.code.controllers.admin.routes.translate_for", return_value="cancelado"):
-            with self.assertRaises(JobCancelledError):
-                admin_routes._sync_scraping_results(job, Path("."), "es", lambda: True)
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            base = Path(tmpdir)
-            fake_service = MagicMock()
-            with patch("app.main.code.controllers.admin.routes.documentos_service", return_value=fake_service), patch(
-                "app.main.code.controllers.admin.routes.translate_for", return_value="cancelado"
-            ):
-                should_cancel = MagicMock(side_effect=[False, True])
-                with self.assertRaises(JobCancelledError):
-                    admin_routes._sync_scraping_results(job, base, "es", should_cancel)
-
     @patch("app.main.code.controllers.admin.routes.send_markdown_finished_email")
     def test_markdown_async_marks_done_and_handles_cancellation_and_errors(self, mock_send):
         """
@@ -586,87 +441,3 @@ class AdminRoutesUnitTest(BaseAppTestCase):
 
         admin_routes.documentos_async(self.app, 9999, "admin@example.com", "http://docs.local")
 
-    @patch("app.main.code.controllers.admin.routes.send_scraping_finished_email")
-    def test_scraping_async_marks_done_cancelled_and_failed(self, mock_send):
-        """
-        Verifica el funcionamiento completo del proceso asíncrono de scraping, incluyendo ejecuciones exitosas, cancelaciones y errores durante el procesamiento.
-        """
-        job = WebScrapingSate(status="queued", progress=0, cancel_requested=False)
-        db.session.add(job)
-        db.session.commit()
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            base = Path(tmpdir)
-            resultados_json = base / "resultados.json"
-            pliegos_json = base / "pliegos.json"
-            with patch(
-                "app.main.code.controllers.admin.routes._build_scraping_context",
-                return_value=(base, Path("."), Path("one.py"), Path("two.py"), Path("."), {}, resultados_json, pliegos_json),
-            ), patch("app.main.code.controllers.admin.routes._run_scraping_script") as mock_run, patch(
-                "app.main.code.controllers.admin.routes._sync_scraping_results", return_value=(3, 4)
-            ):
-                admin_routes.scraping_async(self.app, job.id, "admin@example.com", "http://docs.local")
-
-        db.session.expire_all()
-        refreshed = db.session.get(WebScrapingSate, job.id)
-        self.assertEqual(refreshed.status, "done")
-        self.assertEqual(mock_run.call_count, 2)
-        mock_send.assert_called_once()
-
-        precancelled = WebScrapingSate(status="queued", progress=0, cancel_requested=True)
-        db.session.add(precancelled)
-        db.session.commit()
-        admin_routes.scraping_async(self.app, precancelled.id, "admin@example.com", "http://docs.local")
-        db.session.expire_all()
-        self.assertEqual(db.session.get(WebScrapingSate, precancelled.id).status, "cancelled")
-
-        cancelled = WebScrapingSate(status="queued", progress=0, cancel_requested=False)
-        db.session.add(cancelled)
-        db.session.commit()
-        with patch(
-            "app.main.code.controllers.admin.routes._build_scraping_context",
-            return_value=(Path("."), Path("."), Path("one.py"), Path("two.py"), Path("."), {}, Path("resultados.json"), Path("pliegos.json")),
-        ), patch(
-            "app.main.code.controllers.admin.routes._run_scraping_script", side_effect=JobCancelledError("cancelado")
-        ):
-            admin_routes.scraping_async(self.app, cancelled.id, "admin@example.com", "http://docs.local")
-        db.session.expire_all()
-        self.assertEqual(db.session.get(WebScrapingSate, cancelled.id).status, "cancelled")
-
-        failed = WebScrapingSate(status="queued", progress=0, cancel_requested=False)
-        db.session.add(failed)
-        db.session.commit()
-        with patch("app.main.code.controllers.admin.routes._build_scraping_context", side_effect=RuntimeError("scraping boom")), patch.object(
-            self.app.logger, "exception"
-        ):
-            admin_routes.scraping_async(self.app, failed.id, "admin@example.com", "http://docs.local")
-        db.session.expire_all()
-        self.assertEqual(db.session.get(WebScrapingSate, failed.id).status, "failed")
-
-        callback_job = WebScrapingSate(status="queued", progress=0, cancel_requested=False)
-        db.session.add(callback_job)
-        db.session.commit()
-
-        def inspect_should_cancel(_job, _script, _cwd, _env, should_cancel, _lang, **_kwargs):
-            self.assertFalse(should_cancel())
-
-        with patch(
-            "app.main.code.controllers.admin.routes._build_scraping_context",
-            return_value=(Path("."), Path("."), Path("one.py"), Path("two.py"), Path("."), {}, Path("resultados.json"), Path("pliegos.json")),
-        ), patch("app.main.code.controllers.admin.routes._run_scraping_script", side_effect=inspect_should_cancel), patch(
-            "app.main.code.controllers.admin.routes._sync_scraping_results", return_value=(0, 0)
-        ):
-            admin_routes.scraping_async(self.app, callback_job.id, "admin@example.com", "http://docs.local")
-
-        admin_routes.scraping_async(self.app, 9999, "admin@example.com", "http://docs.local")
-
-        with patch.object(self.app.logger, "exception"):
-            with self.assertRaises(RuntimeError):
-                admin_routes._handle_scraping_exception(
-                    self.app,
-                    9999,
-                    "admin@example.com",
-                    "http://docs.local",
-                    "es",
-                    RuntimeError("missing scraping job"),
-                )

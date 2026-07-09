@@ -3,10 +3,7 @@ Autora: Lydia Blanco Ruiz
 Script para las rutas de administración, incluyendo gestión de usuarios, documentos y procesos en segundo plano con estado y cancelación.
 """
 
-import os
 import smtplib
-import subprocess
-import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -55,14 +52,12 @@ from app.main.code.services.markdown_conversion_state import (
     send_markdown_finished_email,
 )
 from app.main.code.services.vector_update_state import send_update_finished_email
-from app.main.code.services.web_scraping_state import send_scraping_finished_email
 
 from ...model.documento import Documento
 from ...model.markdown_conversion_state import MarkdownConversionState
 from ...model.rag_evaluation_state import RAGEvaluationState
 from ...model.user import User
 from ...model.vector_update_state import VectorUpdateState
-from ...model.web_scraping_state import WebScrapingSate
 from ...services.documentos import DocumentosService, JobCancelledError
 from ...services.evaluation.rag_evaluation_service import run_rag_evaluation
 from ...services.rag.PrototipoRAG import index_pliegos_dir, qdrant_delete_by_filename
@@ -178,14 +173,12 @@ def active_jobs_status() -> ResponseReturnValue:
 
     markdown = _latest_active(MarkdownConversionState)
     vector = _latest_active(VectorUpdateState)
-    scraping = _latest_active(WebScrapingSate)
     rag_eval = _latest_active(RAGEvaluationState)
 
     return jsonify(
         {
             "markdown": {"job_id": markdown.id, "status": markdown.status} if markdown else None,
             "vector": {"job_id": vector.id, "status": vector.status} if vector else None,
-            "scraping": {"job_id": scraping.id, "status": scraping.status} if scraping else None,
             "rag_evaluation": {"job_id": rag_eval.id, "status": rag_eval.status} if rag_eval else None,
         }
     )
@@ -198,7 +191,6 @@ DOC_MARKDOWN_NO = "no"
 JOBS_ALREADY_FINISHED = "jobs.already_finished"
 JOBS_QUEUED_SHORT = "jobs.queued_short"
 MARKDOWN_CANCELLED = "markdown.cancelled"
-SCRAPING_CANCELLED = "scraping.cancelled"
 MARKDOWN_JOB_MESSAGE_MAX_LENGTH = 255
 MADRID_TZ = ZoneInfo("Europe/Madrid")
 ADMIN_RECOVERABLE_ERRORS = (
@@ -206,7 +198,6 @@ ADMIN_RECOVERABLE_ERRORS = (
     OSError,
     RuntimeError,
     SQLAlchemyError,
-    subprocess.SubprocessError,
     ValueError,
 )
 MAIL_RECOVERABLE_ERRORS = (OSError, RuntimeError, smtplib.SMTPException)
@@ -1729,411 +1720,3 @@ def view_document(doc_id: int) -> ResponseReturnValue:
     return send_file(pdf_path, as_attachment=False, download_name=doc.nombre, mimetype="application/pdf")
 
 
-@admin_bp.post("/documents/web_scraping")
-@login_required
-@admin_required
-def web_scraping_documents() -> ResponseReturnValue:
-    """
-    Crea un job para lanzar el proceso de web scraping.
-
-    Returns:
-        Una respuesta JSON con el identificador del job creado.
-    """
-    invalid = _validate_post_action(json_response=True)
-    if invalid:
-        return invalid
-
-    lang = get_locale()
-    job = WebScrapingSate(
-        status="queued",
-        progress=0,
-        message=translate_for(lang, JOBS_QUEUED_SHORT),
-        cancel_requested=False,
-        error=None,
-    )
-    db.session.add(job)
-    db.session.commit()
-
-    app_obj = current_app._get_current_object()
-    submit_tracked(
-        executor,
-        job_type="scraping",
-        tracked_job_id=job.id,
-        fn=scraping_async,
-        app=app_obj,
-        job_id=job.id,
-        user_email=current_user.email,
-        docs_url=documents_page_url(),
-        lang=lang,
-    )
-
-    return jsonify({"job_id": job.id}), 202
-
-
-@admin_bp.post("/documents/web_scraping/cancel/<int:job_id>")
-@login_required
-@admin_required
-def cancel_web_scraping(job_id: int) -> ResponseReturnValue:
-    """
-    Solicita la cancelacion de un job de web scraping.
-
-    Args:
-        job_id: Identificador del job de scraping.
-
-    Returns:
-        Una respuesta JSON con el estado actualizado del job.
-    """
-    invalid = _validate_post_action(json_response=True)
-    if invalid:
-        return invalid
-
-    job = WebScrapingSate.query.get_or_404(job_id)
-
-    if job.status in {"done", "failed", "cancelled"}:
-        return jsonify({"status": job.status, "message": t(JOBS_ALREADY_FINISHED)}), 200
-
-    job.cancel_requested = True
-    _set_job_message(job, t("scraping.cancelling"))
-    if job.status == "queued":
-        cancel_tracked(job_type="scraping", tracked_job_id=job.id)
-        job.status = "cancelled"
-        job.finished_at = _now_madrid()
-    db.session.commit()
-
-    return jsonify({"status": job.status, "message": localize_runtime_message(job.message)}), 202
-
-
-@admin_bp.get("/documents/web_scraping/status/<int:job_id>")
-@admin_required
-def web_scraping_status(job_id: int) -> ResponseReturnValue:
-    """
-    Devuelve el estado actual de un job de web scraping.
-
-    Args:
-        job_id: Identificador del job de scraping.
-
-    Returns:
-        Una respuesta JSON con progreso, mensaje y error del job.
-    """
-    job = WebScrapingSate.query.get(job_id)
-    if not job:
-        abort(404)
-
-    boot_at = current_app.config.get("APP_BOOT_AT")
-    if _job_is_stale_since_boot(job, boot_at=boot_at):
-        _mark_job_as_stale(job)
-        db.session.commit()
-
-    return jsonify(
-        {
-            "status": job.status,
-            "progress": job.progress,
-            "message": localize_runtime_message(job.message),
-            "error": job.error,
-            "cancel_requested": bool(job.cancel_requested),
-        }
-    )
-
-
-def _scraping_cancel_message(lang: str) -> str:
-    """
-    Obtiene el mensaje traducido de cancelacion para scraping.
-
-    Args:
-        lang: Codigo de idioma activo.
-
-    Returns:
-        El mensaje traducido de cancelacion.
-    """
-    return translate_for(lang, SCRAPING_CANCELLED)
-
-
-def _build_scraping_context() -> tuple[Path, Path, Path, Path, Path, dict[str, str], Path, Path]:
-    """
-    Construye el contexto necesario para ejecutar el scraping.
-
-    Returns:
-        Una tupla con directorios, scripts y variables de entorno para scraping.
-    """
-    base_pliegos = pliegos_dir()
-    root = Path(current_app.root_path)
-    scraper_dir = root / "services" / "web_scraping"
-    script_1 = scraper_dir / "PliegosPlaywrightAsincrono.py"
-    script_2 = scraper_dir / "DescargarPliegos.py"
-    data_dir = Path(current_app.config["DATA_DIR"])
-    scraping_data_dir = data_dir / "web_scraping"
-    resultados_json = scraping_data_dir / "resultados_playwright_asincrono_servidor.json"
-    pliegos_json = scraping_data_dir / "pliegos_pdfs.json"
-    env = os.environ.copy()
-    env["PLIEGOS_DEST"] = str(base_pliegos)
-    return base_pliegos, scraper_dir, script_1, script_2, root, env, resultados_json, pliegos_json
-
-
-def _execute_subprocess_with_cancellation(script_path: Path, cwd: Path, env: dict[str, str], should_cancel, lang: str) -> None:
-    """
-    Ejecuta un subprocess con soporte de cancelacion.
-
-    Args:
-        script_path: Ruta del script que se va a ejecutar.
-        cwd: Directorio de trabajo del proceso.
-        env: Variables de entorno del proceso hijo.
-        should_cancel: Callback que indica si el job debe cancelarse.
-        lang: Codigo de idioma activo.
-
-    Returns:
-        None.
-    """
-    proc = subprocess.Popen(
-        [sys.executable, str(script_path)],
-        cwd=str(cwd),
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-    while True:
-        if should_cancel():
-            proc.terminate()
-            try:
-                proc.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                proc.wait()
-            raise JobCancelledError(_scraping_cancel_message(lang))
-
-        code = proc.poll()
-        if code is not None:
-            if code != 0:
-                stdout, stderr = proc.communicate(timeout=5)
-                raise subprocess.CalledProcessError(
-                    code,
-                    [sys.executable, str(script_path)],
-                    output=stdout,
-                    stderr=stderr,
-                )
-            return
-
-        try:
-            proc.wait(timeout=1)
-        except subprocess.TimeoutExpired:
-            continue
-
-
-def _run_scraping_script(job, script_path: Path, cwd: Path, env: dict[str, str], should_cancel, lang: str, *, progress: int | None = None, message: str | None = None) -> None:
-    """
-    Ejecuta un script de scraping con soporte de cancelacion.
-
-    Args:
-        job: Instancia del job de scraping.
-        script_path: Ruta del script que se va a ejecutar.
-        cwd: Directorio de trabajo del proceso.
-        env: Variables de entorno del proceso hijo.
-        should_cancel: Callback que indica si el job debe cancelarse.
-        lang: Codigo de idioma activo.
-        progress: Progreso opcional a registrar antes de ejecutar.
-        message: Mensaje opcional a registrar antes de ejecutar.
-
-    Returns:
-        None.
-    """
-    if should_cancel():
-        raise JobCancelledError(_scraping_cancel_message(lang))
-
-    if progress is not None:
-        job.progress = progress
-    if message is not None:
-        _set_job_message(job, message)
-    db.session.commit()
-
-    _execute_subprocess_with_cancellation(script_path, cwd, env, should_cancel, lang)
-
-
-def _sync_scraping_results(job, base_pliegos: Path, lang: str, should_cancel) -> tuple[int, int]:
-    """
-    Sincroniza los documentos descargados tras el scraping.
-
-    Args:
-        job: Instancia del job de scraping.
-        base_pliegos: Directorio donde se guardan los PDFs descargados.
-        lang: Codigo de idioma activo.
-        should_cancel: Callback que indica si el job debe cancelarse.
-
-    Returns:
-        Una tupla con el numero de documentos nuevos y el total sincronizado.
-    """
-    if should_cancel():
-        raise JobCancelledError(_scraping_cancel_message(lang))
-
-    before_files = {p.name for p in base_pliegos.glob("*.pdf")}
-    job.progress = 90
-    _set_job_message(job, translate_for(lang, "scraping.syncing"))
-    db.session.commit()
-    documentos_service().sync_from_folder()
-    after_files = {p.name for p in base_pliegos.glob("*.pdf")}
-
-    if should_cancel():
-        raise JobCancelledError(_scraping_cancel_message(lang))
-
-    return len(after_files - before_files), len(after_files)
-
-
-def _finish_scraping_job(job, user_email: str, docs_url: str, lang: str, extracted_docs: int, synced_total_docs: int) -> None:
-    """
-    Marca el job de scraping como completado y envia la notificacion.
-
-    Args:
-        job: Instancia del job de scraping.
-        user_email: Correo del usuario que inicio el job.
-        docs_url: URL de la pagina de documentos.
-        lang: Codigo de idioma activo.
-        extracted_docs: Numero de documentos nuevos descargados.
-        synced_total_docs: Numero total de documentos sincronizados.
-
-    Returns:
-        None.
-    """
-    _mark_job_done(job, message=translate_for(lang, "scraping.done"))
-    db.session.commit()
-    _send_email_safe(
-        send_scraping_finished_email,
-        "No se pudo enviar el correo de fin de web scraping",
-        to_email=user_email,
-        ok=True,
-        message=translate_for(lang, "scraping.done_email"),
-        job_id=job.id,
-        docs_url=docs_url,
-        extracted_docs=extracted_docs,
-        synced_total_docs=synced_total_docs,
-    )
-
-
-def _handle_scraping_exception(app, job_id: int, user_email: str, docs_url: str, lang: str, exc: Exception) -> None:
-    """
-    Gestiona un error inesperado en un job de scraping.
-
-    Args:
-        app: Aplicacion Flask activa.
-        job_id: Identificador del job fallido.
-        user_email: Correo del usuario que inicio el job.
-        docs_url: URL de la pagina de documentos.
-        lang: Codigo de idioma activo.
-        exc: Excepcion capturada durante la ejecucion.
-
-    Returns:
-        None.
-    """
-    db.session.rollback()
-    try:
-        job = WebScrapingSate.query.get(job_id)
-        if not job:
-            raise exc
-
-        # Si el fallo proviene de un subprocess, adjuntar stderr/stdout para diagnóstico.
-        if isinstance(exc, subprocess.CalledProcessError):
-            details = []
-            if getattr(exc, "stderr", None):
-                details.append(f"stderr:\n{exc.stderr.strip()}")
-            if getattr(exc, "output", None):
-                details.append(f"stdout:\n{exc.output.strip()}")
-            if details:
-                exc = RuntimeError(f"{exc}\n\n" + "\n\n".join(details))
-        _mark_job_failed(job, exc, message=translate_for(lang, "scraping.failed"))
-        db.session.commit()
-        _send_email_safe(
-            send_scraping_finished_email,
-            "No se pudo enviar el correo de fin de web scraping",
-            to_email=user_email,
-            ok=False,
-            message=translate_for(lang, "scraping.failed_email", error=job.error),
-            job_id=job.id,
-            docs_url=docs_url,
-            extracted_docs=None,
-            synced_total_docs=None,
-        )
-    finally:
-        app.logger.exception("Error en scraping_async")
-
-
-def scraping_async(app, job_id: int, user_email: str, docs_url: str, lang: str = "es") -> None:
-    """
-    Ejecuta en segundo plano el proceso completo de web scraping.
-
-    Args:
-        app: Aplicacion Flask activa.
-        job_id: Identificador del job de scraping.
-        user_email: Correo del usuario que inicio el job.
-        docs_url: URL de la pagina de documentos.
-        lang: Codigo de idioma activo.
-
-    Returns:
-        None.
-    """
-    with app.app_context():
-        job = WebScrapingSate.query.get(job_id)
-        if not job:
-            return
-
-        try:
-            if job.cancel_requested:
-                _mark_job_cancelled(job, message=_scraping_cancel_message(lang))
-                db.session.commit()
-                return
-
-            _mark_job_running(job, message=translate_for(lang, "scraping.starting"))
-            db.session.commit()
-
-            base_pliegos, scraper_dir, script_1, script_2, _root, env, resultados_json, _pliegos_json = _build_scraping_context()
-
-            def should_cancel() -> bool:
-                """
-                Comprueba si el job de scraping debe cancelarse.
-
-                Returns:
-                    ``True`` si se ha solicitado cancelacion.
-                """
-                return _job_should_cancel(job)
-
-            try:
-                _run_scraping_script(
-                    job,
-                    script_1,
-                    scraper_dir,
-                    env,
-                    should_cancel,
-                    lang,
-                    message=translate_for(lang, "scraping.script_1"),
-                )
-            except subprocess.CalledProcessError as exc:
-                # Si el extractor falla pero ya ha ido persistiendo resultados, intentamos descargar con lo disponible para maximizar pliegos.
-                if resultados_json.exists():
-                    app.logger.warning(
-                        "El extractor falló, pero existe '%s'. Continuando con descarga. stderr=%s",
-                        resultados_json,
-                        (exc.stderr or "")[-2000:],
-                    )
-                else:
-                    raise
-            _run_scraping_script(
-                job,
-                script_2,
-                scraper_dir,
-                env,
-                should_cancel,
-                lang,
-                progress=50,
-                message=translate_for(lang, "scraping.script_2"),
-            )
-            extracted_docs, synced_total_docs = _sync_scraping_results(job, base_pliegos, lang, should_cancel)
-            _finish_scraping_job(job, user_email, docs_url, lang, extracted_docs, synced_total_docs)
-        except JobCancelledError:
-            db.session.rollback()
-            job = WebScrapingSate.query.get(job_id)
-            if job:
-                _mark_job_cancelled(job, message=_scraping_cancel_message(lang))
-                db.session.commit()
-        except ADMIN_RECOVERABLE_ERRORS as exc:
-            _handle_scraping_exception(app, job_id, user_email, docs_url, lang, exc)
-        finally:
-            db.session.remove()

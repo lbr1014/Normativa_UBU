@@ -26,22 +26,11 @@ def upgrade():
         batch_op.add_column(sa.Column("cancel_requested", sa.Boolean(), nullable=False, server_default=sa.false()))
         batch_op.create_index(batch_op.f("ix_vector_update_state_cancel_requested"), ["cancel_requested"], unique=False)
 
-    with op.batch_alter_table("web_scraping_sate", schema=None) as batch_op:
-        batch_op.add_column(sa.Column("cancel_requested", sa.Boolean(), nullable=False, server_default=sa.false()))
-        batch_op.create_index(batch_op.f("ix_web_scraping_sate_cancel_requested"), ["cancel_requested"], unique=False)
-
     with op.batch_alter_table("vector_update_state", schema=None) as batch_op:
-        batch_op.alter_column("cancel_requested", server_default=None)
-
-    with op.batch_alter_table("web_scraping_sate", schema=None) as batch_op:
         batch_op.alter_column("cancel_requested", server_default=None)
 
 
 def downgrade():
-    with op.batch_alter_table("web_scraping_sate", schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f("ix_web_scraping_sate_cancel_requested"))
-        batch_op.drop_column("cancel_requested")
-
     with op.batch_alter_table("vector_update_state", schema=None) as batch_op:
         batch_op.drop_index(batch_op.f("ix_vector_update_state_cancel_requested"))
         batch_op.drop_column("cancel_requested")

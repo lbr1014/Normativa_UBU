@@ -4,7 +4,7 @@ Script con pruebas de integración de las rutas de administración de la aplicac
 el correcto funcionamiento de las operaciones de gestión de usuarios, documentos y tareas asíncronas disponibles 
 para los administradores. Las pruebas cubren la administración de usuarios, la subida y eliminación de documentos, 
 la visualización y descarga de contenidos PDF y Markdown, así como la creación, consulta y cancelación de tareas
-de actualización de la base de datos vectorial, conversión a Markdown, web scraping y evaluación RAG. 
+de actualización de la base de datos vectorial, conversión a Markdown y evaluación RAG. 
 Además, se validan distintos escenarios de error y control de acceso para garantizar el correcto comportamiento 
 de la interfaz administrativa.
 """
@@ -19,7 +19,6 @@ from app.main.code.model.markdown_conversion_state import MarkdownConversionStat
 from app.main.code.model.rag_evaluation_state import RAGEvaluationState
 from app.main.code.model.user import User
 from app.main.code.model.vector_update_state import VectorUpdateState
-from app.main.code.model.web_scraping_state import WebScrapingSate
 from app.test.support import BaseAppTestCase
 
 ADMIN_FORM_PASSWORD_FIELD = "pass" + "word"
@@ -308,12 +307,10 @@ class AdminRoutesIntegrationTest(BaseAppTestCase):
         with patch("app.main.code.controllers.admin.routes._validate_post_action", return_value=invalid_response):
             markdown = self.client.post("/admin/documents/markdown/convert")
             vector = self.client.post("/admin/vector-db/update")
-            scraping = self.client.post("/admin/documents/web_scraping")
             markdown_cancel = self.client.post("/admin/documents/markdown/cancel/1")
             vector_cancel = self.client.post("/admin/vector-db/cancel/1")
-            scraping_cancel = self.client.post("/admin/documents/web_scraping/cancel/1")
 
-        for response in (markdown, vector, scraping, markdown_cancel, vector_cancel, scraping_cancel):
+        for response in (markdown, vector, markdown_cancel, vector_cancel):
             self.assertEqual(response.status_code, 400)
 
     def test_admin_markdown_status_and_cancel_queued_job(self):
@@ -380,52 +377,6 @@ class AdminRoutesIntegrationTest(BaseAppTestCase):
 
         self.assertEqual(cancelled.status_code, 200)
         self.assertEqual(cancelled.get_json()["status"], "failed")
-        self.assertEqual(missing.status_code, 404)
-
-    @patch("app.main.code.controllers.admin.routes.executor.submit")
-    def test_admin_web_scraping_creates_queued_job(self, mock_submit):
-        """
-        Comprueba la creación de una tarea asíncrona para la ejecución de procesos de web scraping.
-        """
-        response = self.client.post("/admin/documents/web_scraping")
-
-        self.assertEqual(response.status_code, 202)
-        job = db.session.get(WebScrapingSate, response.get_json()["job_id"])
-        self.assertIsNotNone(job)
-        self.assertEqual(job.status, "queued")
-        mock_submit.assert_called_once()
-
-    def test_admin_web_scraping_status_and_cancel_queued_job(self):
-        """
-        Verifica la consulta de estado y la cancelación de tareas de web scraping en ejecución o pendientes.
-        """
-        job = WebScrapingSate(status="queued", progress=20, message="En cola", cancel_requested=False)
-        db.session.add(job)
-        db.session.commit()
-
-        status = self.client.get(f"/admin/documents/web_scraping/status/{job.id}")
-        self.assertEqual(status.status_code, 200)
-        self.assertEqual(status.get_json()["progress"], 20)
-
-        cancelled = self.client.post(f"/admin/documents/web_scraping/cancel/{job.id}")
-        self.assertEqual(cancelled.status_code, 202)
-        db.session.refresh(job)
-        self.assertTrue(job.cancel_requested)
-        self.assertEqual(job.status, "cancelled")
-
-    def test_admin_web_scraping_cancel_finished_and_status_missing(self):
-        """
-        Comprueba el tratamiento de cancelaciones sobre tareas de scraping ya finalizadas y consultas de tareas inexistentes.
-        """
-        job = WebScrapingSate(status="cancelled", progress=0, message="Cancelado", cancel_requested=True)
-        db.session.add(job)
-        db.session.commit()
-
-        cancelled = self.client.post(f"/admin/documents/web_scraping/cancel/{job.id}")
-        missing = self.client.get("/admin/documents/web_scraping/status/9999", headers={"Accept": "application/json"})
-
-        self.assertEqual(cancelled.status_code, 200)
-        self.assertEqual(cancelled.get_json()["status"], "cancelled")
         self.assertEqual(missing.status_code, 404)
 
     def test_admin_delete_document_delegates_to_service(self):

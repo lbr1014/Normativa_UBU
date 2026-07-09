@@ -62,17 +62,6 @@
             <div class="documents-actions-title">{{ t("docs.actions_title") }}</div>
             <div class="d-grid gap-2">
               <div class="documents-action">
-                <button form="scrapingForm"
-                        type="submit"
-                        id="docs-scraping-button"
-                        class="btn btn-outline-light w-100"
-                        data-bs-toggle="tooltip"
-                        data-bs-title="{{ t('docs.scraping_button_tooltip') }}">
-                  {{ t("docs.scraping_button") }}
-                </button>
-              </div>
-
-              <div class="documents-action">
                 <button form="markdownForm"
                         type="submit"
                         id="docs-markdown-button"
@@ -98,9 +87,6 @@
           </div>
         </form>
 
-        <form id="scrapingForm" method="POST" action="{{ url_for('admin.web_scraping_documents') }}" class="d-none">
-          {{ post_form.hidden_tag() }}
-        </form>
         <form id="vectorForm" method="POST" action="{{ url_for('admin.update_vector_db') }}" class="d-none">
           {{ post_form.hidden_tag() }}
         </form>
@@ -108,11 +94,11 @@
           {{ post_form.hidden_tag() }}
         </form>
 
-        <div id="scraping-progress" data-finished="false" class="mt-4 d-none" aria-label="{{ t('docs.progress_aria') }}">
+        <div id="job-progress" data-finished="false" class="mt-4 d-none" aria-label="{{ t('docs.progress_aria') }}">
           <div class="progress upload-progress w-100" aria-hidden="true">
             <div class="progress-bar" style="width: 0%"></div>
           </div>
-          <progress class="visually-hidden" id="scraping-progress-native" max="100" value="0" aria-label="{{ t('docs.progress_aria') }}"></progress>
+          <progress class="visually-hidden" id="job-progress-native" max="100" value="0" aria-label="{{ t('docs.progress_aria') }}"></progress>
           <div class="progress-text small text-muted-app mt-2 text-center" aria-live="polite">
             {{ t("docs.running_default") }}
           </div>

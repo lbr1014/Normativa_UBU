@@ -1,12 +1,11 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const progressBox = document.getElementById("scraping-progress");
+  const progressBox = document.getElementById("job-progress");
   const progressEl = progressBox?.querySelector(".progress");
   const nativeProgressEl = progressBox?.querySelector("progress");
   const bar = progressBox?.querySelector(".progress-bar");
   const text = progressBox?.querySelector(".progress-text");
   const cancelButton = document.getElementById("cancel-job-button");
 
-  const scrapingForm = document.getElementById("scrapingForm");
   const vectorForm = document.getElementById("vectorForm");
   const markdownForm = document.getElementById("markdownForm");
   const uploadForm = document.getElementById("uploadForm");
@@ -61,7 +60,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function toggleButtons(disabled) {
     // Permite subir PDF aunque haya un job activo, pero deshabilita los botones que inician procesos para evitar conflictos.
-    [vectorForm, markdownForm, scrapingForm].forEach((form) => {
+    [vectorForm, markdownForm].forEach((form) => {
       form?.querySelectorAll("button").forEach((button) => {
         if (button === cancelButton) return;
         button.disabled = disabled;
@@ -71,7 +70,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // En el panel de subida, deshabilitamos solo los botones que disparan procesos
     uploadForm?.querySelectorAll("button").forEach((button) => {
       if (button === cancelButton) return;
-      const isProcessButton = button.form && ["scrapingForm", "markdownForm", "vectorForm"].includes(button.form.id);
+      const isProcessButton = button.form && ["markdownForm", "vectorForm"].includes(button.form.id);
       if (isProcessButton) button.disabled = disabled;
     });
   }
@@ -367,72 +366,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  async function pollScrapingJob(jobId) {
-    const statusUrl = `/admin/documents/web_scraping/status/${jobId}`;
-
-    while (true) {
-      try {
-        const data = await fetchJson(statusUrl);
-        const status = data.status;
-        const hasProgress = data.progress !== null && data.progress !== undefined;
-        const progress = hasProgress ? Number(data.progress) : 0;
-        const message = data.message || tr("scraping.starting_ui");
-
-        if (status === "running" || status === "queued") {
-          if (hasProgress) setUIProgress(progress, message);
-          else setUIIndeterminate(message);
-          await new Promise((resolve) => window.setTimeout(resolve, 1000));
-          continue;
-        }
-
-        if (status === "done") {
-          setUIDone(tr("scraping.done_ui"));
-          return;
-        }
-
-        if (status === "cancelled") {
-          setUICancelled(tr("scraping.cancelled"));
-          return;
-        }
-
-        if (status === "failed") {
-          setUIFailed(tr("scraping.failed_ui", { error_suffix: errorSuffix(data.error) }));
-          return;
-        }
-
-        setUIFailed(tr("scraping.unknown_state"));
-        return;
-      } catch (error) {
-        setUIFailed(tr("scraping.status_error"));
-        return;
-      }
-    }
-  }
-
-  async function startScraping(event) {
-    event.preventDefault();
-    if (!scrapingForm) return;
-
-    try {
-      setUIRunning(tr("scraping.starting_ui"));
-      const data = await fetchJson(scrapingForm.action, {
-        method: "POST",
-        body: new FormData(scrapingForm),
-      });
-
-      if (!data.job_id) {
-        setUIFailed(tr("scraping.no_job_id"));
-        return;
-      }
-
-      setActiveJob("scraping", data.job_id);
-      setUIProgress(0, tr("scraping.starting_ui"));
-      pollScrapingJob(data.job_id);
-    } catch (error) {
-      setUIFailed(tr("scraping.start_error"));
-    }
-  }
-
   async function cancelActiveJob() {
     if (!activeJob || !cancelButton) return;
 
@@ -452,13 +385,6 @@ document.addEventListener("DOMContentLoaded", () => {
           body: csrfFormData(markdownForm),
         });
         setUIProgress(bar ? parseInt(bar.style.width || "0", 10) || 0 : 0, tr("markdown.cancelling"));
-      } else if (activeJob.type === "scraping") {
-        await fetchJson(`/admin/documents/web_scraping/cancel/${activeJob.jobId}`, {
-          method: "POST",
-          headers: csrfHeaders(scrapingForm),
-          body: csrfFormData(scrapingForm),
-        });
-        setUIProgress(bar ? parseInt(bar.style.width || "0", 10) || 0 : 0, tr("scraping.cancelling"));
       }
     } catch (error) {
       cancelButton.disabled = false;
@@ -468,7 +394,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   vectorForm?.addEventListener("submit", startVectorUpdate);
   markdownForm?.addEventListener("submit", startMarkdownConversion);
-  scrapingForm?.addEventListener("submit", startScraping);
   cancelButton?.addEventListener("click", cancelActiveJob);
 
   async function resumeAnyActiveJob() {
@@ -479,25 +404,22 @@ document.addEventListener("DOMContentLoaded", () => {
       setUIRunning(tr("process.resume_tracking"));
       if (savedType === "vector") return pollVectorJob(savedId);
       if (savedType === "markdown") return pollMarkdownJob(savedId);
-      if (savedType === "scraping") return pollScrapingJob(savedId);
     }
 
     try {
       const data = await fetchJson("/admin/jobs/active");
-      const active = data?.markdown || data?.vector || data?.scraping;
+      const active = data?.markdown || data?.vector;
       if (!active) return;
 
-      // Prioridad: markdown > vector > scraping
-      const pick = data.markdown || data.vector || data.scraping;
-      const pickedType = data.markdown ? "markdown" : (data.vector ? "vector" : "scraping");
+      const pick = data.markdown || data.vector;
+      const pickedType = data.markdown ? "markdown" : "vector";
       const pickedId = pick?.job_id;
       if (!pickedId) return;
 
       setActiveJob(pickedType, pickedId);
       setUIRunning(tr("process.resume_tracking"));
       if (pickedType === "vector") return pollVectorJob(pickedId);
-      if (pickedType === "markdown") return pollMarkdownJob(pickedId);
-      return pollScrapingJob(pickedId);
+      return pollMarkdownJob(pickedId);
     } catch (error) {
       // Silencioso: si falla, simplemente no reanudamos
     }

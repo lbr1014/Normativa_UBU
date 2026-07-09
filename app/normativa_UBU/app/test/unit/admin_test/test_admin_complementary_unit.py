@@ -5,7 +5,6 @@ centrandose en aspectos como la detección de tareas obsoletas, manejo de errore
 condiciones límite. El objetivo es asegurar una cobertura exhaustiva de los servicios administrativos, garantizando su correcto funcionamiento incluso en situaciones atípicas o de fallo.
 """
 
-import subprocess
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -17,7 +16,6 @@ from app.main.code.extensions import db
 from app.main.code.model.markdown_conversion_state import MarkdownConversionState
 from app.main.code.model.rag_evaluation_state import RAGEvaluationState
 from app.main.code.model.vector_update_state import VectorUpdateState
-from app.main.code.model.web_scraping_state import WebScrapingSate
 from app.test.support import BaseAppTestCase
 
 
@@ -231,58 +229,3 @@ class AdminRoutesAdditionalCoverageUnitTest(BaseAppTestCase):
             resp = self.client.post("/admin/documents/bulk-delete", data={"selected_doc_ids": ["1", "1"]})
         self.assertEqual(resp.status_code, 500)
 
-    def test_handle_scraping_exception_adds_calledprocess_details(self):
-        """
-        Verifica que las excepciones producidas por procesos externos de scraping almacenan información detallada del error generado.
-        """
-        job = WebScrapingSate(status="running", progress=0, message="x", cancel_requested=False)
-        db.session.add(job)
-        db.session.commit()
-
-        exc = subprocess.CalledProcessError(1, ["cmd"], output="OUT", stderr="ERR")
-        with patch("app.main.code.controllers.admin.routes.translate_for", return_value="msg"), patch(
-            "app.main.code.controllers.admin.routes.send_scraping_finished_email"
-        ), patch("app.main.code.controllers.admin.routes._send_email_safe"):
-            admin_routes._handle_scraping_exception(
-                self.app,
-                job.id,
-                "admin@example.com",
-                "http://docs.local",
-                "es",
-                exc,
-            )
-        db.session.refresh(job)
-        self.assertEqual(job.status, "failed")
-        self.assertIn("ERR", job.error)
-
-    def test_scraping_async_calledprocesserror_continues_when_results_exist(self):
-        """
-        Comprueba que una tarea de scraping puede finalizar correctamente aunque uno de los procesos externos falle, siempre que existan resultados válidos generados previamente.
-        """
-        job = WebScrapingSate(status="queued", progress=0, cancel_requested=False)
-        db.session.add(job)
-        db.session.commit()
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            base = Path(tmpdir)
-            resultados_json = base / "resultados.json"
-            resultados_json.write_text("{}", encoding="utf-8")
-            pliegos_json = base / "pliegos.json"
-            pliegos_json.write_text("{}", encoding="utf-8")
-
-            def run_script(job, script, cwd, env, should_cancel, lang, **kwargs):
-                if "script_1" in str(kwargs.get("message", "")) or script.name == "one.py":
-                    raise subprocess.CalledProcessError(1, ["cmd"], stderr="ERR")
-
-            with patch(
-                "app.main.code.controllers.admin.routes._build_scraping_context",
-                return_value=(base, base, Path("one.py"), Path("two.py"), base, {}, resultados_json, pliegos_json),
-            ), patch("app.main.code.controllers.admin.routes._run_scraping_script", side_effect=run_script), patch(
-                "app.main.code.controllers.admin.routes._sync_scraping_results", return_value=(0, 0)
-            ), patch(
-                "app.main.code.controllers.admin.routes.send_scraping_finished_email"
-            ), patch("app.main.code.controllers.admin.routes._send_email_safe"):
-                admin_routes.scraping_async(self.app, job.id, "admin@example.com", "http://docs.local")
-
-        db.session.expire_all()
-        self.assertEqual(db.session.get(WebScrapingSate, job.id).status, "done")

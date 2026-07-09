@@ -31,9 +31,6 @@ from app.main.code.model import (
 from app.main.code.model import (
     VectorUpdateState as VectorUpdateState,
 )
-from app.main.code.model import (
-    WebScrapingSate as WebScrapingSate,
-)
 from app.main.code.model.job_state import JobStateMixin
 from app.main.code.services.documentos import DocumentosService as DocumentosService
 

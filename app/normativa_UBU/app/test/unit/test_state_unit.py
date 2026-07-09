@@ -2,7 +2,7 @@
 Autora: Lydia Blanco Ruiz
 Script con pruebas unitarias de los sistemas de notificación asociados a las tareas asíncronas de la aplicación. 
 Su objetivo es verificar que los correos electrónicos enviados tras la finalización de procesos de actualización 
-de la base de datos vectorial y de web scraping contienen correctamente el estado de la operación, las métricas 
+de la base de datos vectorial contienen correctamente el estado de la operación, las métricas 
 de procesamiento obtenidas y los enlaces necesarios para acceder a la gestión documental. Las pruebas cubren 
 distintos escenarios de generación de mensajes, construcción de URLs y presentación de información relevante para el usuario.
 """
@@ -10,7 +10,6 @@ distintos escenarios de generación de mensajes, construcción de URLs y present
 from unittest.mock import patch
 
 from app.main.code.services.vector_update_state import send_update_finished_email
-from app.main.code.services.web_scraping_state import send_scraping_finished_email
 from app.test.support import BaseAppTestCase
 
 
@@ -79,25 +78,4 @@ class VectorUpdateStateNotificationUnitTest(BaseAppTestCase):
 
         msg = mock_send.call_args.args[0]
         self.assertIn("/admin/documents/list", msg.body)
-        
-class WebScrapingStateNotificationUnitTest(BaseAppTestCase):
-    @patch("app.main.code.services.web_scraping_state.mail.send")
-    def test_send_scraping_finished_email_includes_scraping_metrics(self, mock_send):
-        """
-        Verifica que el correo electrónico enviado tras finalizar una tarea de web scraping incluye correctamente el asunto, 
-        el mensaje informativo y las métricas relacionadas con el número de documentos extraídos y sincronizados durante el proceso.
-        """
-        send_scraping_finished_email(
-            "user@example.com",
-            ok=True,
-            message="Scraping listo",
-            job_id=9,
-            extracted_docs=3,
-            synced_total_docs=5,
-        )
-
-        msg = mock_send.call_args.args[0]
-        self.assertIn("Web scraping finalizado", msg.subject)
-        self.assertIn("Documentos extra", msg.body)
-        self.assertIn("Documentos sincronizados", msg.body)
 

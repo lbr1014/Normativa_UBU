@@ -14,7 +14,6 @@ from .rag_evaluation_state import RAGEvaluationState
 from .rag_query_state import RAGQueryState
 from .user import User
 from .vector_update_state import VectorUpdateState
-from .web_scraping_state import WebScrapingSate
 
 __all__ = [
     "Chunk",
@@ -28,5 +27,4 @@ __all__ = [
     "State",
     "User",
     "VectorUpdateState",
-    "WebScrapingSate",
 ]

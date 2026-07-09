@@ -20,12 +20,10 @@ En esta carpeta se encuentra la versión final de la aplicaicón. Esta preparada
         - services/
           - markdown/
           - rag/
-          - web_scraping/
           - documentos.py
           - async_tasks.py
           - markdown_conversion_state.py
           - vector_update_state.py
-          - web_scraping_state.py
         - __init__.py
         - countries.py
         - decorators.py
@@ -51,9 +49,9 @@ En esta carpeta se encuentra la versión final de la aplicaicón. Esta preparada
   - docker-compose.yml
 
 ## Contenido de los archivos y directorios:
-- **app/main/code**: contiene el código Python real de la aplicación Flask. Concretamente los controladores, modelos, formularios, servicios, web scraping, RAG y el punto de entrada `run.py`.
+- **app/main/code**: contiene el código Python real de la aplicación Flask. Concretamente los controladores, modelos, formularios, servicios, RAG y el punto de entrada `run.py`.
 - **app/main/code/controllers**: contiene los controladores y blueprints de la aplicación.
-- **app/main/code/services**: contiene la lógica de servicio de la aplicación, incluyendo RAG, conversión a Markdown, web scraping, tareas asíncronas y gestión de documentos.
+- **app/main/code/services**: contiene la lógica de servicio de la aplicación, incluyendo RAG, conversión a Markdown, tareas asíncronas y gestión de documentos.
 - **app/main/code/model**: contiene los modelos y entidades de dominio de la aplicación.
 - **app/test**: contiene los tests unitarios y de integración de la aplicación, además de utilidades compartidas y el script `run_tests.sh` que sirve para ejecutar los **tests**.
 - **migrations**: esta carpeta contiene el historial de vesrisones de la base de datos (gestionado con Flask-Migrate/Alembic). Estas migraciones sirven para aplicar de forma automática los cambios de la base de datos en cualquier entorno. 

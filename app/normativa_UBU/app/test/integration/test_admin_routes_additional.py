@@ -3,7 +3,7 @@ Autora: Lydia Blanco Ruiz
 Script con pruebas de integracion adicionales para las rutas de administarción de la aplicación. Su objetivo es verificar 
 escenarios poco frecuentes y ramas adicionales relacionadas con la gestión de usuarios, documentos, evaluaciones RAG y 
 tareas asíncronas de mantenimiento. Las pruebas cubren la detección de trabajos obsoletos, filtros avanzados de administración,
-operaciones masivas, descargas de artefactos de evaluación, gestión de errores en procesos de scraping y validación de distintos 
+operaciones masivas, descargas de artefactos de evaluación y validación de distintos 
 estados de las tareas en segundo plano. 
 """
 
@@ -16,7 +16,6 @@ from app.main.code.extensions import db
 from app.main.code.model.markdown_conversion_state import MarkdownConversionState
 from app.main.code.model.rag_evaluation_state import RAGEvaluationState
 from app.main.code.model.vector_update_state import VectorUpdateState
-from app.main.code.model.web_scraping_state import WebScrapingSate
 from app.test.support import BaseAppTestCase
 
 
@@ -184,47 +183,3 @@ class AdminRoutesAdditionalCoverageIntegrationTest(BaseAppTestCase):
         self.assertEqual(ok.status_code, 302)
         fake_service.delete_document.assert_called_once_with(1)
 
-    def test_web_scraping_status_marks_stale(self):
-        """
-        Comprueba que las tareas de web scraping obsoletas son detectadas y marcadas automáticamente como fallidas.
-        """
-        boot_at = datetime(2026, 5, 31, 10, 0, tzinfo=timezone.utc)
-        self.app.config["APP_BOOT_AT"] = boot_at
-        job = WebScrapingSate(status="running", progress=0, message="x", cancel_requested=False)
-        job.created_at = boot_at - timedelta(hours=1)
-        db.session.add(job)
-        db.session.commit()
-        res = self.client.get(f"/admin/documents/web_scraping/status/{job.id}")
-        self.assertEqual(res.status_code, 200)
-        db.session.refresh(job)
-        self.assertEqual(job.status, "failed")
-
-    def test_scraping_async_raises_when_extractor_fails_and_no_results(self):
-        """
-        Verifica la gestión de errores durante la ejecución asíncrona del scraping cuando el extractor falla y 
-        no se generan resultados válidos.
-        """
-        from app.main.code.controllers.admin import routes as admin_routes
-
-        job = WebScrapingSate(status="queued", progress=0, cancel_requested=False)
-        db.session.add(job)
-        db.session.commit()
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            base = Path(tmpdir)
-            resultados_json = base / "resultados.json"  # no existe
-            pliegos_json = base / "pliegos.json"
-            pliegos_json.write_text("{}", encoding="utf-8")
-            with patch(
-                "app.main.code.controllers.admin.routes._build_scraping_context",
-                return_value=(base, base, Path("one.py"), Path("two.py"), base, {}, resultados_json, pliegos_json),
-            ), patch(
-                "app.main.code.controllers.admin.routes._run_scraping_script",
-                side_effect=admin_routes.subprocess.CalledProcessError(1, ["cmd"], stderr="ERR"),
-            ), patch(
-                "app.main.code.controllers.admin.routes._handle_scraping_exception"
-            ) as mock_handler, patch(
-                "app.main.code.controllers.admin.routes._send_email_safe"
-            ):
-                admin_routes.scraping_async(self.app, job.id, "admin@example.com", "http://docs.local")
-                mock_handler.assert_called_once()

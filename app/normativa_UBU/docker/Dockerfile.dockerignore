@@ -45,12 +45,6 @@ app/rag/qdrant_data/
 app/rag/pliegos/
 
 # ======================
-# Web scraping outputs
-# ======================
-app/web_scraping/resultados_playwright_*
-app/web_scraping/*.json
-
-# ======================
 # Logs / temp
 # ======================
 *.log

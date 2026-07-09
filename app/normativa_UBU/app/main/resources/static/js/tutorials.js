@@ -382,10 +382,6 @@
           popover: { title: t("tutorial.docs.upload.title"), description: t("tutorial.docs.upload.desc"), side: "right", align: "start" },
         },
         {
-          element: "#docs-scraping-button",
-          popover: { title: t("tutorial.docs.scraping.title"), description: t("tutorial.docs.scraping.desc"), side: "right", align: "start" },
-        },
-        {
           element: "#docs-markdown-button",
           popover: { title: t("tutorial.docs.markdown.title"), description: t("tutorial.docs.markdown.desc"), side: "right", align: "start" },
         },

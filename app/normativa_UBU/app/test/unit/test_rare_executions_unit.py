@@ -2,7 +2,7 @@
 Autora: Lydia Blanco Ruiz
 Script con pruebas unitarias adicionales para cubrir ejecuciones poco frecuentes. Incluye verificaciones relacionadas con la inicialización de 
 la aplicación, generación de configuraciones y rutas, construcción de datos estadísticos para la interfaz, funciones auxiliares de los controladores, 
-modelos de datos, servicios de indexación documental, detección del dispositivo de ejecución de Ollama y utilidades de scraping. Su principal objetivo es 
+modelos de datos, servicios de indexación documental y detección del dispositivo de ejecución de Ollama. Su principal objetivo es 
 aumentar la cobertura global del proyecto validando comportamientos excepcionales y rutas alternativas de ejecución.
 """
 
@@ -389,33 +389,3 @@ class PrototipoRAGOllamaDeviceUnitTest(unittest.TestCase):
         self.assertEqual(device, "CPU")
 
 
-class DescargarPliegosUnitTest(unittest.TestCase):
-    def test_limpiar_expediente_replaces_bad_chars_and_fallback(self):
-        """
-        Verifica la normalización de identificadores de expediente eliminando caracteres no válidos y aplicando valores de respaldo cuando es necesario.
-        """
-        from app.main.code.services.web_scraping.DescargarPliegos import (
-            limpiar_expediente,
-        )
-
-        self.assertEqual(limpiar_expediente(" EXP/12 "), "EXP_12")
-        self.assertEqual(limpiar_expediente(".."), "expediente")
-
-    def test_ensure_dest_dir_falls_back_on_permission_error(self):
-        """
-        Comprueba que el directorio de descarga se reconfigura correctamente cuando se producen errores de permisos en la ubicación inicialmente configurada.
-        """
-        import importlib
-
-        mod = importlib.import_module("app.main.code.services.web_scraping.DescargarPliegos")
-        original_dest = mod.DEST
-        try:
-            configured = "C:\\data\\pliegos" if os.name == "nt" else "/data/pliegos"
-            mod.DEST = Path(configured)  
-            with patch.object(Path, "mkdir", side_effect=[PermissionError(), None]) as _mk, patch.dict(
-                os.environ, {"DOCS_DIR": configured}
-            ):
-                mod.ensure_dest_dir()
-            self.assertEqual(mod.DEST, Path("pliegos"))
-        finally:
-            mod.DEST = original_dest

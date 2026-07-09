@@ -42,14 +42,6 @@ MARKDOWN_STARTING = "markdown.starting"
 MARKDOWN_NONE_PENDING = "markdown.none_pending"
 MARKDOWN_FAILED = "markdown.failed"
 VECTOR_CANCELLING = "vector.cancelling"
-SCRAPING_CANCELLING = "scraping.cancelling"
-SCRAPING_CANCELLED = "scraping.cancelled"
-SCRAPING_STARTING = "scraping.starting"
-SCRAPING_SCRIPT_1 = "scraping.script_1"
-SCRAPING_SCRIPT_2 = "scraping.script_2"
-SCRAPING_SYNCING = "scraping.syncing"
-SCRAPING_DONE = "scraping.done"
-SCRAPING_FAILED = "scraping.failed"
 JOBS_ALREADY_FINISHED = "jobs.already_finished"
 
 DIRECT_RUNTIME_MESSAGE_MAP = {
@@ -70,15 +62,6 @@ DIRECT_RUNTIME_MESSAGE_MAP = {
     "Falló la Conversión a Markdown.": MARKDOWN_FAILED,
     "Cancelando Actualización vectorial...": VECTOR_CANCELLING,
     "Cancelando ActualizaciÃ³n vectorial...": VECTOR_CANCELLING,
-    "Cancelando Web Scraping...": SCRAPING_CANCELLING,
-    "Web Scraping cancelado.": SCRAPING_CANCELLED,
-    "Iniciando Web Scraping...": SCRAPING_STARTING,
-    "Ejecutando script 1/2...": SCRAPING_SCRIPT_1,
-    "Ejecutando script 2/2...": SCRAPING_SCRIPT_2,
-    "Sincronizando PDFs en la base de datos...": SCRAPING_SYNCING,
-    "Web Scraping terminado.": SCRAPING_DONE,
-    "Fallo el Web Scraping.": SCRAPING_FAILED,
-    "Falló el Web Scraping.": SCRAPING_FAILED,
     "El job ya ha terminado.": JOBS_ALREADY_FINISHED,
 }
 
