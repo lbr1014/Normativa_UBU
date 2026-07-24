@@ -79,7 +79,12 @@ if default_model and default_model not in rag_models:
     rag_models.insert(0, default_model)
 
 ocr_model = os.environ.get("OCR_MODEL_NAME", "").strip()
-models = list(dict.fromkeys([*rag_models, *([ocr_model] if ocr_model else [])]))
+ocr_base_url = service_url_from_env(
+    os.environ.get("OCR_OLLAMA_BASE_URL", ollama_base_url),
+    os.environ.get("OLLAMA_BASE_URL_SCHEME", "http"),
+)
+ocr_uses_main_ollama = ocr_base_url == ollama_base_url
+models = list(dict.fromkeys([*rag_models, *([ocr_model] if ocr_model and ocr_uses_main_ollama else [])]))
 pull_timeout_seconds = float(os.environ.get("OLLAMA_PULL_TIMEOUT_SECONDS", "1800"))
 pull_idle_timeout_seconds = float(os.environ.get("OLLAMA_PULL_IDLE_TIMEOUT_SECONDS", "300"))
 pull_log_interval_seconds = float(os.environ.get("OLLAMA_PULL_LOG_INTERVAL_SECONDS", "20"))
