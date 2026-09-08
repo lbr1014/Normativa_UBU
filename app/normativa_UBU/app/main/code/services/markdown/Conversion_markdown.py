@@ -5,8 +5,10 @@ Script para convertir documentos PDF a Markdown mediante OCR y normalización de
 
 import asyncio
 import base64
+from dataclasses import dataclass
 import logging
 import os
+import re
 import shutil
 import statistics
 import sys
@@ -17,6 +19,15 @@ from pathlib import Path
 import httpx
 from pdf2image import convert_from_path, pdfinfo_from_path
 from PIL import Image
+
+try:
+    from pypdf import PdfReader
+    from pypdf.errors import PdfReadError
+except ImportError:  # entorno de tests o despliegue sin pypdf
+    PdfReader = None
+
+    class PdfReadError(Exception):
+        pass
 
 try:
     import torch
@@ -30,14 +41,14 @@ You are converting a Spanish PDF (often legal / administrative) into clean Markd
 
 Rules:
 - Use Markdown headings:
-  - Level 1: section numbers like "1. OBJETO DEL CONTRATO", etc.
+  - Level 1: main section numbers like "1. DISPOSICIONES GENERALES", etc.
   - Level 2: "1.1.", "1.2.", etc.
   - Level 3: "1.1.1.", etc.
+- Also treat legal ordinal headings like "PRIMERA.", "SEGUNDA.", "DISPOSICIÓN ADICIONAL" or "ANEXO" as main headings.
 - When there is a single number like "1.":
   - Only treat it as a title if the following words are mostly UPPERCASE.
 - When there are more numbers, like "1.1." or "1.1.1.":
   - Always treat them as section/subsection titles.
-- Also treat codes like "G.2.2." or "A.1.3." as valid section identifiers, at subsection level.
 - Preserve bold text using **negrita** when the original text is visually bold
   (for example fully uppercase section titles or emphasized words).
 - For tables, use HTML <table> output.
@@ -49,8 +60,8 @@ Rules:
 
 Index / table of contents:
 - If a line has a section title followed by dots and then a page number
-  (e.g. "1. OBJETO DEL CONTRATO............. 3"):
-  - Remove the dots so it becomes "1. OBJETO DEL CONTRATO 3".
+  (e.g. "1. DISPOSICIONES GENERALES............. 3"):
+  - Remove the dots so it becomes "1. DISPOSICIONES GENERALES 3".
   - Do NOT output lines that are only dots or filler characters.
 
 Return only valid Markdown, no explanations.
@@ -82,6 +93,62 @@ OCR_RETRY_MAX_IMAGE_SIDES = [
 OCR_PAGE_FAILURE_MODE = os.getenv("OCR_PAGE_FAILURE_MODE", "placeholder").strip().lower()
 PDF_INFO_TIMEOUT_SECONDS = int(os.getenv("PDF_INFO_TIMEOUT_SECONDS", "30"))
 PDF_RENDER_TIMEOUT_SECONDS = int(os.getenv("PDF_RENDER_TIMEOUT_SECONDS", "120"))
+PDF_OUTLINE_HEADING_MAX_LEVEL = int(os.getenv("PDF_OUTLINE_HEADING_MAX_LEVEL", "6"))
+PDF_NATIVE_MIN_CHARS = int(os.getenv("PDF_NATIVE_MIN_CHARS", "80"))
+PDF_NATIVE_MIN_ALPHA_RATIO = float(os.getenv("PDF_NATIVE_MIN_ALPHA_RATIO", "0.35"))
+PDF_NATIVE_GARBLED_MAX_RATIO = float(os.getenv("PDF_NATIVE_GARBLED_MAX_RATIO", "0.08"))
+HEADER_FOOTER_REPEAT_RATIO = float(os.getenv("HEADER_FOOTER_REPEAT_RATIO", "0.55"))
+HEADER_FOOTER_EDGE_LINES = int(os.getenv("HEADER_FOOTER_EDGE_LINES", "3"))
+SPANISH_ORDINAL_HEADING_WORDS = {
+    "PRIMERA",
+    "PRIMERO",
+    "SEGUNDA",
+    "SEGUNDO",
+    "TERCERA",
+    "TERCERO",
+    "CUARTA",
+    "CUARTO",
+    "QUINTA",
+    "QUINTO",
+    "SEXTA",
+    "SEXTO",
+    "SEPTIMA",
+    "SEPTIMO",
+    "SÉPTIMA",
+    "SÉPTIMO",
+    "OCTAVA",
+    "OCTAVO",
+    "NOVENA",
+    "NOVENO",
+    "DECIMA",
+    "DECIMO",
+    "DÉCIMA",
+    "DÉCIMO",
+    "UNDECIMA",
+    "UNDECIMO",
+    "UNDÉCIMA",
+    "UNDÉCIMO",
+    "DUODECIMA",
+    "DUODECIMO",
+    "DUODÉCIMA",
+    "DUODÉCIMO",
+    "DISPOSICION",
+    "DISPOSICIÓN",
+    "ANEXO",
+}
+
+
+@dataclass(frozen=True)
+class MarkdownBlock:
+    """
+    Representa una unidad intermedia de contenido antes de normalizar el documento completo.
+    """
+
+    text: str
+    page_number: int
+    kind: str = "paragraph"
+    source: str = "native"
+    position: int = 0
 
 
 def _service_url_from_env(env_name: str, default_host: str) -> str:
@@ -351,6 +418,165 @@ def get_pdf_page_count(pdf_path: Path) -> int:
     return pages
 
 
+def _normalize_line_for_repetition(line: str) -> str:
+    """
+    Normaliza una línea para comparar cabeceras y pies entre páginas.
+    """
+    normalized = re.sub(r"\d+", "#", line.casefold())
+    normalized = re.sub(r"\s+", " ", normalized).strip(" -\t\r\n")
+    return normalized
+
+
+def _native_text_quality(text: str) -> dict[str, float]:
+    """
+    Calcula señales simples para decidir si el texto embebido de una página es utilizable.
+    """
+    compact = re.sub(r"\s+", "", text or "")
+    if not compact:
+        return {"chars": 0, "alpha_ratio": 0.0, "garbled_ratio": 1.0}
+
+    alpha = sum(1 for char in compact if char.isalpha())
+    garbled = sum(1 for char in compact if char in "\ufffd■□�")
+    return {
+        "chars": float(len(compact)),
+        "alpha_ratio": alpha / len(compact),
+        "garbled_ratio": garbled / len(compact),
+    }
+
+
+def is_native_pdf_text_usable(text: str) -> bool:
+    """
+    Decide si una página tiene texto embebido suficiente para evitar OCR completo.
+    """
+    quality = _native_text_quality(text)
+    return (
+        quality["chars"] >= PDF_NATIVE_MIN_CHARS
+        and quality["alpha_ratio"] >= PDF_NATIVE_MIN_ALPHA_RATIO
+        and quality["garbled_ratio"] <= PDF_NATIVE_GARBLED_MAX_RATIO
+    )
+
+
+def extract_native_page_text(pdf_path: Path, page_number: int) -> str:
+    """
+    Extrae texto embebido de una página PDF sin renderizarla.
+    """
+    if PdfReader is None:
+        return ""
+
+    try:
+        reader = PdfReader(str(pdf_path))
+        if page_number < 1 or page_number > len(reader.pages):
+            return ""
+        return reader.pages[page_number - 1].extract_text() or ""
+    except (OSError, PdfReadError, ValueError, TypeError, AttributeError) as exc:
+        logger.info("No se pudo extraer texto nativo de %s página %s: %s", pdf_path.name, page_number, exc)
+        return ""
+
+
+def markdown_to_blocks(markdown: str, page_number: int, source: str) -> list[MarkdownBlock]:
+    """
+    Convierte texto plano/Markdown de una página a bloques intermedios.
+    """
+    blocks = []
+    paragraph_lines = []
+    position = 0
+
+    def flush_paragraph() -> None:
+        nonlocal position
+        if not paragraph_lines:
+            return
+        text = " ".join(line.strip() for line in paragraph_lines if line.strip()).strip()
+        paragraph_lines.clear()
+        if text:
+            blocks.append(MarkdownBlock(text=text, page_number=page_number, kind="paragraph", source=source, position=position))
+            position += 1
+
+    for raw_line in (markdown or "").splitlines():
+        line = raw_line.strip()
+        if not line:
+            flush_paragraph()
+            continue
+        if line.startswith(("#", "-", "*", "|", ">", "<")) or re.match(r"^\d+[\).]\s+", line):
+            flush_paragraph()
+            kind = "heading" if line.startswith("#") else "table" if line.startswith("|") else "list" if line.startswith(("-", "*")) or re.match(r"^\d+[\).]\s+", line) else "block"
+            blocks.append(MarkdownBlock(text=line, page_number=page_number, kind=kind, source=source, position=position))
+            position += 1
+            continue
+        paragraph_lines.append(line)
+
+    flush_paragraph()
+    return blocks
+
+
+def _detect_repeated_edge_lines(page_blocks: list[list[MarkdownBlock]]) -> set[str]:
+    """
+    Detecta líneas repetidas en el borde superior/inferior de páginas para eliminar cabeceras y pies.
+    """
+    occurrences: dict[str, set[int]] = {}
+    total_pages = len(page_blocks)
+    if total_pages < 3:
+        return set()
+
+    edge = max(1, HEADER_FOOTER_EDGE_LINES)
+    for page_index, blocks in enumerate(page_blocks, start=1):
+        candidates = [block.text for block in blocks[:edge]] + [block.text for block in blocks[-edge:]]
+        for line in candidates:
+            normalized = _normalize_line_for_repetition(line)
+            if len(normalized) >= 4:
+                occurrences.setdefault(normalized, set()).add(page_index)
+
+    threshold = max(2, int(total_pages * HEADER_FOOTER_REPEAT_RATIO + 0.999))
+    return {line for line, pages in occurrences.items() if len(pages) >= threshold}
+
+
+def _is_joinable_paragraph(previous: str, current: str) -> bool:
+    """
+    Decide si dos bloques consecutivos forman el mismo párrafo lógico.
+    """
+    if not previous or not current:
+        return False
+    if previous.endswith((".", ":", ";", "?", "!", "»", "\"", ")")):
+        return False
+    if current.startswith(("#", "-", "*", "|", ">", "<")):
+        return False
+    if re.match(r"^\d+[\).]\s+", current):
+        return False
+    return current[:1].islower() or previous.endswith("-")
+
+
+def normalize_document_blocks(page_blocks: list[list[MarkdownBlock]]) -> list[MarkdownBlock]:
+    """
+    Normaliza globalmente bloques: elimina cabeceras/pies repetidos y une párrafos partidos por páginas.
+    """
+    repeated = _detect_repeated_edge_lines(page_blocks)
+    normalized_blocks: list[MarkdownBlock] = []
+
+    for blocks in page_blocks:
+        for block in blocks:
+            if _normalize_line_for_repetition(block.text) in repeated:
+                continue
+            text = block.text.strip()
+            if not text:
+                continue
+            if normalized_blocks and block.kind == "paragraph" and normalized_blocks[-1].kind == "paragraph":
+                previous = normalized_blocks[-1]
+                if _is_joinable_paragraph(previous.text, text):
+                    separator = "" if previous.text.endswith("-") else " "
+                    joined = previous.text.rstrip("-") + separator + text
+                    normalized_blocks[-1] = MarkdownBlock(joined, previous.page_number, previous.kind, previous.source, previous.position)
+                    continue
+            normalized_blocks.append(block)
+
+    return normalized_blocks
+
+
+def render_blocks_to_markdown(blocks: list[MarkdownBlock]) -> str:
+    """
+    Renderiza la representación intermedia a Markdown final.
+    """
+    return "\n\n".join(block.text for block in blocks if block.text.strip())
+
+
 def pdf_page_to_image(pdf_path: Path, page_number: int, output_dir: Path, dpi: int = PDF_RENDER_DPI) -> Path:
     """
     Convierte una sola página del PDF en una imagen PNG para evitar cargar el documento completo en memoria.
@@ -493,8 +719,8 @@ def clean_index_dots(markdown: str) -> str:
     """
     Postprocesa el contenido Markdown para limpiar líneas de índice con puntos separadores.
 
-    Convierte líneas como "1. OBJETO DEL CONTRATO............. 3"
-    en "1. OBJETO DEL CONTRATO 3".
+    Convierte líneas como "1. DISPOSICIONES GENERALES............. 3"
+    en "1. DISPOSICIONES GENERALES 3".
 
     También elimina líneas que consistan únicamente de puntos.
 
@@ -619,37 +845,11 @@ def _split_numeric_heading(stripped: str, expected_parts: int) -> tuple[str, str
     return ".".join(parts), title
 
 
-def _split_letter_code_heading(stripped: str) -> tuple[str, str] | None:
-    """
-    Divide un encabezado con código de letra en marcador y título.
-
-    Args:
-        stripped: Línea de texto sin espacios extremos.
-
-    Returns:
-        tuple[str, str] | None: Tupla (código, título) si coincide, None en caso contrario.
-    """
-    marker_end = next((idx for idx, char in enumerate(stripped) if char.isspace()), len(stripped))
-    marker = stripped[:marker_end]
-    title = stripped[marker_end:].strip()
-
-    if len(marker) < 4 or not marker.endswith(".") or not marker[0].isupper():
-        return None
-    if marker[1] != ".":
-        return None
-
-    numeric_parts = marker[2:-1].split(".")
-    if not numeric_parts or not all(part.isdigit() for part in numeric_parts):
-        return None
-
-    return marker, title
-
-
 def _process_single_level_heading(stripped: str) -> str | None:
     """
     Procesa encabezados de nivel único que requieren estar en mayúsculas.
 
-    Convierte líneas como "1. OBJETO DEL CONTRATO" en "# 1. OBJETO DEL CONTRATO"
+    Convierte líneas como "1. DISPOSICIONES GENERALES" en "# 1. DISPOSICIONES GENERALES"
     solo si el texto después del número está mayoritariamente en mayúsculas.
 
     Args:
@@ -705,22 +905,35 @@ def _process_level3_heading(stripped: str) -> str | None:
     return None
 
 
-def _process_letter_code_heading(stripped: str) -> str | None:
+def _process_spanish_ordinal_heading(stripped: str) -> str | None:
     """
-    Procesa códigos de letra con números múltiples como encabezados de nivel 3.
-
-    Convierte líneas como "G.2.2. Texto" en "### G.2.2. Texto".
-
-    Args:
-        stripped: Línea de texto sin espacios en blanco extremos.
-
-    Returns:
-        str | None: Encabezado Markdown de nivel 3 si coincide, None en caso contrario.
+    Procesa encabezados jurídicos como "PRIMERA. Ámbito de aplicación.".
     """
-    parsed = _split_letter_code_heading(stripped)
-    if parsed:
-        code, title = parsed
-        return f"### {code} {title}".rstrip()
+    marker_end = next((idx for idx, char in enumerate(stripped) if char.isspace()), len(stripped))
+    marker = stripped[:marker_end].rstrip(".")
+    title = stripped[marker_end:].strip()
+
+    if not title or not stripped[:marker_end].endswith("."):
+        return None
+    if marker.upper() not in SPANISH_ORDINAL_HEADING_WORDS:
+        return None
+    return f"# {marker}. {title}"
+
+
+def _process_normative_heading(stripped: str) -> str | None:
+    """
+    Procesa encabezados normativos como "DISPOSICIÓN ADICIONAL PRIMERA." o "ANEXO I.".
+    """
+    first_word = stripped.split(maxsplit=1)[0].rstrip(".")
+    if not first_word.isupper():
+        return None
+
+    normalized = stripped.upper()
+    normalized = normalized.replace("DISPOSICION", "DISPOSICIÓN")
+    if re.match(r"^DISPOSICIÓN\s+(ADICIONAL|TRANSITORIA|DEROGATORIA|FINAL)\b", normalized):
+        return f"# {stripped}"
+    if re.match(r"^ANEXO(\s+[IVXLCDM0-9]+)?\.?\b", normalized):
+        return f"# {stripped}"
     return None
 
 
@@ -736,7 +949,8 @@ def normalize_headings(markdown: str) -> str:
       (para un único número se exige MAYÚSCULAS).
     - '1.1. Texto' → '## 1.1. Texto'
     - '1.1.1. Texto' → '### 1.1.1. Texto'
-    - 'G.2.2. Texto' o 'G.2.2.' → '### G.2.2. Texto'
+    - 'PRIMERA. Texto' → '# PRIMERA. Texto'
+    - 'DISPOSICIÓN ADICIONAL PRIMERA. Texto' → '# DISPOSICIÓN ADICIONAL PRIMERA. Texto'
     """
     lines = markdown.splitlines()
     out_lines = []
@@ -754,7 +968,8 @@ def normalize_headings(markdown: str) -> str:
             _process_single_level_heading(stripped) or
             _process_level2_heading(stripped) or
             _process_level3_heading(stripped) or
-            _process_letter_code_heading(stripped)
+            _process_spanish_ordinal_heading(stripped) or
+            _process_normative_heading(stripped)
         )
 
         if processed_line:
@@ -763,6 +978,110 @@ def normalize_headings(markdown: str) -> str:
             out_lines.append(raw)
 
     return "\n".join(out_lines)
+
+
+def _iter_pdf_outline_entries(outline, level: int = 1):
+    """
+    Recorre recursivamente el índice interno del PDF preservando la profundidad.
+    """
+    for item in outline or []:
+        if isinstance(item, list):
+            yield from _iter_pdf_outline_entries(item, level + 1)
+            continue
+        title = str(getattr(item, "title", "") or "").strip()
+        if title:
+            yield item, title, level
+
+
+def get_pdf_outline_headings(pdf_path: Path) -> dict[int, list[tuple[int, str]]]:
+    """
+    Extrae los marcadores/outline del PDF agrupados por página de destino.
+
+    Returns:
+        Diccionario ``pagina_1_indexed -> [(nivel, titulo), ...]``.
+    """
+    if PdfReader is None:
+        return {}
+
+    try:
+        reader = PdfReader(str(pdf_path))
+    except (OSError, PdfReadError, ValueError) as exc:
+        logger.info("No se pudo leer el índice interno de %s: %s", pdf_path.name, exc)
+        return {}
+
+    headings_by_page: dict[int, list[tuple[int, str]]] = {}
+    try:
+        entries = list(_iter_pdf_outline_entries(reader.outline))
+    except (PdfReadError, ValueError, TypeError, AttributeError) as exc:
+        logger.info("No se pudo extraer el índice interno de %s: %s", pdf_path.name, exc)
+        return {}
+
+    for destination, title, level in entries:
+        try:
+            page_number = reader.get_destination_page_number(destination) + 1
+        except (PdfReadError, ValueError, TypeError, AttributeError, KeyError):
+            continue
+        heading_level = min(max(level, 1), max(1, PDF_OUTLINE_HEADING_MAX_LEVEL))
+        headings_by_page.setdefault(page_number, []).append((heading_level, title))
+
+    return headings_by_page
+
+
+def _normalize_heading_text(text: str) -> str:
+    """
+    Normaliza texto de encabezado para comparar títulos del OCR con el índice interno.
+    """
+    return " ".join(text.lstrip("#").strip().casefold().split())
+
+
+def _markdown_heading(level: int, title: str) -> str:
+    """
+    Construye un encabezado Markdown con nivel limitado a la sintaxis estándar.
+    """
+    safe_level = min(max(level, 1), max(1, PDF_OUTLINE_HEADING_MAX_LEVEL))
+    return f"{'#' * safe_level} {title.strip()}"
+
+
+def _page_already_contains_outline_heading(page_markdown: str, title: str) -> bool:
+    """
+    Comprueba si el OCR ya incluyó cerca del inicio de la página el título del marcador.
+    """
+    wanted = _normalize_heading_text(title)
+    if not wanted:
+        return True
+    for line in page_markdown.splitlines()[:20]:
+        current = _normalize_heading_text(line)
+        if current == wanted or wanted in current:
+            return True
+    return False
+
+
+def apply_pdf_outline_headings(
+    page_markdowns: list[str | None],
+    outline_headings: dict[int, list[tuple[int, str]]],
+) -> list[str | None]:
+    """
+    Inserta encabezados Markdown procedentes del índice interno en sus páginas de destino.
+    """
+    if not outline_headings:
+        return page_markdowns
+
+    updated = list(page_markdowns)
+    total_pages = len(updated)
+    for page_number in sorted(outline_headings):
+        if page_number < 1 or page_number > total_pages:
+            continue
+
+        page_md = updated[page_number - 1] or ""
+        missing_headings = [
+            _markdown_heading(level, title)
+            for level, title in outline_headings[page_number]
+            if not _page_already_contains_outline_heading(page_md, title)
+        ]
+        if missing_headings:
+            updated[page_number - 1] = "\n\n".join([*missing_headings, page_md.strip()]).strip()
+
+    return updated
 
 
 async def process_pdf_async(pdf_path: Path, on_page_start=None, model_name: str | None = None) -> str:
@@ -787,9 +1106,9 @@ async def process_pdf_async(pdf_path: Path, on_page_start=None, model_name: str 
     )
 
     total_pages = get_pdf_page_count(pdf_path)
-    page_markdowns: list[str | None] = [None for _ in range(total_pages)]
+    page_blocks: list[list[MarkdownBlock] | None] = [None for _ in range(total_pages)]
     tmp_dir = Path(tempfile.mkdtemp(prefix="nanonets_ocr_"))
-    timings: dict[str, list[float]] = {"render_s": [], "resize_s": [], "ocr_s": [], "cleanup_s": []}
+    timings: dict[str, list[float]] = {"native_s": [], "render_s": [], "resize_s": [], "ocr_s": [], "cleanup_s": []}
     timeout = httpx.Timeout(
         connect=OLLAMA_CONNECT_TIMEOUT_SECONDS,
         read=OLLAMA_READ_TIMEOUT_SECONDS,
@@ -807,16 +1126,23 @@ async def process_pdf_async(pdf_path: Path, on_page_start=None, model_name: str 
 
             async def process_page(page_number: int) -> None:
                 logger.info("Página %s/%s", page_number, total_pages)
+                if on_page_start is not None:
+                    on_page_start(page_number, total_pages)
 
-                # 1) Renderizar a imagen (CPU). Esto puede paralelizarse bastante sin tocar Ollama.
+                t0 = time.perf_counter()
+                native_text = await asyncio.to_thread(extract_native_page_text, pdf_path, page_number)
+                timings["native_s"].append(time.perf_counter() - t0)
+                if is_native_pdf_text_usable(native_text):
+                    logger.info("Página %s/%s: usando texto nativo PDF", page_number, total_pages)
+                    page_blocks[page_number - 1] = markdown_to_blocks(native_text, page_number, source="native")
+                    return
+
+                # Renderizar a imagen solo cuando el texto embebido no es suficiente.
                 t0 = time.perf_counter()
                 async with render_semaphore:
-                    if on_page_start is not None:
-                        on_page_start(page_number, total_pages)
                     img_path = await asyncio.to_thread(pdf_page_to_image, pdf_path, page_number, tmp_dir)
                 timings["render_s"].append(time.perf_counter() - t0)
 
-                # 2) OCR (Ollama). Respetar prioridad de RAG y limitar concurrencia real contra Ollama.
                 try:
                     try:
                         await wait_for_rag_idle_async()
@@ -835,7 +1161,7 @@ async def process_pdf_async(pdf_path: Path, on_page_start=None, model_name: str 
                             raise
                         logger.warning("OCR omitido en página %s/%s: %s", page_number, total_pages, exc)
                         md = _page_failure_markdown(page_number, total_pages, exc)
-                    page_markdowns[page_number - 1] = md
+                    page_blocks[page_number - 1] = markdown_to_blocks(md, page_number, source="ocr")
                 finally:
                     try:
                         img_path.unlink(missing_ok=True)
@@ -846,8 +1172,15 @@ async def process_pdf_async(pdf_path: Path, on_page_start=None, model_name: str 
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
-    full_md = "\n\n".join([chunk for chunk in page_markdowns if chunk])
     t_cleanup = time.perf_counter()
+    page_markdowns = [render_blocks_to_markdown(blocks or []) for blocks in page_blocks]
+    page_markdowns = apply_pdf_outline_headings(page_markdowns, get_pdf_outline_headings(pdf_path))
+    page_blocks = [
+        markdown_to_blocks(page_markdown or "", page_number, source="normalized")
+        for page_number, page_markdown in enumerate(page_markdowns, start=1)
+    ]
+    document_blocks = normalize_document_blocks(page_blocks)
+    full_md = render_blocks_to_markdown(document_blocks)
     full_md = clean_index_dots(full_md)
     full_md = normalize_headings(full_md)
     timings["cleanup_s"].append(time.perf_counter() - t_cleanup)

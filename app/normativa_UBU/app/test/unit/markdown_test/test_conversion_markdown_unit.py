@@ -185,8 +185,58 @@ class ConversionMarkdownUnitTest(unittest.TestCase):
         ):
             out = asyncio.run(conversion.process_pdf_async(Path("x.pdf")))
 
-        self.assertEqual(out.splitlines()[0], "page-1/2")
+        self.assertLess(out.index("page-1/2"), out.index("page-2/2"))
         self.assertIn("page-2/2", out)
+
+    def test_process_pdf_async_prefers_usable_native_text_before_ocr(self):
+        """
+        Verifica que una página con texto embebido válido no se renderiza ni se envía a OCR.
+        """
+        native = "Este es un texto nativo suficientemente largo para superar el umbral de calidad del PDF digital."
+
+        with patch.object(conversion, "get_pdf_page_count", return_value=1), patch.object(
+            conversion,
+            "extract_native_page_text",
+            return_value=native,
+        ), patch.object(conversion, "pdf_page_to_image") as mock_render, patch.object(
+            conversion,
+            "ocr_page_with_nanonets_async",
+            AsyncMock(return_value="ocr"),
+        ) as mock_ocr:
+            out = asyncio.run(conversion.process_pdf_async(Path("x.pdf")))
+
+        self.assertIn("texto nativo", out)
+        mock_render.assert_not_called()
+        mock_ocr.assert_not_called()
+
+    def test_normalize_document_blocks_removes_repeated_headers_and_joins_paragraphs(self):
+        """
+        Comprueba la normalización global de bloques: elimina bordes repetidos y une párrafos partidos.
+        """
+        pages = [
+            [
+                conversion.MarkdownBlock("Universidad de Burgos", 1, position=0),
+                conversion.MarkdownBlock("Este párrafo continúa", 1, position=1),
+                conversion.MarkdownBlock("Página 1", 1, position=2),
+            ],
+            [
+                conversion.MarkdownBlock("Universidad de Burgos", 2, position=0),
+                conversion.MarkdownBlock("en la página siguiente.", 2, position=1),
+                conversion.MarkdownBlock("Página 2", 2, position=2),
+            ],
+            [
+                conversion.MarkdownBlock("Universidad de Burgos", 3, position=0),
+                conversion.MarkdownBlock("# 1. OBJETO", 3, kind="heading", position=1),
+                conversion.MarkdownBlock("Página 3", 3, position=2),
+            ],
+        ]
+
+        markdown = conversion.render_blocks_to_markdown(conversion.normalize_document_blocks(pages))
+
+        self.assertNotIn("Universidad de Burgos", markdown)
+        self.assertNotIn("Página 1", markdown)
+        self.assertIn("Este párrafo continúa en la página siguiente.", markdown)
+        self.assertIn("# 1. OBJETO", markdown)
 
     def test_response_error_details_prefers_json_error_fields(self):
         """
@@ -281,31 +331,66 @@ class ConversionMarkdownUnitTest(unittest.TestCase):
         self.assertIsNone(conversion._split_numeric_heading("123. Title", 1))
         self.assertEqual(conversion._split_numeric_heading("1. Title", 1), ("1", "Title"))
 
-        self.assertIsNone(conversion._split_letter_code_heading("G. Texto"))
-        self.assertIsNone(conversion._split_letter_code_heading("g.1. Texto"))
-        self.assertIsNone(conversion._split_letter_code_heading("G-1. Texto"))
-        self.assertIsNone(conversion._split_letter_code_heading("G.a. Texto"))
-        self.assertEqual(conversion._split_letter_code_heading("G.2. Texto"), ("G.2.", "Texto"))
-
         self.assertIsNone(conversion._process_single_level_heading("1. titulo minuscula"))
         self.assertIsNone(conversion._process_level2_heading("1. Texto"))
         self.assertIsNone(conversion._process_level3_heading("1.1. Texto"))
-        self.assertIsNone(conversion._process_letter_code_heading("Texto"))
+        self.assertIsNone(conversion._process_spanish_ordinal_heading("PRIMERA sin punto"))
+        self.assertIsNone(conversion._process_spanish_ordinal_heading("OTRA. Texto"))
+        self.assertIsNone(conversion._process_normative_heading("Anexo a la solicitud"))
 
     def test_normalize_headings_converts_supported_heading_patterns(self):
         """
         Comprueba la conversión automática de distintos patrones de encabezados a la sintaxis Markdown correspondiente.
         """
-        markdown = "\n# Ya\n1. OBJETO DEL CONTRATO\n1.1. Alcance\n1.1.1. Detalle\nG.2.2. Codigo\n- 1. Lista\nTexto normal"
+        markdown = "\n# Ya\n1. DISPOSICIONES GENERALES\n1.1. Alcance\n1.1.1. Detalle\nG.2.2. Codigo\nPRIMERA. Ámbito de aplicación.\nDISPOSICIÓN ADICIONAL PRIMERA. Régimen aplicable.\nANEXO I. Modelo de solicitud.\n- 1. Lista\nTexto normal"
 
         normalized = conversion.normalize_headings(markdown)
 
-        self.assertIn("# 1. OBJETO DEL CONTRATO", normalized)
+        self.assertIn("# 1. DISPOSICIONES GENERALES", normalized)
         self.assertIn("## 1.1. Alcance", normalized)
         self.assertIn("### 1.1.1. Detalle", normalized)
-        self.assertIn("### G.2.2. Codigo", normalized)
+        self.assertIn("G.2.2. Codigo", normalized)
+        self.assertNotIn("### G.2.2. Codigo", normalized)
+        self.assertIn("# PRIMERA. Ámbito de aplicación.", normalized)
+        self.assertIn("# DISPOSICIÓN ADICIONAL PRIMERA. Régimen aplicable.", normalized)
+        self.assertIn("# ANEXO I. Modelo de solicitud.", normalized)
         self.assertIn("- 1. Lista", normalized)
         self.assertIn("Texto normal", normalized)
+
+    def test_pdf_outline_headings_are_extracted_with_nested_levels(self):
+        """
+        Verifica que el índice interno del PDF se conserva como encabezados agrupados por página.
+        """
+        intro = MagicMock(title="Introducción")
+        child = MagicMock(title="Tramitación")
+        ignored = MagicMock(title="")
+
+        reader = MagicMock()
+        reader.outline = [intro, [child, ignored]]
+        reader.get_destination_page_number.side_effect = [0, 2, 3]
+
+        with patch("app.main.code.services.markdown.Conversion_markdown.PdfReader", return_value=reader):
+            headings = conversion.get_pdf_outline_headings(Path("doc.pdf"))
+
+        self.assertEqual(headings, {1: [(1, "Introducción")], 3: [(2, "Tramitación")]})
+
+    def test_apply_pdf_outline_headings_inserts_missing_titles_without_duplicates(self):
+        """
+        Comprueba que los marcadores del PDF se insertan como encabezados Markdown cuando el OCR los pierde.
+        """
+        pages = ["Texto de portada", "# Introducción\n\nTexto", "Contenido"]
+        outline = {
+            1: [(1, "Objeto")],
+            2: [(1, "Introducción")],
+            3: [(2, "Requisitos")],
+            99: [(1, "Fuera de rango")],
+        }
+
+        updated = conversion.apply_pdf_outline_headings(pages, outline)
+
+        self.assertTrue(updated[0].startswith("# Objeto\n\nTexto de portada"))
+        self.assertEqual(updated[1], "# Introducción\n\nTexto")
+        self.assertTrue(updated[2].startswith("## Requisitos\n\nContenido"))
 
     def test_post_ollama_chat_async_returns_json_payload(self):
         """
