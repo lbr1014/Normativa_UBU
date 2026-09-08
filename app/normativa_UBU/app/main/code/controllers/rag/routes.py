@@ -31,6 +31,7 @@ from app.main.code.inetrnacionalizacion.tarduccion import (
 from app.main.code.model.documento import Documento
 from app.main.code.model.rag_evaluation_state import RAGEvaluationState
 from app.main.code.model.rag_query_state import RAGQueryState
+from app.main.code.services.documentos import extract_document_title_from_markdown, extract_pdf_footer_date
 from app.main.code.services.async_tasks import cancel_tracked, executor, submit_tracked
 from app.main.code.services.rag.PrototipoRAG import (
     QueryCancelledError,
@@ -58,13 +59,11 @@ def rag_page() -> str:
     configure_default_query_form(default_form)
 
     usage_payload = build_model_usage_index_payload()
-    expediente_type_payload = build_expediente_type_payload()
     return render_template(
         "rag.html",
         form=form,
         default_form=default_form,
         model_usage_payload=usage_payload,
-        expediente_type_payload=expediente_type_payload,
     )
 
 
@@ -226,17 +225,6 @@ def _load_json_file_or_default(path: Path, default: object) -> object:
         return json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return default
-
-def build_expediente_type_payload() -> dict[str, list[str]]:
-    """
-    Mapa expediente -> lista de tipos de documento disponibles ('administrativo', 'tecnico').
-    Sirve para filtrar expedientes en el formulario guiado del tab.
-    
-    Returns:
-        dict con nÃºmero de expediente como clave y lista de tipos documentales asociados como valor.
-    """
-    return {}
-
 
 def build_model_usage_index_payload(months: int = 12) -> dict:
     """
@@ -450,45 +438,24 @@ def configure_model_choices(form: RAGQueryForm) -> None:
 
 def configure_default_query_form(form: RAGDefaultQueryForm) -> None:
     """
-    Carga opciones de expedientes, tipos documentales, preguntas frecuentes y modelos.
+    Carga opciones de expedientes, preguntas frecuentes y modelos.
     
     Args:
         form (RAGDefaultQueryForm): El formulario a configurar.
     """
     configure_model_choices(form)
     form.expediente.choices = get_expediente_choices()
-    form.doc_type.choices = [
-        ("", t("rag_default.doc_type_any")),
-        ("heading", "Encabezados"),
-        ("paragraph", "PÃ¡rrafos"),
-        ("list", "Listas"),
-        ("table", "Tablas"),
-    ]
     form.question_kind.choices = [
-        ("general", t("rag_default.question_general")),
-        ("amounts", t("rag_default.question_amounts")),
-        ("deadlines", t("rag_default.question_deadlines")),
-        ("solvency", t("rag_default.question_solvency")),
-        ("criteria", t("rag_default.question_criteria")),
-        ("guarantees", t("rag_default.question_guarantees")),
-        ("budget", t("rag_default.question_budget")),
-        ("duration", t("rag_default.question_duration")),
-        ("penalties", t("rag_default.question_penalties")),
-        ("submission", t("rag_default.question_submission")),
+        ("summary", t("rag_default.question_summary")),
+        ("explain_all", t("rag_default.question_explain_all")),
+        ("explain_section", t("rag_default.question_explain_section")),
     ]
 
 
 GUIDED_QUESTION_TEXTS = {
-    "general": "Indica la informacion principal y las clausulas mas relevantes.",
-    "amounts": "Extrae todas las cantidades economicas, importes, presupuestos, garantias y umbrales relevantes.",
-    "deadlines": "Resume los plazos importantes: presentacion de ofertas, ejecucion, adjudicacion, garantias y cualquier fecha limite.",
-    "solvency": "Identifica los requisitos de solvencia economica, financiera, tecnica y profesional.",
-    "criteria": "Resume los criterios de adjudicacion, su ponderacion y como se valoran.",
-    "guarantees": "Indica las garantias provisionales o definitivas exigidas y sus importes o porcentajes.",
-    "budget": "Explica el presupuesto base, el valor estimado, impuestos incluidos o excluidos y partidas relevantes.",
-    "duration": "Indica la duracion del contrato, posibles prorrogas y condiciones de ejecucion temporal.",
-    "penalties": "Resume penalizaciones, incumplimientos, causas de resolucion y obligaciones criticas.",
-    "submission": "Explica como y donde presentar la oferta, documentacion requerida y sobres o archivos necesarios.",
+    "summary": "elabora un resumen general y detallado del documento completo.",
+    "explain_all": "explica todos los apartados del documento de forma ordenada y comprensible.",
+    "explain_section": "explica el apartado indicado del documento, aclarando su finalidad, requisitos y efectos practicos.",
 }
 
 
@@ -499,7 +466,7 @@ def is_guided_query_request() -> bool:
     Returns:
         bool: True si la peticiÃ³n contiene campos especÃ­ficos del formulario guiado, False en caso contrario.
     """
-    return any(field in request.form for field in ("expediente", "doc_type", "question_kind", "summary"))
+    return any(field in request.form for field in ("expediente", "question_kind", "section"))
 
 
 def build_guided_question(form: RAGDefaultQueryForm) -> str:
@@ -512,32 +479,54 @@ def build_guided_question(form: RAGDefaultQueryForm) -> str:
     Returns:
         str: La pregunta construida para la consulta RAG basada en las opciones seleccionadas.
     """
-    document_scope = (form.expediente.data or "").strip()
-    structure_type = (form.doc_type.data or "").strip()
-    question_kind = (form.question_kind.data or "general").strip() or "general"
-    summary_mode = bool(form.summary.data)
+    document_scope = guided_document_scope((form.expediente.data or "").strip())
+    question_kind = (form.question_kind.data or "summary").strip() or "summary"
+    section = (form.section.data or "").strip()
 
-    scope = f"Para el documento {document_scope}" if document_scope else "Para la normativa disponible de forma general"
-    doc_scope = f" priorizando bloques de tipo {structure_type}" if (not summary_mode and structure_type) else ""
+    scope = f"Para el documento seleccionado {document_scope}" if document_scope else "Para la normativa disponible de forma general"
 
-    task = (
-        "elabora un resumen general y detallado del documento completo."
-        if summary_mode
-        else GUIDED_QUESTION_TEXTS.get(question_kind, GUIDED_QUESTION_TEXTS["general"])
-    )
-    return f"{scope}{doc_scope}, {task}".strip()
+    task = GUIDED_QUESTION_TEXTS.get(question_kind, GUIDED_QUESTION_TEXTS["summary"])
+    if question_kind == "explain_section" and section:
+        task = f"explica el apartado \"{section}\" del documento, aclarando su finalidad, requisitos y efectos practicos."
+    return f"{scope}, {task}".strip()
+
+
+def guided_document_scope(document_id: str) -> str:
+    """Devuelve una descripcion legible del documento seleccionado."""
+    if not document_id:
+        return ""
+    try:
+        doc = db.session.get(Documento, int(document_id))
+    except (TypeError, ValueError):
+        doc = None
+    if doc is None:
+        return document_id
+
+    filename = str(doc.nombre or "").strip()
+    filename_stem = filename[:-4] if filename.lower().endswith(".pdf") else filename
+    title = extract_document_title_from_markdown(doc.markdown_content, filename_stem)
+    pdf_date = extract_pdf_footer_date(doc.markdown_content)
+    parts = [part for part in (filename_stem, title if title != filename_stem else "", pdf_date) if part]
+    return " | ".join(parts)
 
 
 def get_expediente_choices() -> list[tuple[str, str]]:
     """Devuelve documentos disponibles para acotar una consulta guiada."""
     choices: list[tuple[str, str]] = [("", t("rag_default.expediente_any"))]
-    rows = db.session.query(Documento.nombre).order_by(Documento.nombre.asc()).all()
-    for (name,) in rows:
-        title = str(name or "").strip()
-        if title.lower().endswith(".pdf"):
-            title = title[:-4]
-        if title:
-            choices.append((title, title))
+    rows = Documento.query.order_by(Documento.nombre.asc()).all()
+    for doc in rows:
+        filename = str(doc.nombre or "").strip()
+        if not filename:
+            continue
+        filename_stem = filename[:-4] if filename.lower().endswith(".pdf") else filename
+        title = extract_document_title_from_markdown(doc.markdown_content, filename_stem)
+        pdf_date = extract_pdf_footer_date(doc.markdown_content)
+        label_parts = [filename_stem]
+        if title and title != filename_stem:
+            label_parts.append(title)
+        if pdf_date:
+            label_parts.append(pdf_date)
+        choices.append((str(doc.id), " | ".join(label_parts)))
     return choices
 
 def type_label(type_value: str) -> str:

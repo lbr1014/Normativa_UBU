@@ -35,9 +35,14 @@ from app.main.code.countries import (
 from app.main.code.extensions import db
 from app.main.code.forms import EditUserForm, EmptyForm
 from app.main.code.inetrnacionalizacion.tarduccion import get_locale, t
+from app.main.code.services.documentos import (
+    extract_document_title_from_markdown,
+    extract_pdf_footer_date,
+)
 from app.main.code.services.rag.PrototipoRAG import qdrant_get_payloads
 
 from ...model.consulta import Consulta
+from ...model.documento import Documento
 
 STATS_COMPARISON_GLOBAL = "stats.comparison_global"
 from ...model.rag_query_state import RAGQueryState
@@ -1349,6 +1354,43 @@ def best_pid_for_consulta(consulta: Consulta) -> str:
 
     chunk = getattr(best_cc, "chunk", None)
     return getattr(chunk, "qdrant_point_id", "") or ""
+
+
+def _metadata_title_looks_like_filename(title: str, filename: str) -> bool:
+    title = (title or "").strip()
+    filename = (filename or "").strip()
+    return bool(title and filename and title in {filename, Path(filename).stem})
+
+
+def _normalize_chunk_metadata(metadata: dict, document: Documento | None = None) -> dict:
+    """
+    Corrige metadatos de chunk para diferenciar archivo PDF y título documental.
+    """
+    normalized = dict(metadata or {})
+    normalized.pop("tipo_documento", None)
+    document_id = normalized.get("document_id")
+    if document is None and document_id is not None:
+        try:
+            document = Documento.query.get(int(document_id))
+        except (TypeError, ValueError):
+            document = None
+
+    filename = normalized.get("filename") or normalized.get("document_name") or ""
+    title = normalized.get("title") or ""
+    if document is not None:
+        filename = filename or document.nombre
+        if not title or _metadata_title_looks_like_filename(str(title), str(filename)):
+            title = extract_document_title_from_markdown(
+                document.markdown_content,
+                Path(document.nombre or filename).stem,
+            )
+        normalized["pdf_date"] = normalized.get("pdf_date") or extract_pdf_footer_date(document.markdown_content)
+
+    if filename:
+        normalized["filename"] = filename
+    if title:
+        normalized["title"] = title
+    return normalized
     
 def build_meta_by_consulta(consultas: list[Consulta]) -> dict:
     """
@@ -1367,28 +1409,66 @@ def build_meta_by_consulta(consultas: list[Consulta]) -> dict:
     """
     meta_by_consulta = {}
     legacy_pids = {}
+    legacy_chunks = {}
 
     for consulta in consultas:
         fragmentos = sorted(consulta.fragmentos or [], key=lambda item: item.get("ranking", 0))
         if fragmentos:
             best = fragmentos[0]
+            best_metadata = _normalize_chunk_metadata(best.get("metadata") or {})
             meta_by_consulta[consulta.id] = {
                 "qdrant_point_id": (best.get("qdrant_point_id") or "").strip(),
-                "metadata": best.get("metadata") or {},
+                "metadata": best_metadata,
                 "content": best.get("chunk", "") or "",
+                "chunks": [
+                    {
+                        **fragment,
+                        "metadata": _normalize_chunk_metadata(fragment.get("metadata") or {}),
+                    }
+                    for fragment in fragmentos
+                ],
             }
             continue
 
         legacy_pids[consulta.id] = best_pid_for_consulta(consulta)
+        legacy_chunks[consulta.id] = sorted(consulta.consultaChunks or [], key=lambda cc: cc.ranking)
 
     if legacy_pids:
-        payload_by_pid = qdrant_get_payloads(pid for pid in legacy_pids.values() if pid)
+        all_pids = {
+            pid
+            for pid in legacy_pids.values()
+            if pid
+        }
+        for chunks in legacy_chunks.values():
+            for consulta_chunk in chunks:
+                chunk = getattr(consulta_chunk, "chunk", None)
+                pid = getattr(chunk, "qdrant_point_id", "") or ""
+                if pid:
+                    all_pids.add(pid)
+
+        payload_by_pid = qdrant_get_payloads(all_pids)
         for cid, pid in legacy_pids.items():
             payload = payload_by_pid.get(pid) or {}
+            metadata = _normalize_chunk_metadata(payload.get("metadata") or {})
             meta_by_consulta[cid] = {
                 "qdrant_point_id": pid,
-                "metadata": payload.get("metadata") or {},
+                "metadata": metadata,
                 "content": payload.get("content", "") or "",
+                "chunks": [
+                    {
+                        "chunk_id": getattr(chunk, "id", None),
+                        "qdrant_point_id": chunk_pid,
+                        "metadata": _normalize_chunk_metadata(
+                            (chunk_payload.get("metadata") or {}),
+                            getattr(chunk, "document", None),
+                        ),
+                        "content": chunk_payload.get("content", "") or "",
+                    }
+                    for consulta_chunk in legacy_chunks.get(cid, [])
+                    for chunk in [getattr(consulta_chunk, "chunk", None)]
+                    for chunk_pid in [getattr(chunk, "qdrant_point_id", "") or ""]
+                    for chunk_payload in [payload_by_pid.get(chunk_pid) or {}]
+                ],
             }
 
     return meta_by_consulta    

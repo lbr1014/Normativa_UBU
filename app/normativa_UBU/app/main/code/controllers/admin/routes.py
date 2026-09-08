@@ -58,9 +58,14 @@ from ...model.markdown_conversion_state import MarkdownConversionState
 from ...model.rag_evaluation_state import RAGEvaluationState
 from ...model.user import User
 from ...model.vector_update_state import VectorUpdateState
-from ...services.documentos import DocumentosService, JobCancelledError
+from ...services.documentos import (
+    DocumentosService,
+    JobCancelledError,
+    extract_document_title_from_markdown,
+    extract_pdf_footer_date,
+)
 from ...services.evaluation.rag_evaluation_service import run_rag_evaluation
-from ...services.rag.PrototipoRAG import qdrant_delete_by_filename
+from ...services.rag.PrototipoRAG import qdrant_delete_by_filename, qdrant_get_payloads
 try:
     from ...services.rag.PrototipoRAG import index_documents_dir
 except ImportError:
@@ -646,11 +651,10 @@ def _document_filters() -> dict[str, str]:
     Lee los filtros activos de la administracion de documentos.
     
     Returns:
-        Un diccionario con los valores de los filtros de nombre, tipo, estado y markdown.
+        Un diccionario con los valores de los filtros de nombre, estado y markdown.
     """
     return {
         "name": (request.args.get("name") or "").strip(),
-        "type": (request.args.get("type") or "").strip(),
         "status": (request.args.get("status") or "").strip(),
         "markdown": (request.args.get("markdown") or "").strip(),
     }
@@ -662,7 +666,7 @@ def _apply_document_filters(query, filters: dict[str, str]) -> Any:
     
     Args:
         query: Consulta SQLAlchemy base sobre la que aplicar los filtros.
-        filters: Diccionario con los filtros activos (nombre, tipo, estado, markdown).
+        filters: Diccionario con los filtros activos (nombre, estado, markdown).
         
     Returns:
         La consulta SQLAlchemy con los filtros aplicados.
@@ -687,15 +691,14 @@ def _apply_document_filters(query, filters: dict[str, str]) -> Any:
     return query
 
 
-def _document_filter_options() -> tuple[list[str], list[str]]:
+def _document_filter_options() -> list[str]:
     """
-    Devuelve tipos y estados disponibles para los filtros.
+    Devuelve estados disponibles para los filtros.
     
     Returns:
-        Una tupla con la lista de tipos de documento y la lista de estados disponibles.
+        Lista de estados disponibles.
     """
-    type_values = []
-    status_values = [
+    return [
         item[0]
         for item in (
             Documento.query.with_entities(Documento.status)
@@ -705,7 +708,6 @@ def _document_filter_options() -> tuple[list[str], list[str]]:
         )
         if item[0]
     ]
-    return type_values, status_values
 
 
 def convert_pdf_to_markdown(pdf_path: Path, on_page_start=None) -> str:
@@ -1536,6 +1538,89 @@ def vector_db_status(job_id: int) -> ResponseReturnValue:
     )
 
 
+def _section_from_metadata(metadata: dict) -> str:
+    """
+    Extrae un apartado legible desde los metadatos estructurales del chunk.
+    """
+    structure = metadata.get("structure") if isinstance(metadata.get("structure"), dict) else {}
+    section_path = structure.get("section_path") or metadata.get("section_path")
+    if isinstance(section_path, list):
+        section = " > ".join(str(part).strip() for part in section_path if str(part).strip())
+        if section:
+            return section
+    for key in ("heading", "section", "title"):
+        value = structure.get(key) or metadata.get(key)
+        if value:
+            return str(value)
+    return ""
+
+
+def _keywords_from_metadata(metadata: dict) -> str:
+    """
+    Extrae las keywords del payload en un formato legible.
+    """
+    keywords = metadata.get("keywords")
+    if isinstance(keywords, list):
+        return ", ".join(str(keyword).strip() for keyword in keywords if str(keyword).strip())
+    if keywords:
+        return str(keywords)
+    return ""
+
+
+def _document_title_from_metadata(metadata: dict, document: Documento | None) -> str:
+    """
+    Devuelve el título real del documento, evitando usar el nombre del PDF como título.
+    """
+    metadata_title = str(metadata.get("title") or "").strip()
+    if document is None:
+        return metadata_title
+
+    filename_stem = Path(document.nombre or "").stem
+    if metadata_title and metadata_title not in {document.nombre, filename_stem}:
+        return metadata_title
+    return extract_document_title_from_markdown(document.markdown_content, filename_stem)
+
+
+def _chunk_details_by_doc(docs: list[Documento]) -> dict[int, list[dict]]:
+    """
+    Construye los detalles de chunks que se muestran en el modal de documentos.
+    """
+    chunks = [
+        chunk
+        for doc in docs
+        for chunk in sorted(getattr(doc, "chunks_meta", []) or [], key=lambda item: item.segment_index)
+    ]
+    payloads = qdrant_get_payloads([chunk.qdrant_point_id for chunk in chunks])
+    details_by_doc: dict[int, list[dict]] = {doc.id: [] for doc in docs}
+
+    for chunk in chunks:
+        payload = payloads.get(str(chunk.qdrant_point_id), {})
+        metadata = dict(payload.get("metadata") or {})
+        metadata.pop("tipo_documento", None)
+        if not metadata and chunk.structural_metadata:
+            metadata = {"structure": chunk.structural_metadata}
+        document = getattr(chunk, "document", None)
+        title = _document_title_from_metadata(metadata, document)
+
+        details_by_doc.setdefault(chunk.document_id, []).append(
+            {
+                "segment_index": chunk.segment_index,
+                "text": payload.get("content") or "",
+                "title": title,
+                "document_name": metadata.get("filename") or (document.nombre if document else ""),
+                "section": _section_from_metadata(metadata),
+                "keywords": _keywords_from_metadata(metadata),
+                "pdf_date": metadata.get("pdf_date")
+                or (extract_pdf_footer_date(document.markdown_content) if document else ""),
+                "page": metadata.get("page", chunk.page),
+                "type": metadata.get("type", chunk.structure_type),
+                "n_chars": chunk.n_chars,
+            }
+        )
+
+    return details_by_doc
+
+
 @admin_bp.get("/documents/list")
 @login_required
 @admin_required
@@ -1563,16 +1648,17 @@ def documents_list_page() -> ResponseReturnValue:
         pagination = svc.list_documents_paginated(page, per_page)
     docs = pagination.items
     markdown_status = svc.get_markdown_status_map(docs)
+    chunk_details_by_doc = _chunk_details_by_doc(docs)
     pending_markdown = svc.count_pending_markdown()
-    doc_type_options, doc_status_options = _document_filter_options()
+    doc_status_options = _document_filter_options()
 
     return render_template(
         "admin_documents.html",
         docs=docs,
         markdown_status=markdown_status,
+        chunk_details_by_doc=chunk_details_by_doc,
         pending_markdown=pending_markdown,
         filters=filters,
-        doc_type_options=doc_type_options,
         doc_status_options=doc_status_options,
         page=pagination.page,
         total_pages=pagination.pages or 1,
