@@ -313,20 +313,19 @@ class RAGDefaultQueryFormUnitTest(FormTestMixin, BaseAppTestCase):
             method="POST",
             data={
                 "expediente": "",
-                "doc_type": "administrativo",
-                "question_kind": "amounts",
-                "question": "Para los pliegos disponibles, extrae cantidades.",
+                "question_kind": "explain_section",
+                "section": "Articulo 1",
+                "question": "Para los documentos disponibles, explica el articulo 1.",
             },
         ):
             valid = RAGDefaultQueryForm()
             valid.expediente.choices = [("", "General")]
-            valid.doc_type.choices = [("", "Cualquiera"), ("administrativo", "Administrativo")]
-            valid.question_kind.choices = [("amounts", "Cantidades")]
+            valid.question_kind.choices = [("explain_section", "Explicar apartado")]
             valid.model.choices = []
             self.assertTrue(valid.validate(), valid.errors)
 
-        self.assertEqual(valid.doc_type.data, "administrativo")
-        self.assertEqual(valid.question_kind.data, "amounts")
+        self.assertEqual(valid.question_kind.data, "explain_section")
+        self.assertEqual(valid.section.data, "Articulo 1")
 
         invalid = self.assert_form_invalid(RAGDefaultQueryForm, {"question": ""}, "question")
         self.assertEqual(invalid.question.errors[0], t("validation.required"))

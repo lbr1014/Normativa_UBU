@@ -166,9 +166,9 @@ class PrototipoRAGFullCoverageUnitTest(unittest.TestCase):
         Verifica la construcción de filtros de metadatos incluyendo condiciones opcionales de coincidencia cuando están soportadas por Qdrant.
         """
         m = _import_real_prototipo_with_env({})
-        filt = m.build_metadata_filter(numero_expediente="EXP", tipo_documento="tecnico")
+        filt = m.build_metadata_filter(document_id=1, structure_type="heading")
         self.assertIsNotNone(filt)
-        self.assertTrue(getattr(filt, "should", None))
+        self.assertEqual([condition.key for condition in filt.must], ["metadata.document_id", "metadata.type"])
 
     def test_build_metadata_filter_tipo_without_should_returns_must_only(self):
         """
@@ -375,11 +375,10 @@ class PrototipoRAGFullCoverageUnitTest(unittest.TestCase):
         )
 
         with patch.object(m, "qmodels", fake_qmodels):
-            filt = m.build_metadata_filter(numero_expediente="EXP", tipo_documento="administrativo")
+            filt = m.build_metadata_filter(document_id=3, structure_type="heading", page=2)
 
         self.assertIsNotNone(filt)
-        self.assertIsNotNone(getattr(filt, "min_should", None))
-        self.assertEqual(filt.min_should.min_count, 1)
+        self.assertEqual([condition.key for condition in filt.must], ["metadata.document_id", "metadata.type", "metadata.page"])
 
     def test_ensure_ollama_model_available_skips_empty_pull_lines(self):
         """
@@ -632,9 +631,13 @@ class PrototipoRAGFullCoverageUnitTest(unittest.TestCase):
         Verifica el comportamiento de la indexación Markdown cuando no se generan fragmentos o existe inconsistencia entre fragmentos y embeddings.
         """
         m = _import_real_prototipo_with_env({})
-        with patch.object(m, "chunk_text", return_value=[]):
+        with patch.object(m, "chunk_text_with_structure", return_value=[]):
             self.assertEqual(m.index_markdown("texto", filename="doc.md", sha256="h", document_id=1), [])
-        with patch.object(m, "chunk_text", return_value=["c1", "c2"]), patch.object(m, "embedding_model", return_value=[[0.0]]):
+        with patch.object(
+            m,
+            "chunk_text_with_structure",
+            return_value=[m.StructuralChunk(text="c1"), m.StructuralChunk(text="c2")],
+        ), patch.object(m, "embedding_model", return_value=[[0.0]]):
             self.assertEqual(m.index_markdown("texto", filename="doc.md", sha256="h", document_id=1), [])
 
     def test_obtener_mejor_chunk_returns_empty_when_no_points(self):
@@ -669,6 +672,6 @@ class PrototipoRAGFullCoverageUnitTest(unittest.TestCase):
         Comprueba la ejecución correcta del punto de entrada del módulo y la llamada a los procesos de indexación desde línea de comandos.
         """
         m = _import_real_prototipo_with_env({})
-        with patch.object(m, "index_pliegos_dir", return_value={"ok": True}), patch.object(m.logging, "basicConfig"):
+        with patch.object(m, "index_documents_dir", return_value={"ok": True}), patch.object(m.logging, "basicConfig"):
             self.assertEqual(m.cli_main(Path("missing-dir")), {"ok": True})
             self.assertEqual(m.cli_main(), {"ok": True})

@@ -54,7 +54,7 @@ class RagRoutesAdditionalCoverageUnitTest(BaseAppTestCase):
 
             self.assertEqual(rag_routes._load_json_file_or_default(bad_json, []), [])
 
-    def test_process_rows_filters_empty_and_type_label_and_pdf_strip(self):
+    def test_legacy_expediente_helpers_are_noops_and_document_choices_use_names(self):
         """
         Comprueba el procesamiento de registros asociados a expedientes, filtrando valores vacíos,
         agrupando tipos documentales y generando etiquetas descriptivas para la interfaz.
@@ -65,28 +65,16 @@ class RagRoutesAdditionalCoverageUnitTest(BaseAppTestCase):
 
         by2 = {}
         rag_routes.process_rows(by2, [("EXP", "administrativo", "A.pdf"), ("EXP", "", "")])
-        self.assertIn("EXP", by2)
-        self.assertIn("administrativo", by2["EXP"]["types"])
-        self.assertEqual(by2["EXP"]["names"][0], "A.pdf")
+        self.assertEqual(by2, {})
 
         with patch("app.main.code.controllers.rag.routes.t", side_effect=lambda key, **_k: key):
-            self.assertEqual(rag_routes.type_label("administrativo"), "rag_default.doc_type_admin")
-            self.assertEqual(rag_routes.type_label("tecnico"), "rag_default.doc_type_technical")
+            self.assertEqual(rag_routes.type_label("heading"), "heading")
             self.assertEqual(rag_routes.type_label(""), "-")
 
-    def test_build_expediente_type_payload_and_model_usage_index_edge_cases(self):
+    def test_model_usage_index_edge_cases(self):
         """
-        Verifica la construcción de estructuras de datos para expedientes y estadísticas de uso de modelos, incluyendo situaciones con
-        datos incompletos, vacíos o fuera de rango temporal.
+        Verifica estadisticas de uso de modelos con datos incompletos o fuera de rango.
         """
-        with patch.object(rag_routes.db.session, "query") as mock_query:
-            mock_query.return_value.filter.return_value.filter.return_value.filter.return_value.filter.return_value.distinct.return_value.all.return_value = [
-                ("EXP-1", "  "),
-                ("  ", "administrativo"),
-            ]
-            payload = rag_routes.build_expediente_type_payload()
-        self.assertEqual(payload, {})
-
         job_missing = SimpleNamespace(created_at=None, result_payload=None, model_name=None)
         job_old = SimpleNamespace(
             created_at=__import__("datetime").datetime(1900, 1, 1),
@@ -109,41 +97,18 @@ class RagRoutesAdditionalCoverageUnitTest(BaseAppTestCase):
             out = rag_routes.build_model_usage_index_payload(months=1)
         self.assertEqual(out["series"], {})
 
-    def test_get_expediente_choices_strips_pdf_extension(self):
+    def test_get_expediente_choices_shows_document_title_and_date(self):
         """
-        Comprueba la generación de opciones de selección de expedientes eliminando correctamente las 
-        extensiones PDF de los nombres mostrados al usuario.
+        Comprueba la generacion de opciones de documentos mostrando nombre, titulo y fecha.
         """
-        fake_query = SimpleNamespace(
-            filter=lambda *_a, **_k: SimpleNamespace(
-                filter=lambda *_a2, **_k2: SimpleNamespace(
-                    order_by=lambda *_a3, **_k3: SimpleNamespace(all=lambda: [("EXP", "administrativo", "file.pdf")])
-                )
-            )
+        doc = SimpleNamespace(
+            id=7,
+            nombre="file.pdf",
+            markdown_content="# NORMATIVA DE PRUEBA\n\nFECHA : 08/09/2026 10:00",
         )
+        fake_query = SimpleNamespace(order_by=lambda *_a, **_k: SimpleNamespace(all=lambda: [doc]))
         with patch("app.main.code.controllers.rag.routes.t", side_effect=lambda key, **_k: key), patch(
-            "app.main.code.controllers.rag.routes.db.session.query", return_value=fake_query
-        ), patch("app.main.code.controllers.rag.routes.process_rows") as mock_process:
-            class _NameLike:
-                def __init__(self, value: str):
-                    self.value = value
-
-                def __len__(self):
-                    return len(self.value)
-
-                def lower(self):
-                    return self.value.lower()
-
-                def __getitem__(self, idx):
-                    # permite `[0]` devolviendo el string completo
-                    if idx == 0:
-                        return self.value
-                    raise IndexError(idx)
-
-            def _inject(by_expediente, _rows):
-                by_expediente["EXP"] = {"types": {"administrativo"}, "names": [_NameLike("file.pdf")]}
-
-            mock_process.side_effect = _inject
+            "app.main.code.controllers.rag.routes.Documento.query", fake_query
+        ):
             choices = rag_routes.get_expediente_choices()
-        # label should not include ".pdf" due to strip branch
-        self.assertTrue(any("file" in label and ".pdf" not in label for _exp, label in choices if _exp))
+        self.assertIn(("7", "file | NORMATIVA DE PRUEBA | 08/09/2026"), choices)

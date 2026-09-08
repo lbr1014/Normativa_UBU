@@ -57,27 +57,7 @@ class RagRoutesPayloadsUnitTest(unittest.TestCase):
         """
         from app.main.code.controllers.rag import routes as rag_routes
 
-        fake_query = MagicMock()
-        fake_query.filter.return_value = fake_query
-        fake_query.distinct.return_value = fake_query
-        fake_query.all.return_value = [
-            ("EXP-1", "administrativo"),
-            ("EXP-1", "tecnico"),
-            ("EXP-2", "administrativo"),
-            ("", "tecnico"),
-            ("EXP-3", ""),
-        ]
-
-        fake_session = MagicMock()
-        fake_session.query.return_value = fake_query
-
-        with patch.object(rag_routes, "db") as mock_db:
-            mock_db.session = fake_session
-            payload = rag_routes.build_expediente_type_payload()
-
-        self.assertEqual(payload["EXP-1"], ["administrativo", "tecnico"])
-        self.assertEqual(payload["EXP-2"], ["administrativo"])
-        self.assertNotIn("EXP-3", payload)
+        self.assertEqual(rag_routes.build_expediente_type_payload(), {})
 
     def test_build_model_usage_index_payload_counts_months_global(self):
         """

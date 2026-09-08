@@ -36,19 +36,12 @@ class RAGServiceUnitTest(BaseAppTestCase):
         self.assertEqual(service.normalize_text(None), "")
         self.assertEqual(service.normalize_text("  Técnico   Ágil\nMunicipal  "), "tecnico agil municipal")
 
-    def test_detect_tipo_documento_distinguishes_admin_and_technical_questions(self):
+    def test_detect_tipo_documento_is_legacy_noop(self):
         """
         Comprueba la detección automática del tipo documental asociado a una consulta distinguiendo entre pliegos 
         administrativos y técnicos.
         """
-        self.assertEqual(
-            service.detect_tipo_documento("Resume el pliego administrativo del contrato"),
-            "administrativo",
-        )
-        self.assertEqual(
-            service.detect_tipo_documento("Que dicen las prescripciones tecnicas?"),
-            "tecnico",
-        )
+        self.assertIsNone(service.detect_tipo_documento("Resume el documento administrativo"))
         self.assertIsNone(service.detect_tipo_documento("Compara el pliego administrativo y el pliego tecnico"))
 
     def test_guided_query_profile_retrieval_limits(self):
@@ -84,23 +77,19 @@ class RAGServiceUnitTest(BaseAppTestCase):
         )
         self.assertEqual(
             service.resolve_numero_expediente("expediente ABC-2026"),
-            "ABC-2026",
+            None,
         )
 
     def test_extract_and_resolve_expediente_candidate(self):
         """
         Verifica la detección y resolución correcta de expedientes presentes en preguntas formuladas por el usuario.
         """
-        doc = self.create_document(numero_expediente="EXP/2026-001")
-        self.create_chunk(document=doc, numero_expediente="EXP/2026-001")
-
         self.assertEqual(
             service.extract_expediente_candidate('Busca el expediente "EXP/2026-001"'),
             "EXP/2026-001",
         )
-        self.assertEqual(
+        self.assertIsNone(
             service.resolve_numero_expediente("Dame el expediente EXP 2026 001"),
-            "EXP/2026-001",
         )
         self.assertIsNone(service.extract_expediente_candidate(""))
 
@@ -183,12 +172,10 @@ class RAGServiceUnitTest(BaseAppTestCase):
         del fragmento más relevante recuperado.
         """
         user = self.create_user()
-        doc = self.create_document(numero_expediente="EXP-55", tipo_documento="tecnico")
+        doc = self.create_document()
         self.create_chunk(
             document=doc,
             qdrant_point_id="qid-best",
-            numero_expediente="EXP-55",
-            tipo_documento="tecnico",
         )
         mock_obtener = AsyncMock(
             return_value={
@@ -208,7 +195,7 @@ class RAGServiceUnitTest(BaseAppTestCase):
         with patch("app.main.code.services.rag.service.obtener_mejor_chunk", mock_obtener):
             result = asyncio.run(
                 service.rag_answer(
-                    "Consulta el expediente EXP-55 del pliego tecnico",
+                    "Consulta el documento sobre normativa",
                     user_id=user.id,
                 )
             )
@@ -218,8 +205,8 @@ class RAGServiceUnitTest(BaseAppTestCase):
         self.assertEqual(result["qdrant_point_id"], "qid-best")
         self.assertEqual(Consulta.query.count(), 1)
         _, kwargs = mock_obtener.call_args
-        self.assertEqual(kwargs["numero_expediente"], "EXP-55")
-        self.assertEqual(kwargs["tipo_documento"], "tecnico")
+        self.assertNotIn("numero_expediente", kwargs)
+        self.assertNotIn("tipo_documento", kwargs)
 
     def test_rag_answer_extracts_doc_type_override_marker(self):
         """
@@ -238,7 +225,7 @@ class RAGServiceUnitTest(BaseAppTestCase):
             )
 
         _args, kwargs = mock_obtener.call_args
-        self.assertEqual(kwargs["tipo_documento"], "administrativo")
+        self.assertNotIn("tipo_documento", kwargs)
         self.assertEqual(_args[0], "Resume el documento")
 
     def test_rag_answer_returns_validation_error_without_calling_rag(self):

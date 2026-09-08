@@ -335,6 +335,10 @@ class ConversionMarkdownUnitTest(unittest.TestCase):
         self.assertIsNone(conversion._process_level2_heading("1. Texto"))
         self.assertIsNone(conversion._process_level3_heading("1.1. Texto"))
         self.assertIsNone(conversion._process_spanish_ordinal_heading("PRIMERA sin punto"))
+        self.assertEqual(
+            conversion._process_spanish_ordinal_heading("TERCERA: Requisitos para obtener la autorizacion."),
+            "# TERCERA: Requisitos para obtener la autorizacion.",
+        )
         self.assertIsNone(conversion._process_spanish_ordinal_heading("OTRA. Texto"))
         self.assertIsNone(conversion._process_normative_heading("Anexo a la solicitud"))
 
@@ -356,6 +360,16 @@ class ConversionMarkdownUnitTest(unittest.TestCase):
         self.assertIn("# ANEXO I. Modelo de solicitud.", normalized)
         self.assertIn("- 1. Lista", normalized)
         self.assertIn("Texto normal", normalized)
+
+    def test_normalize_headings_converts_ordinal_heading_with_colon(self):
+        """
+        Comprueba que los apartados jurídicos con dos puntos se marcan como encabezados.
+        """
+        markdown = "TERCERA: Requisitos para obtener la autorizacion.\n\nTexto"
+
+        normalized = conversion.normalize_headings(markdown)
+
+        self.assertIn("# TERCERA: Requisitos para obtener la autorizacion.", normalized)
 
     def test_pdf_outline_headings_are_extracted_with_nested_levels(self):
         """

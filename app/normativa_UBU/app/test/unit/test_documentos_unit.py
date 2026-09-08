@@ -45,16 +45,16 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         """
         Verifica la extracción de metadatos documentales a partir del nombre del archivo y la normalización del texto asociado.
         """
-        expediente, tipo = infer_document_metadata_from_filename("EXP-123__Pliego_de_clausulas_administrativas_1.pdf")
-        self.assertEqual(expediente, "EXP-123")
-        self.assertEqual(tipo, "administrativo")
-
-        expediente, tipo = infer_document_metadata_from_filename("EXP-123__Pliego_de_prescripciones_tecnicas_2.pdf")
-        self.assertEqual(expediente, "EXP-123")
-        self.assertEqual(tipo, "tecnico")
-
+        self.assertEqual(
+            infer_document_metadata_from_filename("EXP-123__Pliego_de_clausulas_administrativas_1.pdf"),
+            (None, None),
+        )
+        self.assertEqual(
+            infer_document_metadata_from_filename("EXP-123__Pliego_de_prescripciones_tecnicas_2.pdf"),
+            (None, None),
+        )
         self.assertEqual(infer_document_metadata_from_filename("sin_metadatos.pdf"), (None, None))
-        self.assertEqual(infer_document_metadata_from_filename("EXP-123__Anexo_general.pdf"), ("EXP-123", None))
+        self.assertEqual(infer_document_metadata_from_filename("EXP-123__Anexo_general.pdf"), (None, None))
         self.assertEqual(_normalize_text("  Ágil   Técnico  "), "agil   tecnico")
 
     def test_resolve_pdf_path_rejects_empty_or_non_pdf_names(self):
@@ -263,8 +263,8 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         service.sync_from_folder()
         doc = Documento.query.one()
         self.assertEqual(doc.nombre, pdf_path.name)
-        self.assertEqual(doc.numero_expediente, "EXP-9")
-        self.assertEqual(doc.tipo_documento, "tecnico")
+        self.assertIsNone(doc.numero_expediente)
+        self.assertIsNone(doc.tipo_documento)
 
         doc.markdown_content = "# antiguo"
         db.session.commit()
@@ -525,6 +525,9 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
 
         self.assertEqual(indexed, 1)
         mock_index_md.assert_called_once()
+        _, kwargs = mock_index_md.call_args
+        self.assertEqual(kwargs["numero_expediente"], "EXP-2")
+        self.assertEqual(kwargs["tipo_documento"], "administrativo")
         index_pdf.assert_not_called()
 
     def test_mark_vector_update_failed_rolls_back_and_stores_error(self):
@@ -595,7 +598,7 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
 
         chunk = doc.chunks_meta[0]
         self.assertEqual(chunk.qdrant_point_id, "qid-vector")
-        self.assertEqual(chunk.numero_expediente, "EXP-1")
+        self.assertIsNone(chunk.numero_expediente)
         self.assertEqual(Embedding.query.filter_by(chunk_id=chunk.id).count(), 1)
 
     def test_update_sql_skips_invalid_vectors_and_updates_existing_chunk_without_duplicate_embedding(self):
@@ -628,7 +631,7 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         self.assertEqual(Chunk.query.filter_by(document_id=doc.id).count(), 1)
         self.assertEqual(chunk.qdrant_point_id, "new-qid")
         self.assertEqual(chunk.n_chars, len("Nuevo contenido"))
-        self.assertEqual(chunk.tipo_documento, "tecnico")
+        self.assertIsNone(chunk.tipo_documento)
         self.assertEqual(Embedding.query.filter_by(chunk_id=chunk.id).count(), 1)
 
     @patch("app.main.code.controllers.main.routes.qdrant_get_payloads", return_value={"legacy-qid": {"metadata": {"filename": "legacy.pdf"}, "content": "texto"}})

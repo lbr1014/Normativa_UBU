@@ -139,15 +139,11 @@ class PrototipoRAGSmokeUnitTest(unittest.TestCase):
         """
         self.assertIsNone(self.m.build_metadata_filter())
 
-        tecnico = self.m.build_metadata_filter("EXP", "tecnico")
-        self.assertEqual([c.key for c in tecnico.must], ["metadata.numero_expediente"])
-        self.assertTrue(tecnico.should)
-        self.assertEqual(getattr(tecnico.should[0], "key", None), "metadata.tipo_documento")
-
-        admin = self.m.build_metadata_filter("EXP", "administrativo")
-        self.assertEqual([c.key for c in admin.must], ["metadata.numero_expediente"])
-        self.assertTrue(admin.should)
-        self.assertEqual(getattr(admin.should[0], "key", None), "metadata.tipo_documento")
+        filt = self.m.build_metadata_filter(document_id=7, structure_type="heading", page=2, level=1)
+        self.assertEqual(
+            [c.key for c in filt.must],
+            ["metadata.document_id", "metadata.type", "metadata.page", "metadata.level"],
+        )
 
     def test_service_url_from_env_builds_scheme_and_trims(self):
         """
@@ -503,6 +499,10 @@ class PrototipoRAGSmokeUnitTest(unittest.TestCase):
         self.assertEqual(len(docs), 2)
         self.assertEqual(docs[0].metadata["document_id"], 5)
         self.assertEqual(docs[0].metadata["segment_index"], 0)
+        self.assertEqual(docs[0].metadata["page"], 1)
+        self.assertEqual(docs[0].metadata["numero_expediente"], "EXP")
+        self.assertEqual(docs[0].metadata["tipo_documento"], "administrativo")
+        self.assertIn("keywords", docs[0].metadata)
         mock_save_many.assert_called_once()
 
     def test_pdf_sha256_matches_hashlib(self):
@@ -566,17 +566,25 @@ class PrototipoRAGSmokeUnitTest(unittest.TestCase):
 
         self.assertEqual(module.index_markdown("   ", filename="doc.md"), [])
 
-        with patch.object(module, "chunk_text", side_effect=RuntimeError("chunk")):
+        with patch.object(module, "chunk_text_with_structure", side_effect=RuntimeError("chunk")):
             self.assertEqual(module.index_markdown("# Hola", filename="doc.md"), [])
 
         with (
-            patch.object(module, "chunk_text", return_value=["a", "b"]),
+            patch.object(
+                module,
+                "chunk_text_with_structure",
+                return_value=[module.StructuralChunk(text="a"), module.StructuralChunk(text="b")],
+            ),
             patch.object(module, "embedding_model", return_value=[[1.0]]),
         ):
             self.assertEqual(module.index_markdown("# Hola", filename="doc.md"), [])
 
         with (
-            patch.object(module, "chunk_text", return_value=["a", "b"]),
+            patch.object(
+                module,
+                "chunk_text_with_structure",
+                return_value=[module.StructuralChunk(text="a"), module.StructuralChunk(text="b")],
+            ),
             patch.object(module, "embedding_model", return_value=[[1.0], [2.0]]),
             patch.object(module.VectorBaseDocument, "save_many") as mock_save_many,
         ):
@@ -592,6 +600,13 @@ class PrototipoRAGSmokeUnitTest(unittest.TestCase):
         self.assertEqual(len(docs), 2)
         self.assertEqual(docs[0].metadata["source"], "markdown")
         self.assertEqual(docs[0].metadata["document_id"], 7)
+        self.assertEqual(docs[0].metadata["type"], "paragraph")
+        self.assertEqual(docs[0].metadata["text"], "a")
+        self.assertEqual(docs[0].metadata["structure"]["type"], "paragraph")
+        self.assertEqual(docs[0].metadata["numero_expediente"], "EXP")
+        self.assertEqual(docs[0].metadata["tipo_documento"], "tecnico")
+        self.assertIn("keywords", docs[0].metadata)
+        self.assertEqual(docs[0].content, "a")
         mock_save_many.assert_called_once()
 
     def test_qdrant_has_filename_and_same_hash_delegate(self):
@@ -1629,6 +1644,48 @@ class PrototipoRAGSmokeUnitTest(unittest.TestCase):
         # No debe fallar y debe ignorar BAD
         self.assertTrue(chunks)
         self.assertTrue(all("BAD" not in c for c in chunks))
+
+    def test_chunk_text_with_structure_infers_heading_level_and_page(self):
+        """
+        Verifica que el chunking estructural conserva página y clasifica encabezados Markdown.
+        """
+        module = self.m
+
+        class _Tok:
+            def tokenize(self, text):
+                return text.split()
+
+        module.embedding_model = SimpleNamespace(tokenizer=_Tok(), max_input_length=20)
+        chunks = module.chunk_text_with_structure("## 1.1. Requisitos", page=4, source="markdown")
+
+        self.assertEqual(chunks[0].type, "heading")
+        self.assertEqual(chunks[0].level, 2)
+        self.assertEqual(chunks[0].page, 4)
+        self.assertIsNone(chunks[0].bbox)
+        self.assertEqual(chunks[0].section_hierarchy, {"2": "1.1. Requisitos"})
+
+    def test_chunk_text_with_structure_attaches_markdown_section_hierarchy(self):
+        """
+        Verifica que cada chunk Markdown hereda la jerarquía de encabezados activa.
+        """
+        module = self.m
+
+        class _Tok:
+            def tokenize(self, text):
+                return text.split()
+
+        module.embedding_model = SimpleNamespace(tokenizer=_Tok(), max_input_length=12)
+        markdown = "TERCERA: Requisitos\n\nTexto general\n\n## 1. Solicitud\n\nDetalle de solicitud"
+
+        chunks = module.chunk_text_with_structure(markdown, source="markdown", overlap_ratio=0.1)
+
+        detail = next(chunk for chunk in chunks if "Detalle de solicitud" in chunk.text)
+        self.assertEqual(detail.type, "paragraph")
+        self.assertEqual(
+            detail.section_hierarchy,
+            {"1": "TERCERA: Requisitos", "2": "1. Solicitud"},
+        )
+        self.assertEqual(detail.section_path, ["TERCERA: Requisitos", "1. Solicitud"])
 
     def test_recuperacion_chunk_con_scores_filters_by_similarity(self):
         """
