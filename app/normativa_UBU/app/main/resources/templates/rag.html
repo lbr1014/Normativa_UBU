@@ -282,50 +282,42 @@
 
     const isGuided = form.id === "rag-default-form";
     const expedienteEl = isGuided ? form.querySelector("select[name='expediente']") : null;
-    const docTypeEl = isGuided ? form.querySelector("select[name='doc_type']") : null;
     const questionKindEl = isGuided ? form.querySelector("select[name='question_kind']") : null;
-    const summaryEl = isGuided ? form.querySelector("input[name='summary']") : null;
+    const sectionEl = isGuided ? form.querySelector("input[name='section']") : null;
+    const sectionFieldEl = isGuided ? form.querySelector("[data-section-field]") : null;
 
     const guidedQuestions = {
-      general: "Indica la informacion principal y las clausulas mas relevantes.",
-      amounts: "Extrae todas las cantidades economicas, importes, presupuestos, garantias y umbrales relevantes.",
-      deadlines: "Resume los plazos importantes: presentacion de ofertas, ejecucion, adjudicacion, garantias y cualquier fecha limite.",
-      solvency: "Identifica los requisitos de solvencia economica, financiera, tecnica y profesional.",
-      criteria: "Resume los criterios de adjudicacion, su ponderacion y como se valoran.",
-      guarantees: "Indica las garantias provisionales o definitivas exigidas y sus importes o porcentajes.",
-      budget: "Explica el presupuesto base, el valor estimado, impuestos incluidos o excluidos y partidas relevantes.",
-      duration: "Indica la duracion del contrato, posibles prorrogas y condiciones de ejecucion temporal.",
-      penalties: "Resume penalizaciones, incumplimientos, causas de resolucion y obligaciones criticas.",
-      submission: "Explica como y donde presentar la oferta, documentacion requerida y sobres o archivos necesarios."
+      summary: "elabora un resumen general y detallado del documento completo.",
+      explain_all: "explica todos los apartados del documento de forma ordenada y comprensible.",
+      explain_section: "explica el apartado indicado del documento, aclarando su finalidad, requisitos y efectos practicos."
     };
 
-    function composeGuidedQuestion(mode = "question") {
+    function selectedDocumentLabel() {
+      const option = expedienteEl?.selectedOptions?.[0];
+      return (option?.textContent || "").trim();
+    }
+
+    function composeGuidedQuestion() {
       const expediente = (expedienteEl?.value || "").trim();
-      const docType = (docTypeEl?.value || "").trim();
-      const kind = (questionKindEl?.value || "general").trim() || "general";
-      const scope = expediente ? `Para el expediente ${expediente}` : "Para los pliegos disponibles de forma general";
-      const docTypeText = docType === "tecnico" ? "tecnico" : "administrativo";
-      const docScope = mode !== "summary" && docType ? ` en el pliego ${docTypeText}` : "";
-      const task = mode === "summary" ? "elabora un resumen general y detallado del documento completo." : guidedQuestions[kind];
-      return `${scope}${docScope}, ${task}`.trim();
+      const kind = (questionKindEl?.value || "summary").trim() || "summary";
+      const section = (sectionEl?.value || "").trim();
+      const scope = expediente ? `Para el documento seleccionado ${selectedDocumentLabel()}` : "Para la normativa disponible de forma general";
+      const task = kind === "explain_section" && section
+        ? `explica el apartado "${section}" del documento, aclarando su finalidad, requisitos y efectos practicos.`
+        : guidedQuestions[kind];
+      return `${scope}, ${task}`.trim();
     }
 
     function syncGuidedQuestion() {
       if (!isGuided || !questionEl) return;
-      const mode = summaryEl?.checked ? "summary" : "question";
-      questionEl.value = composeGuidedQuestion(mode);
+      questionEl.value = composeGuidedQuestion();
     }
 
-    function applyGuidedSummaryMode() {
+    function applyGuidedQuestionMode() {
       if (!isGuided) return;
-      const locked = Boolean(summaryEl?.checked);
-      const lockedControls = [docTypeEl, questionKindEl].filter(Boolean);
-      lockedControls.forEach((control) => {
-        control.disabled = locked;
-      });
-      Array.from(form.querySelectorAll("[data-summary-lock]")).forEach((node) => {
-        node.classList.toggle("is-summary-locked", locked);
-      });
+      const needsSection = questionKindEl?.value === "explain_section";
+      sectionFieldEl?.classList.toggle("d-none", !needsSection);
+      if (sectionEl) sectionEl.disabled = !needsSection;
       syncGuidedQuestion();
     }
 
@@ -415,14 +407,34 @@
           const meta = item.metadata || {};
           const similarity = item.similitud ?? "-";
           const filename = item.filename || meta.filename || "-";
+          const title = item.title || meta.title || "-";
           const segment = item.segment_index ?? meta.segment_index ?? "-";
+          const structure = meta.structure || {};
+          const sectionPath = structure.section_path || meta.section_path || [];
+          const section = Array.isArray(sectionPath)
+            ? sectionPath.filter(Boolean).join(" > ")
+            : sectionPath || structure.heading || meta.section || meta.heading || "-";
+          const pdfDate = meta.pdf_date || "-";
+          const keywords = Array.isArray(meta.keywords)
+            ? meta.keywords.join(", ")
+            : meta.keywords || "-";
+          const chunk = item.chunk || tr("docs.chunk_text_unavailable");
           return `
-            <tr>
-              <td>${escapeHtml(item.ranking ?? "-")}</td>
-              <td>${escapeHtml(typeof similarity === "number" ? similarity.toFixed(6) : similarity)}</td>
-              <td>${escapeHtml(filename)}</td>
-              <td>${escapeHtml(segment)}</td>
-            </tr>`;
+            <details class="chunks-detail-item">
+              <summary>
+                <span>${escapeHtml(segment)}</span>
+                <span>${escapeHtml(filename)}</span>
+                <span>${escapeHtml(title)}</span>
+                <span>${escapeHtml(section || "-")}</span>
+                <span>${escapeHtml(pdfDate)}</span>
+                <span>${escapeHtml(keywords)}</span>
+              </summary>
+              <div class="chunks-detail-score">
+                ${escapeHtml(tr("history.ranking"))}: ${escapeHtml(item.ranking ?? "-")} &middot;
+                ${escapeHtml(tr("history.similarity"))} ${escapeHtml(typeof similarity === "number" ? similarity.toFixed(6) : similarity)}
+              </div>
+              <pre class="chunks-pre">${escapeHtml(chunk)}</pre>
+            </details>`;
         }).join("");
 
         traceTemplate.innerHTML = `
@@ -444,20 +456,16 @@
 
           <div class="chunks-card">
             <p style="margin:0 0 .4rem 0;"><strong>${escapeHtml(tr("history.top_chunks", { shown: Math.min(10, lastTracePayload.length), total: lastTracePayload.length }))}</strong></p>
-            <div class="table-card mt-3">
-              <div class="table-responsive">
-                <table class="table table-hover align-middle mb-0 app-table">
-                  <thead>
-                    <tr>
-                      <th>${escapeHtml(tr("history.ranking"))}</th>
-                      <th>${escapeHtml(tr("history.similarity"))}</th>
-                      <th>${escapeHtml(tr("history.document"))}</th>
-                      <th>${escapeHtml(tr("history.segment"))}</th>
-                    </tr>
-                  </thead>
-                  <tbody>${rows}</tbody>
-                </table>
+            <div class="chunks-detail-list mt-3">
+              <div class="chunks-detail-header" aria-hidden="true">
+                <span>${escapeHtml(tr("history.segment"))}</span>
+                <span>${escapeHtml(tr("history.file"))}</span>
+                <span>${escapeHtml(tr("history.title_label"))}</span>
+                <span>${escapeHtml(tr("docs.section"))}</span>
+                <span>${escapeHtml(tr("docs.pdf_date"))}</span>
+                <span>${escapeHtml(tr("docs.keywords"))}</span>
               </div>
+              <div class="chunks-detail-items">${rows}</div>
             </div>
           </div>`;
       }
@@ -637,12 +645,11 @@
     });
 
     if (isGuided) {
-      [expedienteEl, docTypeEl, questionKindEl].filter(Boolean).forEach((control) => {
-        control.addEventListener("input", () => applyGuidedSummaryMode());
-        control.addEventListener("change", () => applyGuidedSummaryMode());
+      [expedienteEl, questionKindEl, sectionEl].filter(Boolean).forEach((control) => {
+        control.addEventListener("input", () => applyGuidedQuestionMode());
+        control.addEventListener("change", () => applyGuidedQuestionMode());
       });
-      summaryEl?.addEventListener("change", () => applyGuidedSummaryMode());
-      applyGuidedSummaryMode();
+      applyGuidedQuestionMode();
     }
 
     // Reanuda la UI si había un job en ejecución (p. ej. al recargar la página).
@@ -680,64 +687,6 @@
 
   // D3 chart (index chart style)
   window.PYTHIA_MODEL_USAGE = {{ (model_usage_payload or {})|tojson }};
-  window.PYTHIA_EXPEDIENTE_TYPES = {{ (expediente_type_payload or {})|tojson }};
-
-  // Filtra expedientes según el tipo de documento seleccionado.
-  (function initGuidedExpedienteFilter() {
-    const pane = document.getElementById("rag-form-pane");
-    if (!pane) return;
-    const form = pane.querySelector("#rag-default-form");
-    if (!form) return;
-
-    const docTypeEl = form.querySelector("select[name='doc_type']");
-    const expedienteEl = form.querySelector("select[name='expediente']");
-    if (!docTypeEl || !expedienteEl) return;
-
-    const allOptions = Array.from(expedienteEl.options).map((opt) => ({
-      value: opt.value,
-      label: opt.textContent || opt.value,
-    }));
-
-    function applyFilter() {
-      const selectedType = (docTypeEl.value || "").trim();
-      const current = expedienteEl.value;
-      const map = window.PYTHIA_EXPEDIENTE_TYPES || {};
-
-      expedienteEl.innerHTML = "";
-      allOptions.forEach((opt) => {
-        // Mantener siempre el placeholder "cualquiera"
-        if (!opt.value) {
-          const o = document.createElement("option");
-          o.value = opt.value;
-          o.textContent = opt.label;
-          expedienteEl.appendChild(o);
-          return;
-        }
-
-        if (!selectedType) {
-          const o = document.createElement("option");
-          o.value = opt.value;
-          o.textContent = opt.label;
-          expedienteEl.appendChild(o);
-          return;
-        }
-
-        const types = map[opt.value] || [];
-        if (types.includes(selectedType)) {
-          const o = document.createElement("option");
-          o.value = opt.value;
-          o.textContent = opt.label;
-          expedienteEl.appendChild(o);
-        }
-      });
-
-      const stillExists = Array.from(expedienteEl.options).some((o) => o.value === current);
-      expedienteEl.value = stillExists ? current : "";
-    }
-
-    docTypeEl.addEventListener("change", applyFilter);
-    applyFilter();
-  })();
 
   (function renderModelUsageChart() {
     const host = document.getElementById("model-usage-chart");

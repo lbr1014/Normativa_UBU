@@ -24,17 +24,6 @@
             ) }}
           </div>
         </div>
-
-        <div class="rag-field-row" data-summary-lock>
-          {{ form.doc_type.label(class="form-label rag-label mb-0", for=form.doc_type.id) }}
-          <div class="rag-model-select-shell">
-            {{ form.doc_type(
-              class="form-select rag-model-select",
-              data_bs_toggle="tooltip",
-              data_bs_title=t("rag_default.doc_type_tooltip")
-            ) }}
-          </div>
-        </div>
       </div>
     </section>
 
@@ -44,13 +33,7 @@
         <h3 class="rag-section-title h5 mb-0">{{ t("rag_default.question_kind_label") }}</h3>
       </div>
 
-      <label class="rag-summary-switch" for="{{ form.summary.id }}">
-        {{ form.summary(class="rag-summary-input", autocomplete="off") }}
-        <span class="rag-summary-track" aria-hidden="true"></span>
-        <span class="rag-summary-copy">{{ form.summary.label.text }}</span>
-      </label>
-
-      <div class="rag-field-row" data-summary-lock>
+      <div class="rag-field-row">
         {{ form.question_kind.label(class="form-label rag-label mb-0", for=form.question_kind.id) }}
         <div class="rag-model-select-shell">
           {{ form.question_kind(
@@ -59,6 +42,16 @@
             data_bs_title=t("rag_default.question_kind_tooltip")
           ) }}
         </div>
+      </div>
+
+      <div class="rag-field-row" data-section-field>
+        {{ form.section.label(class="form-label rag-label mb-0", for=form.section.id) }}
+        {{ form.section(
+          class="form-control rag-input",
+          placeholder=t("rag_default.section_placeholder"),
+          data_bs_toggle="tooltip",
+          data_bs_title=t("rag_default.section_tooltip")
+        ) }}
       </div>
     </section>
 

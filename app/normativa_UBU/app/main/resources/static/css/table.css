@@ -1701,6 +1701,71 @@ body[data-theme="light"] .app-table tbody tr:hover > * {
   font-size: 13px;
 }
 
+.docs-chunks-button {
+  min-width: 48px;
+}
+
+.chunks-detail-list {
+  overflow-x: auto;
+  border: 1px solid rgba(var(--app-primary-rgb), .14);
+  border-radius: var(--app-radius-sm);
+}
+
+.chunks-detail-header,
+.chunks-detail-item summary {
+  display: grid;
+  grid-template-columns: minmax(78px, .4fr) minmax(160px, 1fr) minmax(180px, 1fr) minmax(180px, 1fr) minmax(105px, .55fr) minmax(170px, 1fr);
+  gap: .75rem;
+  align-items: start;
+  min-width: 1120px;
+}
+
+.chunks-detail-header {
+  padding: .8rem 1rem;
+  background: rgba(var(--app-primary-rgb), .1);
+  color: var(--app-heading);
+  font-size: .82rem;
+  font-weight: 800;
+}
+
+.chunks-detail-items {
+  min-width: 1120px;
+}
+
+.chunks-detail-item {
+  border-top: 1px solid rgba(var(--app-primary-rgb), .12);
+}
+
+.chunks-detail-item summary {
+  padding: .9rem 1rem;
+  color: var(--app-text);
+  cursor: pointer;
+  list-style-position: outside;
+}
+
+.chunks-detail-item summary:hover {
+  background: rgba(var(--app-primary-rgb), .07);
+  color: var(--app-heading);
+}
+
+.chunks-detail-item summary span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.chunks-detail-score {
+  padding: 0 1rem;
+  color: var(--app-text-soft);
+  font-size: .86rem;
+  font-weight: 700;
+}
+
+.chunks-detail-item .chunks-pre {
+  margin: .75rem 1rem 1rem;
+  max-height: 380px;
+  overflow: auto;
+}
+
 .modal-backdrop.show{
   opacity: .45;
 }

@@ -7,7 +7,7 @@
       {% for c in consultas %}
         {% set qc_best = (meta_by_consulta or {}).get(c.id) or {} %}
         {% set qm_best = qc_best.get("metadata") or {} %}
-        {% set stored_fragments = (c.fragmentos or [])|sort(attribute="ranking") %}
+        {% set stored_fragments = (qc_best.get("chunks") or c.fragmentos or [])|sort(attribute="ranking") %}
         {% set best_fragment = (stored_fragments|first) if (stored_fragments|length > 0) else none %}
         {% set best_fragment_meta = best_fragment.get("metadata") if best_fragment else {} %}
         {% set used = (c.consultaChunks or []) %}
@@ -110,57 +110,102 @@
             </p>
 
             {% if stored_fragments|length > 0 %}
-              <div class="table-card mt-3">
-                <div class="table-responsive">
-                  <table class="table table-hover align-middle mb-0 app-table">
-                    <thead>
-                      <tr>
-                        <th>{{ t("history.ranking") }}</th>
-                        <th>{{ t("history.similarity") }}</th>
-                        <th>{{ t("history.document") }}</th>
-                        <th>{{ t("history.segment") }}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {% for frag in stored_fragments[:10] %}
-                        {% set frag_meta = frag.get("metadata") or {} %}
-                        <tr>
-                          <td>{{ frag.get("ranking", "-") }}</td>
-                          <td>{{ "%.6f"|format(frag.get("similitud", 0.0)) }}</td>
-                          <td>{{ frag_meta.get("document_name") or frag_meta.get("filename") or "-" }}</td>
-                          <td>{{ frag_meta.get("segment_index") if frag_meta.get("segment_index") is not none else "-" }}</td>
-                        </tr>
-                      {% endfor %}
-                    </tbody>
-                  </table>
+              <div class="chunks-detail-list mt-3">
+                <div class="chunks-detail-header" aria-hidden="true">
+                  <span>{{ t("history.segment") }}</span>
+                  <span>{{ t("history.file") }}</span>
+                  <span>{{ t("history.title_label") }}</span>
+                  <span>{{ t("docs.section") }}</span>
+                  <span>{{ t("docs.pdf_date") }}</span>
+                  <span>{{ t("docs.keywords") }}</span>
+                </div>
+
+                <div class="chunks-detail-items">
+                  {% for frag in stored_fragments[:10] %}
+                    {% set frag_meta = frag.get("metadata") or {} %}
+                    {% set frag_structure = frag_meta.get("structure") or {} %}
+                    {% set frag_section_path = frag_structure.get("section_path") or frag_meta.get("section_path") %}
+                    {% set frag_keywords = frag_meta.get("keywords") %}
+                    <details class="chunks-detail-item">
+                      <summary>
+                        <span>{{ frag_meta.get("segment_index") if frag_meta.get("segment_index") is not none else "-" }}</span>
+                        <span>{{ frag_meta.get("document_name") or frag_meta.get("filename") or "-" }}</span>
+                        <span>{{ frag_meta.get("title") or "-" }}</span>
+                        <span>
+                          {% if frag_section_path is iterable and frag_section_path is not string %}
+                            {{ frag_section_path|join(" > ") }}
+                          {% else %}
+                            {{ frag_structure.get("heading") or frag_meta.get("section") or frag_meta.get("heading") or "-" }}
+                          {% endif %}
+                        </span>
+                        <span>{{ frag_meta.get("pdf_date") or "-" }}</span>
+                        <span>
+                          {% if frag_keywords is iterable and frag_keywords is not string %}
+                            {{ frag_keywords|join(", ") }}
+                          {% else %}
+                            {{ frag_keywords or "-" }}
+                          {% endif %}
+                        </span>
+                      </summary>
+                      <div class="chunks-detail-score">
+                        {{ t("history.ranking") }}: {{ frag.get("ranking", "-") }} &middot;
+                        {{ t("history.similarity") }} {{ "%.6f"|format(frag.get("similitud", 0.0)) }}
+                      </div>
+                      <pre class="chunks-pre">{{ frag.get("chunk") or t("docs.chunk_text_unavailable") }}</pre>
+                    </details>
+                  {% endfor %}
                 </div>
               </div>
             {% elif used_sorted|length == 0 %}
               <div class="alert alert-info">{{ t("history.no_chunks") }}</div>
             {% else %}
-              <div class="table-card mt-3">
-                <div class="table-responsive">
-                  <table class="table table-hover align-middle mb-0 app-table">
-                    <thead>
-                      <tr>
-                        <th>{{ t("history.ranking") }}</th>
-                        <th>{{ t("history.similarity") }}</th>
-                        <th>{{ t("history.document") }}</th>
-                        <th>{{ t("history.segment") }}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {% for cc in used_sorted[:10] %}
-                        {% set ch = cc.chunk %}
-                        <tr>
-                          <td>{{ cc.ranking }}</td>
-                          <td>{{ "%.6f"|format(cc.similitud) }}</td>
-                          <td>{{ ch.document.nombre if ch and ch.document else "-" }}</td>
-                          <td>{{ ch.segment_index if ch else "-" }}</td>
-                        </tr>
-                      {% endfor %}
-                    </tbody>
-                  </table>
+              {% set legacy_payload_chunks = qc_best.get("chunks") or [] %}
+              <div class="chunks-detail-list mt-3">
+                <div class="chunks-detail-header" aria-hidden="true">
+                  <span>{{ t("history.segment") }}</span>
+                  <span>{{ t("history.file") }}</span>
+                  <span>{{ t("history.title_label") }}</span>
+                  <span>{{ t("docs.section") }}</span>
+                  <span>{{ t("docs.pdf_date") }}</span>
+                  <span>{{ t("docs.keywords") }}</span>
+                </div>
+
+                <div class="chunks-detail-items">
+                  {% for cc in used_sorted[:10] %}
+                    {% set ch = cc.chunk %}
+                    {% set payload_chunk = legacy_payload_chunks[loop.index0] if legacy_payload_chunks|length > loop.index0 else {} %}
+                    {% set payload_meta = payload_chunk.get("metadata") or {} %}
+                    {% set ch_structure = payload_meta.get("structure") or (ch.structural_metadata if ch and ch.structural_metadata else {}) %}
+                    {% set ch_section_path = ch_structure.get("section_path") or payload_meta.get("section_path") %}
+                    {% set ch_keywords = payload_meta.get("keywords") %}
+                    <details class="chunks-detail-item">
+                      <summary>
+                        <span>{{ ch.segment_index if ch else "-" }}</span>
+                        <span>{{ payload_meta.get("filename") or (ch.document.nombre if ch and ch.document else "-") }}</span>
+                        <span>{{ payload_meta.get("title") or (ch.document.nombre if ch and ch.document else "-") }}</span>
+                        <span>
+                          {% if ch_section_path is iterable and ch_section_path is not string %}
+                            {{ ch_section_path|join(" > ") }}
+                          {% else %}
+                            {{ ch_structure.get("heading") or payload_meta.get("section") or payload_meta.get("heading") or "-" }}
+                          {% endif %}
+                        </span>
+                        <span>{{ payload_meta.get("pdf_date") or "-" }}</span>
+                        <span>
+                          {% if ch_keywords is iterable and ch_keywords is not string %}
+                            {{ ch_keywords|join(", ") }}
+                          {% else %}
+                            {{ ch_keywords or "-" }}
+                          {% endif %}
+                        </span>
+                      </summary>
+                      <div class="chunks-detail-score">
+                        {{ t("history.ranking") }}: {{ cc.ranking }} &middot;
+                        {{ t("history.similarity") }} {{ "%.6f"|format(cc.similitud) }}
+                      </div>
+                      <pre class="chunks-pre">{{ payload_chunk.get("content") or t("docs.chunk_text_unavailable") }}</pre>
+                    </details>
+                  {% endfor %}
                 </div>
               </div>
             {% endif %}

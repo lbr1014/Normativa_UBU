@@ -111,7 +111,7 @@
       </aside>
 
       <section class="admin-users-table-panel documents-section">
-        {% set documents_has_filters = filters.name or filters.type or filters.status or filters.markdown %}
+        {% set documents_has_filters = filters.name or filters.status or filters.markdown %}
         <div class="app-sticky-bar app-sticky-surface app-sticky-shell">
           <div class="app-filter-toolbar">
             <button class="btn btn-outline-light btn-sm app-filter-toggle"
@@ -152,19 +152,6 @@
                    value="{{ filters.name }}"
                    class="form-control"
                    placeholder="{{ t('docs.filter_name_placeholder') }}">
-          </div>
-
-          <div>
-            <label for="doc-type-filter" class="form-label">{{ t("docs.type") }}</label>
-            <select id="doc-type-filter" name="type" class="form-select">
-              <option value="">{{ t("common.all") }}</option>
-              {% for type_value in doc_type_options %}
-                <option value="{{ type_value }}"{% if filters.type == type_value %} selected{% endif %}>
-                  {{ t("docs.type_" ~ type_value) }}
-                </option>
-              {% endfor %}
-              <option value="unknown"{% if filters.type == "unknown" %} selected{% endif %}>{{ t("docs.type_unknown") }}</option>
-            </select>
           </div>
 
           <div>
@@ -229,15 +216,28 @@
                         <td class="text-start">
                           <div class="fw-semibold doc-name">{{ d.nombre }}</div>
                           <div class="doc-meta-inline mt-1">
-                            <span>{{ t("docs.type_" ~ d.tipo_documento) if d.tipo_documento else t("docs.type_unknown") }}</span>
-                            <span class="doc-meta-separator">&bull;</span>
                             <span>{{ (d.size_bytes / 1024) | round(1) }} KB</span>
                             <span class="doc-meta-separator">&bull;</span>
                             <span>{{ d.modified_at.strftime("%Y-%m-%d %H:%M:%S") }}</span>
                           </div>
                         </td>
 
-                        <td>{{ d.chunks if d.chunks is not none else 0 }}</td>
+                        <td>
+                          {% set doc_chunks = (chunk_details_by_doc or {}).get(d.id) or [] %}
+                          {% if doc_chunks %}
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-light docs-chunks-button"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#chunksModal"
+                                    data-consulta-id="doc-{{ d.id }}"
+                                    data-bs-tooltip="tooltip"
+                                    data-bs-title="{{ t('docs.view_chunks') }}">
+                              {{ d.chunks if d.chunks is not none else doc_chunks|length }}
+                            </button>
+                          {% else %}
+                            {{ d.chunks if d.chunks is not none else 0 }}
+                          {% endif %}
+                        </td>
                         <td>
                           <div class="d-flex flex-column gap-1">
                             {% if d.status == "indexado" %}
@@ -292,6 +292,43 @@
                           </div>
                         </td>
                       </tr>
+
+                      {% set doc_chunks = (chunk_details_by_doc or {}).get(d.id) or [] %}
+                      {% if doc_chunks %}
+                        <template id="chunks-content-doc-{{ d.id }}">
+                          <div>
+                            <h3 class="chunks-modal-title">{{ t("docs.chunks_details") }}</h3>
+                            <p class="chunks-modal-sub">{{ d.nombre }} &middot; {{ t("docs.count", count=doc_chunks|length) }}</p>
+                          </div>
+
+                          <div class="chunks-detail-list mt-3">
+                            <div class="chunks-detail-header" aria-hidden="true">
+                              <span>{{ t("history.segment") }}</span>
+                              <span>{{ t("history.file") }}</span>
+                              <span>{{ t("history.title_label") }}</span>
+                              <span>{{ t("docs.section") }}</span>
+                              <span>{{ t("docs.pdf_date") }}</span>
+                              <span>{{ t("docs.keywords") }}</span>
+                            </div>
+
+                            <div class="chunks-detail-items">
+                              {% for chunk in doc_chunks %}
+                                <details class="chunks-detail-item">
+                                  <summary>
+                                    <span>{{ chunk.segment_index }}</span>
+                                    <span>{{ chunk.document_name or d.nombre }}</span>
+                                    <span>{{ chunk.title or "-" }}</span>
+                                    <span>{{ chunk.section or "-" }}</span>
+                                    <span>{{ chunk.pdf_date or "-" }}</span>
+                                    <span>{{ chunk.keywords or "-" }}</span>
+                                  </summary>
+                                  <pre class="chunks-pre">{{ chunk.text or t("docs.chunk_text_unavailable") }}</pre>
+                                </details>
+                              {% endfor %}
+                            </div>
+                          </div>
+                        </template>
+                      {% endif %}
                     {% endfor %}
                   </tbody>
                 </table>
@@ -306,7 +343,7 @@
               <nav aria-label="Paginacion documentos">
                 <ul class="pagination pagination-sm justify-content-center mb-0">
                   <li class="page-item{% if page <= 1 %} disabled{% endif %}">
-                    <a class="page-link" href="{% if page > 1 %}{{ url_for('admin.documents_list_page', page=page-1, name=filters.name, type=filters.type, status=filters.status, markdown=filters.markdown) }}{% else %}#{% endif %}"{% if page <= 1 %} tabindex="-1" aria-disabled="true"{% endif %}>
+                    <a class="page-link" href="{% if page > 1 %}{{ url_for('admin.documents_list_page', page=page-1, name=filters.name, status=filters.status, markdown=filters.markdown) }}{% else %}#{% endif %}"{% if page <= 1 %} tabindex="-1" aria-disabled="true"{% endif %}>
                       {{ t("common.previous") }}
                     </a>
                   </li>
@@ -314,7 +351,7 @@
                     <span class="page-link">{{ page }}/{{ total_pages }}</span>
                   </li>
                   <li class="page-item{% if page >= total_pages %} disabled{% endif %}">
-                    <a class="page-link" href="{% if page < total_pages %}{{ url_for('admin.documents_list_page', page=page+1, name=filters.name, type=filters.type, status=filters.status, markdown=filters.markdown) }}{% else %}#{% endif %}"{% if page >= total_pages %} tabindex="-1" aria-disabled="true"{% endif %}>
+                    <a class="page-link" href="{% if page < total_pages %}{{ url_for('admin.documents_list_page', page=page+1, name=filters.name, status=filters.status, markdown=filters.markdown) }}{% else %}#{% endif %}"{% if page >= total_pages %} tabindex="-1" aria-disabled="true"{% endif %}>
                       {{ t("common.next") }}
                     </a>
                   </li>
@@ -328,5 +365,6 @@
   </div>
 
   {% include "components/modal_delete.html" %}
+  {% include "components/modal_chunks.html" %}
   <script src="{{ url_for('static', filename='js/bar_progress.js') }}"></script>
 {% endblock %}
