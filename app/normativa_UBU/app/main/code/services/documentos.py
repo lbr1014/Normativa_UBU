@@ -1,6 +1,6 @@
-"""
+﻿"""
 Autora: Lydia Blanco Ruiz
-Script para gestionar documentos PDF, su sincronización, conversión a Markdown e indexación en la base de datos vectorial.
+Script para gestionar documentos PDF, su sincronizaciÃ³n, conversiÃ³n a Markdown e indexaciÃ³n en la base de datos vectorial.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ UPLOAD_RESTORE_POSITION_ERROR = "Upload: could not restore stream position (%s):
 
 class JobCancelledError(RuntimeError):
     """
-    Excepción lanzada cuando un proceso largo se cancela manualmente.
+    ExcepciÃ³n lanzada cuando un proceso largo se cancela manualmente.
     """
 
 
@@ -70,7 +70,7 @@ def infer_document_metadata_from_filename(filename: str) -> tuple[str | None, st
         filename: Nombre del archivo PDF.
 
     Returns:
-        Una tupla con el Número de expediente y el tipo de documento.
+        Una tupla con el NÃºmero de expediente y el tipo de documento.
     """
     inferred = Documento.infer_metadata_from_filename(filename)
     if inferred is None:
@@ -86,29 +86,36 @@ def infer_document_metadata_from_filename(filename: str) -> tuple[str | None, st
 
 class DocumentosService:
     """
-    Servicio de gestion documental para archivos, Markdown e indexación.
-    Proporciona métodos para guardar archivos, sincronizar con el sistema de archivos, convertir a Markdown y preparar documentos para indexación vectorial.
+    Servicio de gestion documental para archivos, Markdown e indexaciÃ³n.
+    Proporciona mÃ©todos para guardar archivos, sincronizar con el sistema de archivos, convertir a Markdown y preparar documentos para indexaciÃ³n vectorial.
     """
 
     def __init__(
         self,
         docs_dir: Path,
-        index_pliegos_dir,
-        delete_chunks,
+        index_documents_dir=None,
+        delete_chunks=None,
         markdown_converter=None,
+        **legacy_dependencies,
     ) -> None:
         """
         Construye el servicio con sus dependencias principales.
 
         Args:
             docs_dir: Directorio base donde se almacenan los PDFs.
-            index_pliegos_dir: Dependencia para la función de pliegos.
-            delete_chunks: Función que elimina chunks previos del indice.
-            markdown_converter: Función opcional para convertir PDFs a Markdown.
+            index_documents_dir: Dependencia para indexar documentos por directorio.
+            delete_chunks: FunciÃ³n que elimina chunks previos del indice.
+            markdown_converter: FunciÃ³n opcional para convertir PDFs a Markdown.
         """
+        if index_documents_dir is None:
+            index_documents_dir = legacy_dependencies.pop("index_pliegos_dir", None)
+        if legacy_dependencies:
+            unknown = ", ".join(sorted(legacy_dependencies))
+            raise TypeError(f"Dependencias no reconocidas: {unknown}")
+
         self.docs_dir = docs_dir
         self.docs_dir.mkdir(parents=True, exist_ok=True)
-        self.index_pliegos_dir = index_pliegos_dir
+        self.index_documents_dir = index_documents_dir
         self.delete_chunks = delete_chunks
         self.markdown_converter = markdown_converter
 
@@ -141,7 +148,7 @@ class DocumentosService:
             raise ValueError("Nombre de archivo invalido")
 
         if Path(safe).suffix.lower() not in ALLOWED_EXT:
-            raise ValueError("Extensión no permitida")
+            raise ValueError("ExtensiÃ³n no permitida")
 
         return self.docs_dir / safe
 
@@ -152,10 +159,10 @@ class DocumentosService:
         Args:
             stream (_type_): Stream del archivo subido.
             file_storage (_type_): Almacenamiento del archivo.
-            size (int): Tamaño del fragmento a leer.
+            size (int): TamaÃ±o del fragmento a leer.
 
         Returns:
-            bytes: El fragmento de datos leído.
+            bytes: El fragmento de datos leÃ­do.
         """
         raw_filename = getattr(file_storage, "filename", "-")
         try:
@@ -183,7 +190,7 @@ class DocumentosService:
 
     def _is_pdf_upload(self, file_storage) -> bool:  # NOSONAR
         """
-        Comprueba extensión y firma del archivo subido sin consumir el stream.
+        Comprueba extensiÃ³n y firma del archivo subido sin consumir el stream.
 
         Args:
             file_storage: Archivo recibido desde un formulario Flask-WTF.
@@ -194,7 +201,7 @@ class DocumentosService:
         """
         filename = self.filename(getattr(file_storage, "filename", ""))
         if not filename or Path(filename).suffix.lower() not in ALLOWED_EXT:
-            logger.warning("Upload rechazado: extensión no permitida (%s).", getattr(file_storage, "filename", "-"))
+            logger.warning("Upload rechazado: extensiÃ³n no permitida (%s).", getattr(file_storage, "filename", "-"))
             return False
 
         stream = getattr(file_storage, "stream", None)
@@ -204,7 +211,7 @@ class DocumentosService:
             return False
 
         # Intentar validar la firma sin consumir el stream.
-        # En algunos flujos el puntero no está al inicio cuando llegamos aquí.
+        # En algunos flujos el puntero no estÃ¡ al inicio cuando llegamos aquÃ­.
         if hasattr(stream, "seekable") and stream.seekable():
             try:
                 position = stream.tell()
@@ -257,25 +264,25 @@ class DocumentosService:
                     content_type,
                     header_bytes[:32],
                 )
-                # Último fallback: si el navegador/werkzeug lo marca como PDF, lo aceptamos.
+                # Ãšltimo fallback: si el navegador/werkzeug lo marca como PDF, lo aceptamos.
                 if "application/pdf" in (mimetype, content_type):
                     return True
             return True
 
         # Si no es seekable, no podemos comprobar firma sin consumir el stream.
-        logger.warning("Upload: stream no seekable (%s). Se acepta por extensiÃ³n.", getattr(file_storage, "filename", "-"))
+        logger.warning("Upload: stream no seekable (%s). Se acepta por extensiÃƒÂ³n.", getattr(file_storage, "filename", "-"))
         return True
 
     def list_documents_paginated(self, page: int, per_page: int) -> object:
         """
-        Obtiene documentos paginados ordenados por fecha de modificación.
+        Obtiene documentos paginados ordenados por fecha de modificaciÃ³n.
 
         Args:
-            page: Número de página solicitado.
-            per_page: Número de elementos por página.
+            page: NÃºmero de pÃ¡gina solicitado.
+            per_page: NÃºmero de elementos por pÃ¡gina.
 
         Returns:
-            El objeto de paginación devuelto por SQLAlchemy.
+            El objeto de paginaciÃ³n devuelto por SQLAlchemy.
         """
 
         return Documento.query.order_by(Documento.modified_at.desc()).paginate(
@@ -317,10 +324,10 @@ class DocumentosService:
 
         Args:
             docs: Coleccion opcional de documentos a evaluar.
-                Si no se proporciona, se evaluarán todos los documentos de la base de datos.
+                Si no se proporciona, se evaluarÃ¡n todos los documentos de la base de datos.
 
         Returns:
-            El Número de documentos sin Markdown disponible.
+            El NÃºmero de documentos sin Markdown disponible.
         """
         if docs is None:
             docs = Documento.query.all()
@@ -335,7 +342,7 @@ class DocumentosService:
             files: Coleccion de archivos recibidos en una subida.
 
         Returns:
-            El número de PDFs guardados.
+            El nÃºmero de PDFs guardados.
         """
         saved = 0
         for f in files:
@@ -370,7 +377,7 @@ class DocumentosService:
         Elimina registros y relaciones de documentos que ya no existen.
 
         Returns:
-            El Número de documentos eliminados de la base de datos.
+            El NÃºmero de documentos eliminados de la base de datos.
         
         Raises:
             OSError: Si ocurre un error al eliminar un PDF o sus chunks relacionados.
@@ -490,14 +497,14 @@ class DocumentosService:
 
         Args:
             doc: Documento que se quiere convertir.
-            on_page_start: Callback opcional invocado al comenzar cada página.
+            on_page_start: Callback opcional invocado al comenzar cada pÃ¡gina.
 
         Returns:
             ``True`` si se genero un Markdown nuevo.
-            ``False`` si el documento ya tenía Markdown o no se pudo generar.   
+            ``False`` si el documento ya tenÃ­a Markdown o no se pudo generar.   
             
         Raises: 
-            RuntimeError: Si no se pudo generar Markdown y no existía previamente.
+            RuntimeError: Si no se pudo generar Markdown y no existÃ­a previamente.
             FileNotFoundError: Si el PDF no existe en disco.
         """
         if doc.markdown_content:
@@ -529,7 +536,7 @@ class DocumentosService:
         Separa los documentos pendientes de los ya resueltos.
 
         Returns:
-            Una tupla con la lista de pendientes y el Número de omitidos.
+            Una tupla con la lista de pendientes y el NÃºmero de omitidos.
         """
         docs = Documento.query.order_by(Documento.modified_at.desc()).all()
         pending_docs: list[Documento] = []
@@ -552,12 +559,12 @@ class DocumentosService:
 
     def _build_markdown_page_callback(self, on_page_start, doc_index: int, total_docs: int) -> callable | None:
         """
-        Crea el callback de progreso por página para Markdown.
+        Crea el callback de progreso por pÃ¡gina para Markdown.
 
         Args:
-            on_page_start: Callback externo de progreso por página.
+            on_page_start: Callback externo de progreso por pÃ¡gina.
             doc_index: Posicion del documento actual.
-            total_docs: Número total de documentos del lote.
+            total_docs: NÃºmero total de documentos del lote.
 
         Returns:
             Un callback listo para el conversor o ``None``.
@@ -568,7 +575,7 @@ class DocumentosService:
 
         def page_callback(page: int, total_pages: int) -> None:
             """
-            Callback interno que adapta la información de página al formato esperado por el callback externo.
+            Callback interno que adapta la informaciÃ³n de pÃ¡gina al formato esperado por el callback externo.
             """
             on_page_start(doc_index, total_docs, page, total_pages)
 
@@ -590,9 +597,9 @@ class DocumentosService:
         Args:
             doc: Documento que se va a procesar.
             doc_index: Posicion del documento actual.
-            total_docs: Número total de documentos del lote.
+            total_docs: NÃºmero total de documentos del lote.
             on_current_doc: Callback opcional al iniciar un documento.
-            on_page_start: Callback opcional al iniciar una página.
+            on_page_start: Callback opcional al iniciar una pÃ¡gina.
 
         Returns:
             ``converted``, ``skipped`` o ``failed`` segun el resultado.
@@ -617,7 +624,7 @@ class DocumentosService:
 
         Args:
             doc: Documento que se va a reindexar.
-            require_pdf: Si es ``True``, se lanzará un error si el PDF no existe en disco.
+            require_pdf: Si es ``True``, se lanzarÃ¡ un error si el PDF no existe en disco.
 
         Returns:
             La ruta del PDF listo para ser indexado.
@@ -637,14 +644,14 @@ class DocumentosService:
     def _index_vector_document(self, doc: Documento, index_pdf) -> int:
 
         """
-        Indexa un documento y actualiza su estado y Número de chunks.
+        Indexa un documento y actualiza su estado y NÃºmero de chunks.
 
         Args:
             doc: Documento que se va a indexar.
-            index_pdf: Función que genera los chunks vectoriales.
+            index_pdf: FunciÃ³n que genera los chunks vectoriales.
 
         Returns:
-            El Número de chunks indexados para el documento.
+            El NÃºmero de chunks indexados para el documento.
         """
         use_markdown = bool(doc.markdown_content)
         pdf_path = self._prepare_document_for_vector_update(doc, require_pdf=not use_markdown)
@@ -658,19 +665,15 @@ class DocumentosService:
                 title=Path(doc.nombre).stem,
                 sha256=getattr(doc, "hash", "") or "",
                 document_id=doc.id,
-                numero_expediente=doc.numero_expediente,
-                tipo_documento=doc.tipo_documento,
             )
         else:
             vector_docs = index_pdf(
                 pdf_path,
                 document_id=doc.id,
-                numero_expediente=doc.numero_expediente,
-                tipo_documento=doc.tipo_documento,
             )
 
         if not vector_docs:
-            raise RuntimeError("index_pdf devolvió 0 chunks (PDF sin texto o ruta inválida)")
+            raise RuntimeError("index_pdf devolviÃ³ 0 chunks (PDF sin texto o ruta invÃ¡lida)")
 
         update_sql(doc, vector_docs)
         db.session.commit()
@@ -706,7 +709,7 @@ class DocumentosService:
             on_progress: Callback opcional para informar del progreso total.
             on_current_doc: Callback opcional al comenzar un documento.
             should_cancel: Callback opcional para comprobar cancelacion.
-            on_page_start: Callback opcional al comenzar una página.
+            on_page_start: Callback opcional al comenzar una pÃ¡gina.
 
         Returns:
             Un resumen con convertidos, fallidos, omitidos y total.
@@ -719,7 +722,7 @@ class DocumentosService:
                 result (str): Resultado de procesar un documento, puede ser "converted", "skipped" o "failed".
 
             Returns:
-                tuple[int, int, int]: Número de documentos convertidos, fallidos y omitidos.
+                tuple[int, int, int]: NÃºmero de documentos convertidos, fallidos y omitidos.
             """
             if result == "converted":
                 return 1, 0, 0
@@ -729,7 +732,7 @@ class DocumentosService:
 
         def _convert_one(doc: Documento, index: int, total_docs: int) -> str:
             """
-            Convierte un documento a Markdown y maneja cancelación.
+            Convierte un documento a Markdown y maneja cancelaciÃ³n.
 
             Args:
                 doc (Documento): documento que se va a procesar.
@@ -743,7 +746,7 @@ class DocumentosService:
                 str: El resultado del procesamiento del documento, que puede ser "converted", "skipped" o "failed".
             """
             if should_cancel and should_cancel():
-                raise JobCancelledError("Conversión a Markdown cancelada por el usuario.")
+                raise JobCancelledError("ConversiÃ³n a Markdown cancelada por el usuario.")
             return self._process_pending_markdown_doc(
                 doc,
                 index,
@@ -779,10 +782,10 @@ class DocumentosService:
     @staticmethod
     def _page_count_exceptions() -> tuple[type[Exception], ...]:
         """
-        Obtiene las excepciones relacionadas con el conteo de páginas.
+        Obtiene las excepciones relacionadas con el conteo de pÃ¡ginas.
 
         Returns:
-            tuple[type[Exception], ...]: Una tupla con las clases de excepción que pueden ocurrir al contar páginas de un PDF.
+            tuple[type[Exception], ...]: Una tupla con las clases de excepciÃ³n que pueden ocurrir al contar pÃ¡ginas de un PDF.
         """
         try:
             from pdf2image.exceptions import (
@@ -811,7 +814,7 @@ class DocumentosService:
 
     def _sort_docs_by_page_count(self, docs: list[Documento]) -> list[Documento]:
         """
-        Ordena los documentos por cantidad de páginas.
+        Ordena los documentos por cantidad de pÃ¡ginas.
 
         Args:
             docs (list[Documento]): documentos a ordenar.
@@ -861,7 +864,7 @@ class DocumentosService:
 
         for i, doc in enumerate(docs, start=1):
             if should_cancel and should_cancel():
-                raise JobCancelledError("Actualización cancelada por el usuario.")
+                raise JobCancelledError("ActualizaciÃ³n cancelada por el usuario.")
             if on_current_doc:
                 on_current_doc(doc.nombre)
 

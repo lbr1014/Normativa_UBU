@@ -60,7 +60,11 @@ from ...model.user import User
 from ...model.vector_update_state import VectorUpdateState
 from ...services.documentos import DocumentosService, JobCancelledError
 from ...services.evaluation.rag_evaluation_service import run_rag_evaluation
-from ...services.rag.PrototipoRAG import index_pliegos_dir, qdrant_delete_by_filename
+from ...services.rag.PrototipoRAG import qdrant_delete_by_filename
+try:
+    from ...services.rag.PrototipoRAG import index_documents_dir
+except ImportError:
+    from ...services.rag.PrototipoRAG import index_pliegos_dir as index_documents_dir
 from . import admin_bp
 
 MIMETYPE = "text/markdown; charset=utf-8"
@@ -621,7 +625,7 @@ def documentos_service() -> DocumentosService:
     """
     return DocumentosService(
         pliegos_dir(),
-        index_pliegos_dir=index_pliegos_dir,
+        index_documents_dir=index_documents_dir,
         delete_chunks=qdrant_delete_by_filename,
         markdown_converter=convert_pdf_to_markdown,
     )
@@ -666,11 +670,6 @@ def _apply_document_filters(query, filters: dict[str, str]) -> Any:
     if filters["name"]:
         query = query.filter(Documento.nombre.ilike(f"%{filters['name']}%"))
 
-    if filters["type"] == DOC_TYPE_UNKNOWN:
-        query = query.filter(Documento.tipo_documento.is_(None))
-    elif filters["type"]:
-        query = query.filter(Documento.tipo_documento == filters["type"])
-
     if filters["status"]:
         query = query.filter(Documento.status == filters["status"])
 
@@ -695,17 +694,7 @@ def _document_filter_options() -> tuple[list[str], list[str]]:
     Returns:
         Una tupla con la lista de tipos de documento y la lista de estados disponibles.
     """
-    type_values = [
-        item[0]
-        for item in (
-            Documento.query.with_entities(Documento.tipo_documento)
-            .filter(Documento.tipo_documento.isnot(None))
-            .distinct()
-            .order_by(Documento.tipo_documento.asc())
-            .all()
-        )
-        if item[0]
-    ]
+    type_values = []
     status_values = [
         item[0]
         for item in (

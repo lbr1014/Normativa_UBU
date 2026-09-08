@@ -1,6 +1,6 @@
-"""
+﻿"""
 Autora: Lydia Blanco Ruiz
-Script con la lógica de servicio para validar preguntas, consultar el sistema RAG y persistir resultados.
+Script con la lÃ³gica de servicio para validar preguntas, consultar el sistema RAG y persistir resultados.
 """
 
 from __future__ import annotations
@@ -84,19 +84,14 @@ GUIDED_QUERY_PROFILES = {
 
 QUESTION_MIN_SIMILARITY = 0.5
 
-EXPEDIENTE_KEYWORDS = {
-    "administrativo",
-    "administrativa",
-    "administrativos",
-    "administrativas",
-    "tecnico",
-    "tecnica",
-    "tecnicos",
-    "tecnicas",
+DOCUMENT_REFERENCE_KEYWORDS = {
     "pliego",
     "pliegos",
     "documento",
     "documentos",
+    "norma",
+    "normas",
+    "normativa",
     "sobre",
     "del",
     "de",
@@ -108,15 +103,15 @@ EXPEDIENTE_KEYWORDS = {
 
 def normalize_text(value: str | None) -> str:
     """
-    Normaliza un texto para comparación: minúsculas, sin acentos, espacios normalizados.
+    Normaliza un texto para comparaciÃ³n: minÃºsculas, sin acentos, espacios normalizados.
 
     Args:
         value: Texto a normalizar. Puede ser None.
 
     Returns:
-        Texto normalizado: minúsculas, sin caracteres diacríticos,
+        Texto normalizado: minÃºsculas, sin caracteres diacrÃ­ticos,
         espacios consecutivos convertidos a uno solo, y sin espacios al inicio/fin.
-        Retorna string vacío si el valor es None o vacío.
+        Retorna string vacÃ­o si el valor es None o vacÃ­o.
     """
 
     value = (value or "").strip().lower()
@@ -132,45 +127,18 @@ def normalize_text(value: str | None) -> str:
 
 def detect_tipo_documento(question: str) -> str | None:
     """
-    Detecta si la pregunta se refiere a pliegos administrativos o técnicos.
-    Analiza el texto de la pregunta para determinar si solicita información
-    específica sobre pliegos administrativos o técnicos basándose en palabras clave.
+    Detecta si la pregunta se refiere a pliegos administrativos o tÃ©cnicos.
+    Analiza el texto de la pregunta para determinar si solicita informaciÃ³n
+    especÃ­fica sobre pliegos administrativos o tÃ©cnicos basÃ¡ndose en palabras clave.
 
     Args:
         question: Texto de la pregunta del usuario.
 
     Returns:
         "administrativo" si la pregunta menciona pliegos administrativos,
-        "tecnico" si menciona pliegos técnicos,
-        None si no se detecta un tipo específico o se mencionan ambos.
+        "tecnico" si menciona pliegos tÃ©cnicos,
+        None si no se detecta un tipo especÃ­fico o se mencionan ambos.
     """
-
-    normalized = normalize_text(question)
-    asks_admin = any(
-        token in normalized
-        for token in (
-            "pliego administrativo",
-            "pliegos administrativos",
-            "clausulas administrativas",
-            "clausula administrativa",
-        )
-    )
-
-    asks_tech = any(
-        token in normalized
-        for token in (
-            "pliego tecnico",
-            "pliegos tecnicos",
-            "prescripciones tecnicas",
-            "prescripcion tecnica",
-        )
-    )
-
-    if asks_admin and not asks_tech:
-        return "administrativo"
-
-    if asks_tech and not asks_admin:
-        return "tecnico"
 
     return None
 
@@ -190,13 +158,13 @@ def normalize_guided_retrieval_k(profile_name: str, retrieval_k: int | None) -> 
 def detect_guided_query_profile(question: str) -> tuple[str, int]:
     """
     Detecta las preguntas generadas por el formulario guiado y devuelve el
-    perfil de prompt junto con el número de chunks recomendado.
+    perfil de prompt junto con el nÃºmero de chunks recomendado.
     
     Args:
         question: Texto de la pregunta del usuario.
 
     Returns:
-        Una tupla con el nombre del perfil y el número de chunks recomendado.
+        Una tupla con el nombre del perfil y el nÃºmero de chunks recomendado.
     """
     normalized = normalize_text(question)
     for profile_name, config in GUIDED_QUERY_PROFILES.items():
@@ -207,19 +175,19 @@ def detect_guided_query_profile(question: str) -> tuple[str, int]:
 
 def extract_expediente_candidate(question: str) -> str | None:
     """
-    Extrae un posible número de expediente de una pregunta usando expresiones regulares.
+    Extrae un posible nÃºmero de expediente de una pregunta usando expresiones regulares.
     Busca patrones comunes de referencia a expedientes en el texto de la pregunta,
-    tanto entre comillas como en formatos estándar de expediente.
+    tanto entre comillas como en formatos estÃ¡ndar de expediente.
 
     Args:
         question: Texto de la pregunta que puede contener una referencia a expediente.
 
     Returns:
-        Número de expediente candidato si se encuentra un patrón válido,
-        None si no se encuentra ningún patrón o el candidato está vacío.
+        NÃºmero de expediente candidato si se encuentra un patrÃ³n vÃ¡lido,
+        None si no se encuentra ningÃºn patrÃ³n o el candidato estÃ¡ vacÃ­o.
     """
     
-    expediente_prefix = r"expediente(?:\s+n[uú]mero|\s+n[ºo]?)?"
+    expediente_prefix = r"expediente(?:\s+n[uÃº]mero|\s+n[Âºo]?)?"
     expediente_separator = r"\s*[:#-]?\s*"
     expediente_token = r"[A-Za-z0-9][A-Za-z0-9/_.-]*"
     expediente_smulti = rf"{expediente_token}(?:\s+{expediente_token}){{0,5}}"
@@ -229,7 +197,7 @@ def extract_expediente_candidate(question: str) -> str | None:
     if not question:
         return None
 
-    quoted_pattern = rf"{expediente_prefix}{expediente_separator}[\"“](.+?)[\"”]"
+    quoted_pattern = rf"{expediente_prefix}{expediente_separator}[\"â€œ](.+?)[\"â€]"
     quoted = re.search(quoted_pattern, question, re.IGNORECASE)
 
     if quoted:
@@ -243,7 +211,7 @@ def extract_expediente_candidate(question: str) -> str | None:
 
     words = match.group(1).strip().split()
 
-    while words and normalize_text(words[-1]) in EXPEDIENTE_KEYWORDS:
+    while words and normalize_text(words[-1]) in DOCUMENT_REFERENCE_KEYWORDS:
         words.pop()
 
     candidate = " ".join(words).strip(" ,.;:")
@@ -251,7 +219,7 @@ def extract_expediente_candidate(question: str) -> str | None:
 
 def resolve_numero_expediente(question: str) -> str | None:
     """
-    Resuelve un número de expediente válido a partir de una pregunta.
+    Resuelve un nÃºmero de expediente vÃ¡lido a partir de una pregunta.
     Extrae un candidato de expediente de la pregunta y lo valida contra
     los expedientes existentes en la base de datos, intentando coincidencias
     exactas y normalizadas.
@@ -260,37 +228,12 @@ def resolve_numero_expediente(question: str) -> str | None:
         question: Texto de la pregunta que puede contener una referencia a expediente.
 
     Returns:
-        Número de expediente válido de la base de datos si se encuentra coincidencia,
-        el candidato original si no se encuentra en BD pero tiene formato válido,
-        None si no se puede extraer ningún candidato.
+        NÃºmero de expediente vÃ¡lido de la base de datos si se encuentra coincidencia,
+        el candidato original si no se encuentra en BD pero tiene formato vÃ¡lido,
+        None si no se puede extraer ningÃºn candidato.
     """
 
-    candidate = extract_expediente_candidate(question)
-
-    if not candidate:
-        return None
-
-    normalized_candidate = normalize_text(candidate)
-    available = (
-        db.session.query(Chunk.numero_expediente)
-        .filter(Chunk.numero_expediente.isnot(None))
-        .distinct()
-        .all()
-    )
-    existing_values = [value for (value,) in available if value]
-
-    for value in existing_values:
-        if normalize_text(value) == normalized_candidate:
-            return value
-
-    compact_candidate = re.sub(r"[\s./_-]+", "", normalized_candidate)
-
-    for value in existing_values:
-        normalized_value = normalize_text(value)
-        if re.sub(r"[\s./_-]+", "", normalized_value) == compact_candidate:
-            return value
-
-    return candidate
+    return None
 
 DOC_TYPE_MARKERS = {
     "[doc_type=administrativo]": "administrativo",
@@ -302,20 +245,20 @@ DOC_TYPE_MARKERS = {
 
 def extract_doc_type_override(text: str) -> tuple[str, str | None]:
     """
-    Extrae una posible selección de tipo de documento desde la pregunta.
-    Permite que el usuario indique explícitamente el tipo de documento (administrativo o técnico)
+    Extrae una posible selecciÃ³n de tipo de documento desde la pregunta.
+    Permite que el usuario indique explÃ­citamente el tipo de documento (administrativo o tÃ©cnico)
 
     Args:
         text (str): texto de la pregunta que puede contener un marcador de tipo de documento.
 
     Returns:
-        tuple[str, str | None]: Una tupla con el texto de la pregunta limpio de marcadores y el tipo de documento indicado ("administrativo" o "tecnico") o None si no se indicó ningún tipo.
+        tuple[str, str | None]: Una tupla con el texto de la pregunta limpio de marcadores y el tipo de documento indicado ("administrativo" o "tecnico") o None si no se indicÃ³ ningÃºn tipo.
     """
 
     cleaned = (text or "").strip()
     lower_text = cleaned.lower()
 
-    for marker, doc_type in DOC_TYPE_MARKERS.items():
+    for marker in DOC_TYPE_MARKERS:
         pos = lower_text.find(marker)
         if pos >= 0:
             cleaned = (
@@ -323,7 +266,7 @@ def extract_doc_type_override(text: str) -> tuple[str, str | None]:
                 + " "
                 + cleaned[pos + len(marker):]
             ).strip()
-            return cleaned, doc_type
+            return cleaned, None
 
     return cleaned, None
 
@@ -339,21 +282,21 @@ async def rag_answer(
     Procesa una pregunta usando el sistema RAG y guarda la consulta en BD.
     Valida la pregunta, extrae metadatos (expediente, tipo documento),
     consulta el sistema RAG para obtener la mejor respuesta, mide el tiempo
-    de respuesta y guarda toda la información en la base de datos.
+    de respuesta y guarda toda la informaciÃ³n en la base de datos.
 
     Args:
         question: Texto de la pregunta del usuario.
-        should_cancel: Función opcional que retorna True para cancelar la consulta.
-        on_status: Función opcional callback para reportar progreso/status.
+        should_cancel: FunciÃ³n opcional que retorna True para cancelar la consulta.
+        on_status: FunciÃ³n opcional callback para reportar progreso/status.
         user_id: ID del usuario que realiza la consulta. Si None, usa current_user.
-        lang: Código de idioma para mensajes de error ("es", "en"). Defaults to "es".
+        lang: CÃ³digo de idioma para mensajes de error ("es", "en"). Defaults to "es".
 
     Returns:
         Diccionario con respuesta RAG y metadatos adicionales:
         - answer: Respuesta generada por el sistema
-        - title: Título del documento fuente
+        - title: TÃ­tulo del documento fuente
         - filename: Nombre del archivo fuente
-        - segment_index: Índice del segmento en el documento
+        - segment_index: Ãndice del segmento en el documento
         - chunk: Texto del fragmento relevante
         - qdrant_point_id: ID del punto en Qdrant
         - elapsed_s: Tiempo de procesamiento en segundos
@@ -362,8 +305,7 @@ async def rag_answer(
         QueryCancelledError: Si should_cancel retorna True durante el procesamiento.
     """
 
-    
-    question, tipo_override = extract_doc_type_override(question)
+    question, _legacy_doc_type = extract_doc_type_override(question)
     invalid = validate_question(question, lang=lang)
 
     if invalid:
@@ -371,17 +313,15 @@ async def rag_answer(
 
     start = time.perf_counter()
     data: dict[str, Any]
-    numero_expediente = resolve_numero_expediente(question)
-    tipo_documento = tipo_override or detect_tipo_documento(question)
     query_profile, retrieval_k = detect_guided_query_profile(question)
 
     async def _run_query() -> dict[str, Any]:
         """
-        Ejecuta la consulta al sistema RAG con los parámetros adecuados.
-        Muestra un mensaje de preparación si se proporciona on_status.
+        Ejecuta la consulta al sistema RAG con los parÃ¡metros adecuados.
+        Muestra un mensaje de preparaciÃ³n si se proporciona on_status.
 
         Returns:
-            dict[str, Any]: Diccionario con la respuesta del sistema RAG o un mensaje de error si ocurre una excepción durante la consulta.
+            dict[str, Any]: Diccionario con la respuesta del sistema RAG o un mensaje de error si ocurre una excepciÃ³n durante la consulta.
         """
         if on_status:
             on_status(translate_for(lang, "rag.preparing"))
@@ -390,8 +330,6 @@ async def rag_answer(
             model=model,
             should_cancel=should_cancel,
             on_status=on_status,
-            numero_expediente=numero_expediente,
-            tipo_documento=tipo_documento,
             query_profile=query_profile,
             retrieval_k=retrieval_k,
             min_similarity=QUESTION_MIN_SIMILARITY,
@@ -435,7 +373,7 @@ def message_error(msg: str) -> dict[str, Any]:
         msg: Mensaje de error descriptivo.
 
     Returns:
-        Diccionario con estructura de respuesta RAG pero con campos vacíos
+        Diccionario con estructura de respuesta RAG pero con campos vacÃ­os
         excepto el campo 'answer' que contiene el mensaje de error.
     """
 
@@ -446,15 +384,15 @@ def message_error(msg: str) -> dict[str, Any]:
 def validate_question(question: str, lang: str = "es") -> dict[str, Any] | None:
     """
     Valida una pregunta antes de procesarla en el sistema RAG.
-    Verifica que la pregunta no esté vacía y no exceda la longitud máxima permitida.
+    Verifica que la pregunta no estÃ© vacÃ­a y no exceda la longitud mÃ¡xima permitida.
 
     Args:
         question: Texto de la pregunta a validar.
-        lang: Código de idioma para los mensajes de error. Defaults to "es".
+        lang: CÃ³digo de idioma para los mensajes de error. Defaults to "es".
 
     Returns:
-        Diccionario de error si la validación falla (pregunta vacía o demasiado larga),
-        None si la pregunta es válida.
+        Diccionario de error si la validaciÃ³n falla (pregunta vacÃ­a o demasiado larga),
+        None si la pregunta es vÃ¡lida.
     """
 
     if not question:
@@ -468,17 +406,17 @@ def validate_question(question: str, lang: str = "es") -> dict[str, Any] | None:
 def try_persist(question: str, data: dict[str, Any], elapsed: float, user_id: int | None = None) -> None:
     """
     Intenta guardar una consulta en la base de datos con manejo de errores.
-    Envuelve la función persist_consulta en un try-catch para evitar que
+    Envuelve la funciÃ³n persist_consulta en un try-catch para evitar que
     errores de base de datos interrumpan el flujo principal de respuesta RAG.
 
     Args:
         question: Texto de la pregunta realizada.
         data: Diccionario con la respuesta y metadatos del sistema RAG.
         elapsed: Tiempo transcurrido en segundos para procesar la consulta.
-        user_id: ID del usuario que realizó la consulta. Si None, usa current_user.
+        user_id: ID del usuario que realizÃ³ la consulta. Si None, usa current_user.
 
     Returns:
-        None: La función no retorna valor. Los errores se loggean.
+        None: La funciÃ³n no retorna valor. Los errores se loggean.
     """
 
     try:
@@ -493,14 +431,14 @@ def persist_consulta(question: str, data: dict[str, Any], elapsed: float, user_i
     """
     Guarda una consulta completa en la base de datos con todos sus metadatos.
     Crea una entidad Consulta con la pregunta, respuesta, tiempo de procesamiento,
-    fragmentos recuperados y enlaces a chunks. También crea las entidades
+    fragmentos recuperados y enlaces a chunks. TambiÃ©n crea las entidades
     ConsultaChunk para mantener las relaciones many-to-many.
 
     Args:
         question: Texto de la pregunta realizada.
         data: Diccionario con la respuesta y metadatos del sistema RAG.
         elapsed: Tiempo transcurrido en segundos para procesar la consulta.
-        user_id: ID del usuario que realizó la consulta. Si es None, usa current_user.
+        user_id: ID del usuario que realizÃ³ la consulta. Si es None, usa current_user.
 
     Returns:
         None: Los datos se guardan en la base de datos.

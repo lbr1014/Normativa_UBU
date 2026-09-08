@@ -5,7 +5,6 @@ Script con la entidad SQLAlchemy que representa los documentos PDF gestionados p
 
 from __future__ import annotations
 
-import re
 import unicodedata
 from datetime import datetime
 from pathlib import Path
@@ -62,8 +61,6 @@ class Documento(db.Model):
     status = db.Column(db.String(25), nullable=False, default="cargado", index=True)
     markdown_content = db.Column(db.Text, nullable=True)
     error_message = db.Column(db.Text, nullable=True)
-    numero_expediente = db.Column(db.String(255), nullable=True, index=True)
-    tipo_documento = db.Column(db.String(30), nullable=True, index=True)
 
     def __init__(self, **kwargs) -> None:
         """
@@ -72,7 +69,11 @@ class Documento(db.Model):
         Args:
             **kwargs: Valores iniciales del modelo SQLAlchemy.
         """
+        legacy_numero_expediente = kwargs.pop("numero_expediente", None)
+        legacy_tipo_documento = kwargs.pop("tipo_documento", None)
         super().__init__(**kwargs)
+        self._legacy_numero_expediente = legacy_numero_expediente
+        self._legacy_tipo_documento = legacy_tipo_documento
         if not self.modified_at:
             self.modified_at = datetime.now(MADRID_TZ)
 
@@ -87,23 +88,7 @@ class Documento(db.Model):
         Returns:
             tuple[str | None, str | None]: Tupla con el número de expediente y el tipo de documento inferido.
         """
-        stem = Path(filename or "").stem
-        if "__" not in stem:
-            return None, None
-
-        expediente_part, doc_part = stem.split("__", 1)
-        expediente = expediente_part.strip() or None
-
-        match = re.match(r"(?P<doc>.+?)_(?P<index>\d+)$", doc_part.strip())
-        raw_doc_name = match.group("doc").strip() if match else doc_part.strip()
-
-        normalized_doc_name = _normalize_document_text(raw_doc_name).replace("_", " ")
-        if "clausulas administrativas" in normalized_doc_name or "administrativ" in normalized_doc_name:
-            return expediente, "administrativo"
-        if "prescripciones tecnicas" in normalized_doc_name or "tecnic" in normalized_doc_name:
-            return expediente, "tecnico"
-
-        return expediente, None
+        return None, None
 
     @property
     def has_markdown(self) -> bool:
@@ -114,6 +99,30 @@ class Documento(db.Model):
             bool: True si existe contenido Markdown, False en caso contrario.
         """
         return bool(self.markdown_content)
+
+    @property
+    def numero_expediente(self) -> None:
+        """
+        Campo legacy de licitaciones retirado: los metadatos útiles viven en chunks estructurales.
+        """
+        return getattr(self, "_legacy_numero_expediente", None)
+
+    @numero_expediente.setter
+    def numero_expediente(self, _value) -> None:
+        self._legacy_numero_expediente = _value
+        return None
+
+    @property
+    def tipo_documento(self) -> None:
+        """
+        Campo legacy de licitaciones retirado.
+        """
+        return getattr(self, "_legacy_tipo_documento", None)
+
+    @tipo_documento.setter
+    def tipo_documento(self, _value) -> None:
+        self._legacy_tipo_documento = _value
+        return None
 
     def clear_markdown_content(self) -> None:
         """
@@ -157,7 +166,6 @@ class Documento(db.Model):
         Returns:
             Documento inicializado con metadatos inferidos.
         """
-        numero_expediente, tipo_documento = cls.infer_metadata_from_filename(pdf_path.name)
         return cls(
             nombre=pdf_path.name,
             path=str(pdf_path),
@@ -168,8 +176,6 @@ class Documento(db.Model):
             markdown_content=None,
             status=status,
             error_message=None,
-            numero_expediente=numero_expediente,
-            tipo_documento=tipo_documento,
         )
 
     def refresh_file_metadata(self, pdf_path: Path, file_hash: str, modified_at: datetime) -> bool:
@@ -185,13 +191,10 @@ class Documento(db.Model):
             bool: True si el hash cambió, False si es el mismo.
         """
         previous_hash = self.hash
-        numero_expediente, tipo_documento = self.infer_metadata_from_filename(pdf_path.name)
         self.nombre = pdf_path.name
         self.size_bytes = pdf_path.stat().st_size
         self.modified_at = modified_at
         self.hash = file_hash
-        self.numero_expediente = numero_expediente
-        self.tipo_documento = tipo_documento
         return previous_hash != file_hash
 
     def sync_from_pdf_path(self, pdf_path: Path, file_hash: str, modified_at: datetime, status: str | None = None) -> bool:
@@ -311,8 +314,11 @@ class Documento(db.Model):
             meta = vd.metadata or {}
             seg = int(meta.get("segment_index", -1))
             sha = (meta.get("sha256") or meta.get("doc_sha256") or "").strip()
-            numero_expediente = meta.get("numero_expediente")
-            tipo_documento = meta.get("tipo_documento")
+            structure = dict(meta.get("structure") or {})
+            structure_type = meta.get("type") or structure.get("type")
+            page = meta.get("page", structure.get("page"))
+            level = meta.get("level", structure.get("level"))
+            bbox = meta.get("bbox", structure.get("bbox"))
 
             if seg < 0 or not sha:
                 continue
@@ -326,16 +332,22 @@ class Documento(db.Model):
                     doc_sha256=sha,
                     n_chars=len(vd.content or ""),
                     n_tokens=None,
-                    numero_expediente=numero_expediente,
-                    tipo_documento=tipo_documento,
+                    structure_type=structure_type,
+                    page=page,
+                    level=level,
+                    bbox=bbox,
+                    structural_metadata=structure or None,
                 )
                 db.session.add(chunk)
                 db.session.flush()
             else:
                 chunk.qdrant_point_id = qid
                 chunk.n_chars = len(vd.content or "")
-                chunk.numero_expediente = numero_expediente
-                chunk.tipo_documento = tipo_documento
+                chunk.structure_type = structure_type
+                chunk.page = page
+                chunk.level = level
+                chunk.bbox = bbox
+                chunk.structural_metadata = structure or None
 
             embedding = Embedding.query.filter_by(chunk_id=chunk.id).first()
             if embedding is None:

@@ -30,12 +30,12 @@ from pathlib import Path
 from app.main.code.services.rag.PrototipoRAG import VectorBaseDocument, ask_ollama
 
 PROMPT_QA_FROM_CHUNK = """
-Eres un experto en contratacion publica y pliegos (PCAP/PPT).
+Eres un experto en normativa universitaria y documentos administrativos.
 A partir del TEXTO, genera exactamente {n} pares (pregunta, respuesta) que se puedan responder SOLO con ese texto.
 
 Reglas:
 - Preguntas especificas y verificables; evita cuestiones generales.
-- Deben cubrir detalles tipicos de pliegos: criterios de adjudicacion, solvencia, garantias, plazos, penalidades, condiciones tecnicas y documentacion.
+- Deben cubrir detalles normativos y estructurales: articulos, secciones, requisitos, plazos, organos, efectos, excepciones, tablas, notas y anexos.
 - La RESPUESTA debe ser breve y estar sustentada por el texto.
 - Si el texto no contiene informacion suficiente para una pregunta, no la inventes: genera otra distinta.
 - Devuelve SOLO JSON valido con esta forma:

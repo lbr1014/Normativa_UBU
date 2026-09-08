@@ -41,8 +41,11 @@ class Chunk(db.Model):
     doc_sha256 = db.Column(db.String(100), nullable=False, index=True)
     n_chars = db.Column(db.Integer, nullable=True)
     n_tokens = db.Column(db.Integer, nullable=True)
-    numero_expediente = db.Column(db.String(255), nullable=True, index=True)
-    tipo_documento = db.Column(db.String(30), nullable=True, index=True)
+    structure_type = db.Column(db.String(50), nullable=True, index=True)
+    page = db.Column(db.Integer, nullable=True, index=True)
+    level = db.Column(db.Integer, nullable=True, index=True)
+    bbox = db.Column(db.JSON, nullable=True)
+    structural_metadata = db.Column(db.JSON, nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, index=True)
 
     __table_args__ = (
@@ -57,9 +60,31 @@ class Chunk(db.Model):
         Args:
             **kwargs: Valores iniciales del modelo SQLAlchemy.
         """
+        legacy_numero_expediente = kwargs.pop("numero_expediente", None)
+        legacy_tipo_documento = kwargs.pop("tipo_documento", None)
         super().__init__(**kwargs)
+        self._legacy_numero_expediente = legacy_numero_expediente
+        self._legacy_tipo_documento = legacy_tipo_documento
         if not self.created_at:
             self.created_at = datetime.now(ZoneInfo("Europe/Madrid"))
+
+    @property
+    def numero_expediente(self) -> None:
+        return getattr(self, "_legacy_numero_expediente", None)
+
+    @numero_expediente.setter
+    def numero_expediente(self, _value) -> None:
+        self._legacy_numero_expediente = _value
+        return None
+
+    @property
+    def tipo_documento(self) -> None:
+        return getattr(self, "_legacy_tipo_documento", None)
+
+    @tipo_documento.setter
+    def tipo_documento(self, _value) -> None:
+        self._legacy_tipo_documento = _value
+        return None
             
     @classmethod
     def find_from_retrieved_item(cls, item: dict) -> Chunk | None:
@@ -106,6 +131,11 @@ class Chunk(db.Model):
             "segment_index": self.segment_index,
             "n_chars": self.n_chars,
             "n_tokens": self.n_tokens,
+            "type": self.structure_type,
+            "page": self.page,
+            "level": self.level,
+            "bbox": self.bbox,
+            "structure": self.structural_metadata,
             "qdrant_point_id": self.qdrant_point_id,
         }
         if self.created_at is not None:

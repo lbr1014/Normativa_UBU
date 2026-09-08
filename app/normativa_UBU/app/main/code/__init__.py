@@ -147,7 +147,7 @@ def _configure_data_dirs(app: Flask, *, project_root: Path) -> None:
     app.config["DATA_DIR"] = data_dir
 
     docs_dir_env = os.environ.get("DOCS_DIR")
-    docs_dir = Path(docs_dir_env) if docs_dir_env else (data_dir / "pliegos")
+    docs_dir = Path(docs_dir_env) if docs_dir_env else (data_dir / "documentos")
     if not docs_dir.is_absolute():
         docs_dir = data_dir / docs_dir
     app.config["DOCS_DIR"] = docs_dir

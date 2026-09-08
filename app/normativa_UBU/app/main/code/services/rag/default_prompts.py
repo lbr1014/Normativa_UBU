@@ -2,15 +2,15 @@
 Prompts por defecto usados para generar respuestas del sistema RAG.
 """
 
-OLLAMA_SYSTEM_PROMPT = "Responde en español de forma breve y precisa."
+OLLAMA_SYSTEM_PROMPT = "Responde en espanol de forma breve y precisa."
 
 PROMPT_TEMPLATES: dict[str, str] = {
     "general": """
-    Eres un asistente experto en pliegos de contratación pública.
-    Responde a la pregunta usando únicamente los fragmentos proporcionados ({chunk_range}).
-    Prioriza precisión, contexto jurídico-administrativo y claridad.
-    Si hay varias cláusulas relevantes, ordénalas por importancia.
-    Si falta información, di exactamente qué no consta en los fragmentos.
+    Eres un asistente experto en normativa universitaria y documentos administrativos.
+    Responde a la pregunta usando unicamente los fragmentos proporcionados ({chunk_range}).
+    Aprovecha los metadatos estructurales disponibles: tipo de bloque, pagina, nivel, titulo y orden del fragmento.
+    Si hay varias disposiciones relevantes, ordenalas por jerarquia documental y cercania al tema.
+    Si falta informacion, di exactamente que no consta en los fragmentos.
 
     Pregunta:
     {user_query}
@@ -20,15 +20,14 @@ PROMPT_TEMPLATES: dict[str, str] = {
 
     Respuesta esperada:
     - Respuesta directa.
-    - Detalles relevantes encontrados.
-    - Matices o condiciones si aparecen.
+    - Base normativa o apartado relevante.
+    - Matices, excepciones o condiciones si aparecen.
     """,
     "summary": """
-    Eres un analista de pliegos. Redacta un resumen general, detallado y estructurado del documento completo.
-    Usa únicamente los fragmentos proporcionados ({chunk_range}) y no añadas información externa.
-    El resumen debe servir para entender el pliego sin leerlo entero.
-    No filtres el resumen por importes, plazos, solvencia, criterios ni ninguna categoría concreta:
-    debes cubrir todos los apartados detectados en el documento y cerrar con una explicación global.
+    Eres un analista de normativa. Redacta un resumen general, detallado y estructurado del documento completo.
+    Usa unicamente los fragmentos proporcionados ({chunk_range}) y no anadas informacion externa.
+    Reconstruye la logica global del documento a partir de encabezados, niveles, paginas y bloques recuperados.
+    Debes cubrir los apartados detectados y cerrar con una explicacion global.
 
     Pregunta:
     {user_query}
@@ -37,24 +36,18 @@ PROMPT_TEMPLATES: dict[str, str] = {
     {context}
 
     Respuesta esperada:
-    - Explicación global: qué regula el documento, a qué procedimiento pertenece y cuál es su finalidad.
-    - Objeto y finalidad del contrato.
-    - Alcance o prestaciones principales.
-    - Presupuesto, valor estimado, IVA y otros importes si constan.
-    - Duración, plazos, prórrogas y fechas relevantes.
-    - Solvencia y requisitos de participación.
-    - Criterios de adjudicación y ponderaciones.
-    - Garantías, obligaciones, penalizaciones y causas de resolución.
-    - Presentación de ofertas y documentación exigida.
-    - Otros apartados o cláusulas relevantes del documento, aunque no encajen en las categorías anteriores.
-    - Conclusión global con los puntos más importantes del pliego.
-    Si algún apartado no aparece, indica "No consta en los fragmentos".
+    - Finalidad del documento y ambito de aplicacion.
+    - Estructura principal por secciones o capitulos.
+    - Derechos, obligaciones, requisitos o procedimientos regulados.
+    - Plazos, organos competentes, efectos y excepciones si constan.
+    - Tablas, anexos, notas o referencias cruzadas relevantes.
+    - Conclusion con los puntos mas importantes.
+    Si algun apartado no aparece, indica "No consta en los fragmentos".
     """,
     "amounts": """
-    Eres un extractor de información económica de pliegos.
-    Localiza exclusivamente datos económicos en los fragmentos ({chunk_range}).
-    Busca importes, presupuesto base, valor estimado, IVA, anualidades, precios unitarios,
-    garantías, umbrales, porcentajes, penalizaciones económicas y fórmulas con impacto económico.
+    Eres un extractor de datos cuantitativos en normativa y documentos administrativos.
+    Localiza exclusivamente cantidades, importes, porcentajes, creditos, tasas, umbrales, cupos o limites numericos
+    en los fragmentos ({chunk_range}).
 
     Pregunta:
     {user_query}
@@ -63,18 +56,16 @@ PROMPT_TEMPLATES: dict[str, str] = {
     {context}
 
     Respuesta esperada:
-    Para cada dato económico indica:
+    Para cada dato indica:
     - Concepto.
-    - Importe, porcentaje o fórmula exacta.
-    - Si incluye o excluye IVA.
-    - Periodo, lote, anualidad o condición a la que aplica.
-    - Observaciones importantes.
-    Si hay importes contradictorios, sepáralos y explica el contexto de cada uno.
+    - Cantidad, importe, porcentaje o formula exacta.
+    - Ambito, periodo, colectivo o condicion a la que aplica.
+    - Pagina o apartado si consta en el contexto.
     """,
     "deadlines": """
-    Eres un especialista en plazos de contratación pública.
-    Extrae de los fragmentos ({chunk_range}) todas las fechas, duraciones, vencimientos,
-    prórrogas, plazos de presentación, ejecución, adjudicación, garantía y subsanación.
+    Eres un especialista en plazos administrativos.
+    Extrae de los fragmentos ({chunk_range}) todas las fechas, duraciones, vencimientos, computos,
+    prorroga, presentacion, resolucion, reclamacion, subsanacion o efectos temporales.
 
     Pregunta:
     {user_query}
@@ -83,15 +74,14 @@ PROMPT_TEMPLATES: dict[str, str] = {
     {context}
 
     Respuesta esperada:
-    - Tabla o lista cronológica cuando haya fechas concretas.
-    - Para cada plazo: hito, duración o fecha, inicio del cómputo, fin del cómputo y condiciones.
-    - Separa plazos de licitación, ejecución, prórrogas, garantía y trámites administrativos.
+    - Tabla o lista cronologica cuando haya fechas concretas.
+    - Para cada plazo: hito, duracion o fecha, inicio del computo, fin del computo y condiciones.
+    - Organo o procedimiento asociado si aparece.
     Si un plazo depende de un evento, explica ese evento.
     """,
     "solvency": """
-    Eres un experto en requisitos de solvencia y habilitación.
-    Identifica solo requisitos de solvencia económica, financiera, técnica, profesional,
-    clasificación empresarial, adscripción de medios, habilitaciones y documentación acreditativa.
+    Eres un experto en requisitos de acceso, admision, permanencia o habilitacion.
+    Identifica requisitos personales, academicos, documentales, economicos o procedimentales en los fragmentos ({chunk_range}).
 
     Pregunta:
     {user_query}
@@ -100,18 +90,15 @@ PROMPT_TEMPLATES: dict[str, str] = {
     {context}
 
     Respuesta esperada:
-    - Solvencia económica y financiera.
-    - Solvencia técnica o profesional.
-    - Clasificación o habilitación exigida, si consta.
-    - Medios personales/materiales exigidos.
-    - Documentos o certificados para acreditar cada requisito.
-    - Umbrales mínimos, importes, años de referencia y criterios de cumplimiento.
-    No mezcles criterios de adjudicación con solvencia salvo que el pliego los relacione expresamente.
+    - Requisito.
+    - A quien aplica.
+    - Documentacion o acreditacion exigida.
+    - Umbrales, condiciones y excepciones.
+    - Consecuencia de cumplirlo o incumplirlo.
     """,
     "criteria": """
-    Eres un analista de criterios de adjudicación.
-    Extrae los criterios evaluables, su ponderación y la forma de valoración desde los fragmentos ({chunk_range}).
-    Distingue criterios automáticos, criterios sujetos a juicio de valor y mejoras.
+    Eres un analista de criterios de valoracion y decision.
+    Extrae criterios, baremos, prioridades, ponderaciones y reglas de desempate desde los fragmentos ({chunk_range}).
 
     Pregunta:
     {user_query}
@@ -122,16 +109,14 @@ PROMPT_TEMPLATES: dict[str, str] = {
     Respuesta esperada:
     Para cada criterio indica:
     - Nombre del criterio.
-    - Puntuación máxima o porcentaje.
-    - Tipo de valoración: automática, fórmula, juicio de valor u otra.
-    - Fórmula o reglas de puntuación si aparecen.
-    - Subcriterios y límites.
-    Termina con un total de puntos si puede calcularse desde los fragmentos.
+    - Puntuacion, ponderacion o prioridad.
+    - Forma de aplicacion.
+    - Limites, subcriterios o reglas especiales.
     """,
     "guarantees": """
-    Eres un extractor de garantías contractuales.
-    Busca garantía provisional, definitiva, complementaria, retenciones, devolución de garantía
-    y cualquier porcentaje o condición asociada en los fragmentos ({chunk_range}).
+    Eres un extractor de garantias, recursos y salvaguardas procedimentales.
+    Busca derechos de reclamacion, recursos, garantias, proteccion de datos, audiencia, subsanacion,
+    efectos del silencio o mecanismos de revision en los fragmentos ({chunk_range}).
 
     Pregunta:
     {user_query}
@@ -140,18 +125,14 @@ PROMPT_TEMPLATES: dict[str, str] = {
     {context}
 
     Respuesta esperada:
-    - Tipo de garantía.
-    - Importe, porcentaje o base de cálculo.
-    - Momento de constitución.
-    - Forma admitida.
-    - Plazo de devolución o cancelación.
-    - Supuestos de incautación o pérdida si constan.
-    Si no se exige alguna garantía, indícalo solo si aparece explícitamente.
+    - Garantia o mecanismo.
+    - Quien puede usarlo.
+    - Plazo, organo y forma si constan.
+    - Efectos o limites.
     """,
     "budget": """
-    Eres un analista presupuestario de contratación pública.
-    Explica el presupuesto base de licitación, valor estimado, IVA, desglose de costes,
-    anualidades, financiación, lotes y precios unitarios usando los fragmentos ({chunk_range}).
+    Eres un analista de informacion economica administrativa.
+    Explica tasas, precios, becas, ayudas, creditos, importes, financiacion o efectos economicos usando los fragmentos ({chunk_range}).
 
     Pregunta:
     {user_query}
@@ -160,17 +141,15 @@ PROMPT_TEMPLATES: dict[str, str] = {
     {context}
 
     Respuesta esperada:
-    - Presupuesto base de licitación, con IVA y sin IVA si consta.
-    - Valor estimado del contrato y conceptos incluidos.
-    - Desglose por costes, anualidades, lotes o partidas.
-    - Tipo de IVA y régimen de impuestos.
-    - Financiación o aplicación presupuestaria si aparece.
-    - Notas sobre revisión de precios o límites económicos.
+    - Concepto economico.
+    - Importe o formula.
+    - Sujeto, periodo o supuesto de aplicacion.
+    - Exenciones, bonificaciones o limites si aparecen.
     """,
     "duration": """
-    Eres un especialista en duración y ejecución contractual.
-    Identifica duración inicial, inicio del contrato, calendario de ejecución, prórrogas,
-    plazos parciales, recepción, garantía y condiciones temporales desde los fragmentos ({chunk_range}).
+    Eres un especialista en vigencia, aplicacion temporal y calendario administrativo.
+    Identifica vigencia, entrada en vigor, duracion, calendario, prorroga, efectos transitorios y derogaciones
+    desde los fragmentos ({chunk_range}).
 
     Pregunta:
     {user_query}
@@ -179,17 +158,15 @@ PROMPT_TEMPLATES: dict[str, str] = {
     {context}
 
     Respuesta esperada:
-    - Duración inicial.
     - Fecha o evento de inicio.
-    - Prórrogas: número, duración y condiciones.
-    - Plazos parciales o hitos de ejecución.
-    - Plazo de garantía o recepción si consta.
-    - Consecuencias por incumplimiento temporal si aparecen.
+    - Duracion o vigencia.
+    - Regimen transitorio o prorroga.
+    - Fin de efectos, derogaciones o sustituciones si constan.
     """,
     "penalties": """
-    Eres un analista de obligaciones, incumplimientos y penalizaciones.
-    Extrae penalidades, incumplimientos, obligaciones esenciales, causas de resolución,
-    sanciones, indemnizaciones y consecuencias contractuales desde los fragmentos ({chunk_range}).
+    Eres un analista de incumplimientos, infracciones y consecuencias.
+    Extrae obligaciones, prohibiciones, incumplimientos, sanciones, perdida de derechos,
+    anulaciones o efectos desfavorables desde los fragmentos ({chunk_range}).
 
     Pregunta:
     {user_query}
@@ -199,17 +176,15 @@ PROMPT_TEMPLATES: dict[str, str] = {
 
     Respuesta esperada:
     Para cada supuesto indica:
-    - Obligación o incumplimiento.
-    - Penalización o consecuencia.
-    - Importe, porcentaje o graduación si consta.
-    - Procedimiento, límite o reiteración.
-    - Si puede causar resolución del contrato.
-    Distingue penalizaciones de simples obligaciones informativas.
+    - Obligacion o conducta.
+    - Consecuencia.
+    - Organo o procedimiento si consta.
+    - Gradacion, limite o excepcion.
     """,
     "submission": """
-    Eres un asistente experto en presentación de ofertas.
-    Explica cómo presentar la oferta según los fragmentos ({chunk_range}): plataforma,
-    plazo, documentación, sobres o archivos, firma, formato y requisitos administrativos.
+    Eres un asistente experto en tramitacion administrativa.
+    Explica como presentar solicitudes, escritos o documentacion segun los fragmentos ({chunk_range}): canal,
+    plazo, organo, firma, formato, anexos y subsanacion.
 
     Pregunta:
     {user_query}
@@ -218,13 +193,12 @@ PROMPT_TEMPLATES: dict[str, str] = {
     {context}
 
     Respuesta esperada:
-    - Lugar o plataforma de presentación.
-    - Plazo y hora límite si constan.
-    - Documentación administrativa.
-    - Documentación técnica.
-    - Oferta económica y anexos.
-    - Estructura de sobres/archivos.
-    - Requisitos de firma, formato o subsanación.
-    Advierte claramente si falta algún dato esencial.
+    - Canal o lugar de presentacion.
+    - Plazo y hora limite si constan.
+    - Documentacion exigida.
+    - Formato, firma o identificacion.
+    - Organo competente.
+    - Subsanacion o efectos de no presentar lo requerido.
+    Advierte claramente si falta algun dato esencial.
     """,
 }

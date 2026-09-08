@@ -227,6 +227,19 @@ class Settings:
 settings = Settings()
 
 
+@dataclass(frozen=True)
+class StructuralChunk:
+    """
+    Chunk de texto acompañado de metadatos estructurales útiles para recuperación y auditoría.
+    """
+
+    text: str
+    type: str = "paragraph"
+    page: int | None = None
+    level: int | None = None
+    bbox: list[float] | None = None
+
+
 def _embedding_execution_backend() -> str:
     """
     Determina el backend de ejecución para los embeddings.
@@ -1559,6 +1572,81 @@ def chunk_text(text: str, overlap_ratio: float = 0.1) -> list[str]:
 
     return chunks
 
+
+def chunk_text_with_structure(
+    text: str,
+    *,
+    page: int | None = None,
+    source: str = "text",
+    overlap_ratio: float = 0.1,
+) -> list[StructuralChunk]:
+    """
+    Trocea texto preservando metadatos estructurales por chunk.
+
+    Para Markdown infiere encabezados por prefijo '#', listas por viñetas/numeración
+    y tablas por tuberías. Para PDF nativo se conserva al menos la página.
+    """
+    chunks = chunk_text(text, overlap_ratio=overlap_ratio)
+    return [
+        StructuralChunk(
+            text=chunk,
+            type=_infer_chunk_type(chunk, source=source),
+            page=page,
+            level=_infer_heading_level(chunk),
+            bbox=None,
+        )
+        for chunk in chunks
+    ]
+
+
+def _infer_heading_level(text: str) -> int | None:
+    """
+    Infere el nivel de encabezado Markdown si el chunk comienza con un título.
+    """
+    first_line = (text or "").lstrip().splitlines()[0] if (text or "").strip() else ""
+    match = re.match(r"^(#{1,6})\s+", first_line)
+    if match:
+        return len(match.group(1))
+    if re.match(r"^\d+\.\s+[A-ZÁÉÍÓÚÜÑ0-9][A-ZÁÉÍÓÚÜÑ0-9\s,;:()/-]+$", first_line):
+        return 1
+    if re.match(r"^\d+\.\d+\.\s+", first_line):
+        return 2
+    if re.match(r"^\d+\.\d+\.\d+\.\s+", first_line):
+        return 3
+    return None
+
+
+def _infer_chunk_type(text: str, *, source: str = "text") -> str:
+    """
+    Clasifica un chunk en tipos estructurales básicos.
+    """
+    stripped = (text or "").lstrip()
+    if not stripped:
+        return "empty"
+    if _infer_heading_level(stripped) is not None:
+        return "heading"
+    if stripped.startswith("|") or "<table" in stripped.lower():
+        return "table"
+    if stripped.startswith(("-", "*")) or re.match(r"^\d+[\).]\s+", stripped):
+        return "list"
+    if source == "markdown" and re.search(r"\n\s*\|", stripped):
+        return "table"
+    return "paragraph"
+
+
+def _structural_metadata(chunk: StructuralChunk) -> dict[str, Any]:
+    """
+    Serializa los metadatos estructurales con claves estables.
+    """
+    metadata = {
+        "type": chunk.type,
+        "text": chunk.text,
+        "page": chunk.page,
+        "level": chunk.level,
+        "bbox": chunk.bbox,
+    }
+    return {key: value for key, value in metadata.items() if value is not None}
+
 def token_len(tokenizer, text: str) -> int | None:
     """
     Devuelve el número de tokens o None si falla la tokenización.
@@ -1633,15 +1721,7 @@ def iter_clean_lines(text: str) -> Iterable[str]:
 
 def _normalize_tipo_documento(value: str | None) -> str:
     """
-    Normaliza valores de tipo documental para que coincidan con lo almacenado en Qdrant (en minusculas, sin tildes y si espacios).
-    Además, aplica reglas para mapear variantes comunes a un mismo valor estándar ("tecnico" y "administrativo").
-    
-    Args:
-        value: El valor de tipo documental a normalizar, que puede ser None o una cadena de texto.
-    
-    Returns:
-        El valor normalizado, o una cadena vacía si el valor es None o vacío.
-        
+    Compatibilidad legacy: el pipeline ya no usa tipos administrativo/técnico.
     """
     if value is None:
         return ""
@@ -1656,7 +1736,6 @@ def _normalize_tipo_documento(value: str | None) -> str:
     except (ImportError, AttributeError, TypeError, ValueError):
         pass
     value = re.sub(r"\s+", " ", value).strip()
-    # Canonicalización
     if value.startswith("tecnic"):
         return "tecnico"
     if value.startswith("admin"):
@@ -1668,27 +1747,17 @@ def build_metadata_filter(
     numero_expediente: str | None = None,
     tipo_documento: str | None = None,
     document_id: int | None = None,
+    structure_type: str | None = None,
+    page: int | None = None,
+    level: int | None = None,
 ) -> qmodels.Filter | None:
-    """ 
-    Construye un filtro de Qdrant a partir de los metadatos de número de expediente y tipo de documento, si se proporcionan. Si no se proporcionan filtros, devuelve None.
-    
-    Args:
-        numero_expediente: Número de expediente para filtrar los documentos (opcional).
-        tipo_documento: Tipo de documento para filtrar los documentos (opcional).
-        document_id: ID del documento para filtrar los documentos (opcional).
-        
-    Returns:
-        Un objeto qmodels.Filter que combina las condiciones de filtrado para número de expediente y tipo de documento, o None si no se proporcionan filtros.
+    """
+    Construye un filtro de Qdrant a partir de metadatos estructurales.
     """
     must: list[Any] = []
-
-    if numero_expediente is not None and numero_expediente != "":
-        must.append(
-            qmodels.FieldCondition(
-                key="metadata.numero_expediente",
-                match=qmodels.MatchValue(value=numero_expediente),
-            )
-        )
+    if tipo_documento and not structure_type:
+        structure_type = str(tipo_documento).strip()
+    del numero_expediente
 
     if document_id is not None:
         must.append(
@@ -1698,35 +1767,17 @@ def build_metadata_filter(
             )
         )
 
-    raw_tipo = (tipo_documento or "").strip()
-    tipo = _normalize_tipo_documento(raw_tipo)
-
-    tipo_field = "metadata.tipo_documento"
-    missing_tipo_conditions: list[Any] = []
-
-
-    if raw_tipo:
-        match_values = [tipo]
-        if tipo == "tecnico":
-            match_values.append("técnico")
-        match_tipo = qmodels.FieldCondition(
-            key=tipo_field,
-            match=(
-                qmodels.MatchAny(any=match_values)
-                if hasattr(qmodels, "MatchAny") and len(match_values) > 1
-                else qmodels.MatchValue(value=tipo)
-            ),
+    if structure_type:
+        must.append(
+            qmodels.FieldCondition(
+                key="metadata.type",
+                match=qmodels.MatchValue(value=str(structure_type).strip()),
+            )
         )
-        should = [match_tipo, *missing_tipo_conditions]
-        return qmodels.Filter(
-            must=must or None,
-            should=should,
-            min_should=(
-                qmodels.MinShould(conditions=should, min_count=1)
-                if hasattr(qmodels, "MinShould")
-                else None
-            ),
-        )
+    if page is not None:
+        must.append(qmodels.FieldCondition(key="metadata.page", match=qmodels.MatchValue(value=int(page))))
+    if level is not None:
+        must.append(qmodels.FieldCondition(key="metadata.level", match=qmodels.MatchValue(value=int(level))))
 
     if not must:
         return None
@@ -1737,6 +1788,10 @@ def recuperacion_chunk(
     k: int = 10,
     numero_expediente: str | None = None,
     tipo_documento: str | None = None,
+    document_id: int | None = None,
+    structure_type: str | None = None,
+    page: int | None = None,
+    level: int | None = None,
 ) -> list[VectorBaseDocument]:
     """
     Dada una pregunta del usuario, recupera los chunks más similares desde Qdrant.
@@ -1751,11 +1806,14 @@ def recuperacion_chunk(
         Lista de instancias de VectorBaseDocument que representan los chunks más similares encontrados en Qdrant, ordenados por similitud. 
         Cada instancia incluye el contenido del chunk, su embedding y metadatos asociados.
     """
+    del numero_expediente, tipo_documento
     points = recuperacion_chunk_con_scores(
         user_query=user_query,
         k=k,
-        numero_expediente=numero_expediente,
-        tipo_documento=tipo_documento,
+        document_id=document_id,
+        structure_type=structure_type,
+        page=page,
+        level=level,
         min_similarity=None,
     )
     return [VectorBaseDocument.from_record(point) for point in points]
@@ -1775,6 +1833,10 @@ def recuperacion_chunk_con_scores(
     k: int = DEFAULT_RAG_MAX_CHUNKS,
     numero_expediente: str | None = None,
     tipo_documento: str | None = None,
+    document_id: int | None = None,
+    structure_type: str | None = None,
+    page: int | None = None,
+    level: int | None = None,
     min_similarity: float | None = DEFAULT_RAG_MIN_SIMILARITY,
 ) -> list[qmodels.ScoredPoint]:
     """
@@ -1791,6 +1853,7 @@ def recuperacion_chunk_con_scores(
         Lista de objetos qmodels.ScoredPoint que representan los chunks más similares encontrados en Qdrant, ordenados por similitud. 
         Cada objeto incluye el id del punto, el score de similitud, y el payload con el contenido y metadatos del chunk.  
     """
+    del numero_expediente, tipo_documento
     logger.info(
         "Recuperando chunks para consulta RAG con embeddings en %s",
         _embedding_execution_backend(),
@@ -1798,18 +1861,18 @@ def recuperacion_chunk_con_scores(
     k = normalize_retrieval_k(k)
     query_vector = embedding_model(user_query, to_list=True)
     query_filter = build_metadata_filter(
-        numero_expediente=numero_expediente,
-        tipo_documento=tipo_documento,
+        document_id=document_id,
+        structure_type=structure_type,
+        page=page,
+        level=level,
     )
-    _log_qdrant_query_filter(query_filter, numero_expediente=numero_expediente, tipo_documento=tipo_documento)
+    _log_qdrant_query_filter(query_filter)
 
     try:
-        points = _qdrant_query_points_with_optional_tipo_fallback(
+        points = _qdrant_query_points(
             query_vector=query_vector,
             k=k,
             query_filter=query_filter,
-            numero_expediente=numero_expediente,
-            tipo_documento=tipo_documento,
         )
         return _filter_points_by_similarity(points, min_similarity=min_similarity, k=k)
     except QDRANT_RECOVERABLE_ERRORS as e:
@@ -1819,9 +1882,6 @@ def recuperacion_chunk_con_scores(
 
 def _log_qdrant_query_filter(
     query_filter: qmodels.Filter | None,
-    *,
-    numero_expediente: str | None,
-    tipo_documento: str | None,
 ) -> None:
     """
     Registra información sobre el filtro de Qdrant que se va a aplicar en la consulta.
@@ -1831,27 +1891,23 @@ def _log_qdrant_query_filter(
         numero_expediente (str | None): El número de expediente que se está utilizando como filtro en la consulta, o None si no se está filtrando por número de expediente.
         tipo_documento (str | None): El tipo de documento que se está utilizando como filtro en la consulta, o None si no se está filtrando por tipo de documento.
     """
-    if query_filter is None or not (numero_expediente or tipo_documento):
+    if query_filter is None:
         return
     try:
         dump = query_filter.model_dump() if hasattr(query_filter, "model_dump") else str(query_filter)
     except (AttributeError, TypeError, ValueError):
         dump = "<unserializable-filter>"
     logger.info(
-        "Qdrant query_filter aplicado (expediente=%s, tipo=%s): %s",
-        (numero_expediente or ""),
-        (tipo_documento or ""),
+        "Qdrant query_filter estructural aplicado: %s",
         dump,
     )
 
 
-def _qdrant_query_points_with_optional_tipo_fallback(
+def _qdrant_query_points(
     *,
     query_vector: list[float],
     k: int,
     query_filter: qmodels.Filter | None,
-    numero_expediente: str | None,
-    tipo_documento: str | None,
 ) -> list[qmodels.ScoredPoint]:
     """
     Recupera puntos de Qdrant usando el vector de consulta y el filtro dado. Si no se encuentran puntos y se estaba filtrando por tipo_documento, 
@@ -1880,27 +1936,16 @@ def _qdrant_query_points_with_optional_tipo_fallback(
         with_vectors=False,
     )
     points = getattr(res, "points", res)
-    if points or not tipo_documento:
-        return points
+    return points
 
-    fallback_filter = build_metadata_filter(
-        numero_expediente=numero_expediente,
-        tipo_documento=None,
-    )
-    logger.warning(
-        "Qdrant devolvió 0 puntos con tipo=%s; reintentando sin filtro de tipo.",
-        (tipo_documento or ""),
-    )
-    res2 = qdrant.query_points(
-        collection_name=VectorBaseDocument.get_collection_name(),
-        query=query_vector,
-        limit=k,
-        query_filter=fallback_filter,
-        with_payload=True,
-        with_vectors=False,
-    )
-    points2 = getattr(res2, "points", res2)
-    return points2 or points
+
+def _qdrant_query_points_with_optional_tipo_fallback(**kwargs) -> list[qmodels.ScoredPoint]:
+    """
+    Compatibilidad con tests/callers antiguos: ya no hay fallback por tipo documental.
+    """
+    kwargs.pop("numero_expediente", None)
+    kwargs.pop("tipo_documento", None)
+    return _qdrant_query_points(**kwargs)
 
 
 def _filter_points_by_similarity(
@@ -2117,11 +2162,10 @@ def obtener_chunk_de_query(
         Un diccionario con los detalles del chunk más relevante encontrado, incluyendo título del documento, nombre del archivo, índice de segmento y el texto del chunk.
         Si no se encuentra ningún chunk relevante, devuelve None.
     """
+    del numero_expediente, tipo_documento
     docs = recuperacion_chunk(
         user_query,
         k=1,
-        numero_expediente=numero_expediente,
-        tipo_documento=tipo_documento,
     )
     if not docs:
         return None
@@ -2171,6 +2215,7 @@ async def obtener_mejor_chunk(
         la respuesta indicará que no se encontraron fragmentos relevantes en la base de datos. 
     """
     user_query = (user_query or "").strip()
+    del numero_expediente, tipo_documento
     model_name = resolve_rag_llm_model(model)
     _raise_if_query_cancelled(should_cancel)
 
@@ -2183,15 +2228,11 @@ async def obtener_mejor_chunk(
     points = recuperacion_chunk_con_scores(
         user_query,
         k=retrieval_k,
-        numero_expediente=numero_expediente,
-        tipo_documento=tipo_documento,
         min_similarity=min_similarity,
     )
     if not points:
         logger.info(
-            "RAG sin fragmentos (expediente=%s, tipo=%s, k=%s, min_sim=%s)",
-            (numero_expediente or ""),
-            (tipo_documento or ""),
+            "RAG sin fragmentos (k=%s, min_sim=%s)",
             retrieval_k,
             min_similarity,
         )
@@ -2200,8 +2241,6 @@ async def obtener_mejor_chunk(
             query_profile=query_profile,
             retrieval_k=retrieval_k,
             min_similarity=min_similarity,
-            numero_expediente=numero_expediente,
-            tipo_documento=tipo_documento,
         )
 
     retrieved, context_blocks = _build_retrieved_and_context(points, should_cancel=should_cancel)
@@ -2231,8 +2270,6 @@ async def obtener_mejor_chunk(
         query_profile=query_profile,
         retrieval_k=retrieval_k,
         min_similarity=min_similarity,
-        numero_expediente=numero_expediente,
-        tipo_documento=tipo_documento,
     )
 
 
@@ -2260,8 +2297,8 @@ def _empty_rag_result(
     query_profile: str,
     retrieval_k: int,
     min_similarity: float | None,
-    numero_expediente: str | None,
-    tipo_documento: str | None,
+    numero_expediente: str | None = None,
+    tipo_documento: str | None = None,
 ) -> dict:
     """
     Construye un resultado de RAG vacío, indicando que no hay información disponible.
@@ -2277,8 +2314,9 @@ def _empty_rag_result(
     Returns:
         dict: El resultado de RAG vacío.
     """
+    del numero_expediente, tipo_documento
     return {
-        "answer": "No hay información disponible sobre tu consulta en la base de datos. Por favor realiza otra búsqueda o revisa los filtros aplicados. Los temas sobre los que puedes preguntar son los contenidos en las licitaciones del estado, por ejemplo: plazos, importes, requisitos, criterios de adjudicación, etc.",
+        "answer": "No hay información disponible sobre tu consulta en la base de datos. Prueba con otra búsqueda o revisa que la normativa relevante esté cargada e indexada.",
         "title": "",
         "filename": "",
         "segment_index": -1,
@@ -2289,10 +2327,7 @@ def _empty_rag_result(
         "query_profile": query_profile,
         "retrieval_k": retrieval_k,
         "min_similarity": min_similarity,
-        "applied_filters": {
-            "numero_expediente": numero_expediente,
-            "tipo_documento": tipo_documento,
-        },
+        "applied_filters": {},
     }
 
 
@@ -2364,8 +2399,18 @@ def _build_retrieved_and_context(points: list[Any], *, should_cancel=None) -> tu
             "chunk": content,
         }
         retrieved.append(item)
+        structure_hint = " | ".join(
+            f"{label}={value}"
+            for label, value in (
+                ("type", meta.get("type")),
+                ("page", meta.get("page")),
+                ("level", meta.get("level")),
+            )
+            if value not in (None, "")
+        )
+        structure_suffix = f" | {structure_hint}" if structure_hint else ""
         context_blocks.append(
-            f"""[CHUNK #{idx} | score={item['similitud']:.6f} | file={item['filename']} | seg={item['segment_index']}]
+            f"""[CHUNK #{idx} | score={item['similitud']:.6f} | file={item['filename']} | seg={item['segment_index']}{structure_suffix}]
             \"\"\"{content}\"\"\""""
         )
     return retrieved, context_blocks
@@ -2381,8 +2426,8 @@ def _rag_result_from_best(
     query_profile: str,
     retrieval_k: int,
     min_similarity: float | None,
-    numero_expediente: str | None,
-    tipo_documento: str | None,
+    numero_expediente: str | None = None,
+    tipo_documento: str | None = None,
 ) -> dict:
     """
     Construye el resultado final de RAG a partir de la respuesta generada por el modelo, el chunk más relevante y la lista de chunks recuperados.
@@ -2403,6 +2448,7 @@ def _rag_result_from_best(
         dict: Un diccionario con la respuesta generada por el modelo, detalles del chunk más relevante (título del documento, nombre del archivo, índice de segmento, texto del chunk), la lista de chunks recuperados con sus scores y metadatos, el modelo usado, 
         el dispositivo de ejecución, el perfil de consulta, los parámetros de recuperación y los filtros aplicados.
     """
+    del numero_expediente, tipo_documento
     return {
         "answer": answer,
         "model": model_name,
@@ -2415,10 +2461,7 @@ def _rag_result_from_best(
         "query_profile": query_profile,
         "retrieval_k": retrieval_k,
         "min_similarity": min_similarity,
-        "applied_filters": {
-            "numero_expediente": numero_expediente,
-            "tipo_documento": tipo_documento,
-        },
+        "applied_filters": {},
     }
 
 def index_pdf(
@@ -2442,6 +2485,7 @@ def index_pdf(
         Si ocurre un error durante el proceso de indexación (lectura del PDF, chunking, generación de embeddings, guardado en Qdrant), 
         se devuelve una lista vacía y se registran los errores correspondientes.
     """
+    del numero_expediente, tipo_documento
     with timed_block(f"total {pdf_path.name}"):
         logger.info("Procesando %s ...", pdf_path.name)
 
@@ -2452,10 +2496,11 @@ def index_pdf(
                 info = reader.metadata or {}
                 title = info.get("/Title") or pdf_path.stem
                 doc_hash = pdf_sha256(pdf_path)
-                parts: list[str] = []
-                for page in reader.pages:
-                    parts.append(page.extract_text() or "")
-                full_text = "\n".join(parts)
+                page_texts = [
+                    (page_number, page.extract_text() or "")
+                    for page_number, page in enumerate(reader.pages, start=1)
+                ]
+                full_text = "\n".join(text for _, text in page_texts)
         except (OSError, PdfReadError, PdfStreamError, RuntimeError, TypeError, ValueError):
             logger.exception("Error leyendo %s", pdf_path.name)
             return []
@@ -2467,7 +2512,11 @@ def index_pdf(
         # 2) Chunking
         try:
             with timed_block(f"chunking {pdf_path.name}"):
-                chunks = chunk_text(full_text)
+                chunks = [
+                    chunk
+                    for page_number, page_text in page_texts
+                    for chunk in chunk_text_with_structure(page_text, page=page_number, source="pdf")
+                ]
         except (RuntimeError, TypeError, ValueError):
             logger.exception("Error haciendo chunks en %s", pdf_path.name)
             return []
@@ -2478,7 +2527,8 @@ def index_pdf(
 
         # 3) Embeddings
         with timed_block(f"embeddings {pdf_path.name}"):
-            vectors = embedding_model(chunks, to_list=True)
+            chunk_texts = [chunk.text for chunk in chunks]
+            vectors = embedding_model(chunk_texts, to_list=True)
             
         # Seguridad si no coinciden longitudes
         if len(vectors) != len(chunks):
@@ -2495,8 +2545,6 @@ def index_pdf(
                 "filename": pdf_path.name,
                 "title": title,
                 "sha256": doc_hash,
-                "numero_expediente": numero_expediente,
-                "tipo_documento": _normalize_tipo_documento(tipo_documento) or None,
             }
             if document_id is not None:
                 base_meta["document_id"] = int(document_id)
@@ -2504,9 +2552,12 @@ def index_pdf(
             for idx, (chunk, vec) in enumerate(zip(chunks, vectors)):
                 meta = dict(base_meta)
                 meta["segment_index"] = idx
+                structure = _structural_metadata(chunk)
+                meta.update(structure)
+                meta["structure"] = structure
                 docs.append(
                     VectorBaseDocument(
-                        content=chunk,
+                        content=chunk.text,
                         embedding=vec,
                         metadata=meta,
                     )
@@ -2547,6 +2598,7 @@ def index_markdown(
         Si ocurre un error durante el proceso de indexación (chunking, generación de embeddings, guardado en Qdrant), 
         se devuelve una lista vacía y se registran los errores correspondientes.
     """
+    del numero_expediente, tipo_documento
     if not (markdown_content or "").strip():
         return []
 
@@ -2555,7 +2607,7 @@ def index_markdown(
 
     try:
         with timed_block(f"chunking-md {filename}"):
-            chunks = chunk_text(markdown_content)
+            chunks = chunk_text_with_structure(markdown_content, source="markdown")
     except (RuntimeError, TypeError, ValueError):
         logger.exception("Error haciendo chunks desde Markdown en %s", filename)
         return []
@@ -2565,7 +2617,8 @@ def index_markdown(
         return []
 
     with timed_block(f"embeddings-md {filename}"):
-        vectors = embedding_model(chunks, to_list=True)
+        chunk_texts = [chunk.text for chunk in chunks]
+        vectors = embedding_model(chunk_texts, to_list=True)
 
     if len(vectors) != len(chunks):
         logger.error(
@@ -2582,8 +2635,6 @@ def index_markdown(
             "filename": filename,
             "title": safe_title,
             "sha256": safe_hash,
-            "numero_expediente": numero_expediente,
-            "tipo_documento": _normalize_tipo_documento(tipo_documento) or None,
             "source": "markdown",
         }
         if document_id is not None:
@@ -2592,27 +2643,30 @@ def index_markdown(
         for idx, (chunk, vec) in enumerate(zip(chunks, vectors)):
             meta = dict(base_meta)
             meta["segment_index"] = idx
-            docs.append(VectorBaseDocument(content=chunk, embedding=vec, metadata=meta))
+            structure = _structural_metadata(chunk)
+            meta.update(structure)
+            meta["structure"] = structure
+            docs.append(VectorBaseDocument(content=chunk.text, embedding=vec, metadata=meta))
 
         VectorBaseDocument.save_many(docs)
         logger.info("Guardados %d chunks (Markdown) en Qdrant", len(docs))
         return docs
 
 
-def index_pliegos_dir(pliegos_dir: Path) -> dict:
+def index_documents_dir(documents_dir: Path) -> dict:
     """
     Recorre todos los PDFs de un directorio y los indexa de forma incremental.
     Si el PDF no existe en Qdrant lo indexa, si existe y el hash coincide no lo indexa y si existe y el hash no coincide borra sus chunks y lo reindexa
     
     Args:
-        pliegos_dir: Ruta al directorio que contiene los archivos PDF a indexar.
+        documents_dir: Ruta al directorio que contiene los archivos PDF a indexar.
         
     Returns:
         Un diccionario con un resumen del proceso de indexación, incluyendo el número total de PDFs procesados, cuántos fueron nuevos, cuántos fueron modificados (reindexados), 
         cuántos fueron omitidos por no tener cambios, cuántos tuvieron errores o no tenían texto, y el número total de chunks guardados en Qdrant.
     """
-    if not pliegos_dir.exists():
-        logger.error("No se encuentra la carpeta %s", pliegos_dir)
+    if not documents_dir.exists():
+        logger.error("No se encuentra la carpeta %s", documents_dir)
         raise SystemExit(1)
 
     # Asegura colección antes de empezar
@@ -2627,7 +2681,7 @@ def index_pliegos_dir(pliegos_dir: Path) -> dict:
         "chunks_guardados": 0,
     }
 
-    pdfs = sorted(pliegos_dir.glob("*.pdf"))
+    pdfs = sorted(documents_dir.glob("*.pdf"))
     summary["pdfs_total"] = len(pdfs)
 
     for pdf_path in pdfs:
@@ -2658,13 +2712,19 @@ def index_pliegos_dir(pliegos_dir: Path) -> dict:
     return summary
 
 
+def index_pliegos_dir(pliegos_dir: Path) -> dict:
+    """
+    Alias legacy: usar ``index_documents_dir``.
+    """
+    return index_documents_dir(pliegos_dir)
 
-def cli_main(pliegos_dir: Path | None = None) -> dict:
+
+def cli_main(documents_dir: Path | None = None) -> dict:
     """
     Entrada CLI para indexar PDFs en Qdrant.
 
     Args:
-        pliegos_dir: Directorio opcional con PDFs; por defecto `./pliegos`.
+        documents_dir: Directorio opcional con PDFs; por defecto `./documentos`.
 
     Returns:
         dict: Resumen de indexación.
@@ -2677,11 +2737,11 @@ def cli_main(pliegos_dir: Path | None = None) -> dict:
     if os.environ.get("PYTHIA_TESTING") == "1":
         return {}
 
-    if pliegos_dir is None:
+    if documents_dir is None:
         base_dir = Path(__file__).parent
-        pliegos_dir = base_dir / "pliegos"
+        documents_dir = base_dir / "documentos"
 
-    summary = index_pliegos_dir(pliegos_dir)
+    summary = index_documents_dir(documents_dir)
     logger.info("Resumen indexado: %s", summary)
     return summary
 
