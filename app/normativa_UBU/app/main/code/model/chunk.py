@@ -165,6 +165,7 @@ class Chunk(db.Model):
             dict: El fragmento serializable.
         """
         chunk_metadata = dict(item.get("metadata") or {})
+        chunk_metadata.pop("tipo_documento", None)
         chunk = item.get("chunk", "") or ""
 
         if chunk_obj is not None:
