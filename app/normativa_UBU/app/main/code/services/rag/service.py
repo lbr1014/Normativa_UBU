@@ -9,6 +9,7 @@ import logging
 import re
 import time
 import unicodedata
+from pathlib import Path
 from typing import Any
 
 from flask_login import current_user
@@ -17,6 +18,11 @@ from app.main.code.extensions import db
 from app.main.code.inetrnacionalizacion.tarduccion import translate_for
 from app.main.code.model.chunk import Chunk
 from app.main.code.model.consulta import Consulta
+from app.main.code.model.documento import Documento
+from app.main.code.services.documentos import (
+    extract_document_title_from_markdown,
+    extract_pdf_footer_date,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -349,6 +355,7 @@ async def rag_answer(
         logger.exception("Error en rag_answer")
         data = message_error(translate_for(lang, "rag.system_error"))
 
+    normalize_rag_document_titles(data)
     elapsed = time.perf_counter() - start
     # `obtener_mejor_chunk` intenta rellenar `execution_device` con el dispositivo real
     data.setdefault("execution_device", get_ollama_execution_device())
@@ -363,6 +370,64 @@ async def rag_answer(
         (retrieved[0].get("qdrant_point_id") or "").strip() if retrieved else ""
     )
     return data
+
+
+def normalize_rag_document_titles(data: dict[str, Any]) -> None:
+    """
+    Corrige títulos de documentos en la respuesta RAG cuando Qdrant contiene el nombre de archivo como título.
+    """
+    retrieved = data.get("retrieved") or []
+    for item in retrieved:
+        if not isinstance(item, dict):
+            continue
+        metadata = item.get("metadata") or {}
+        metadata.pop("tipo_documento", None)
+        document = _document_for_retrieved_item(item, metadata)
+        filename = item.get("filename") or metadata.get("filename") or metadata.get("document_name") or ""
+        current_title = item.get("title") or metadata.get("title") or ""
+        if document is None or not _title_looks_like_filename(current_title, filename):
+            if document is not None:
+                metadata["pdf_date"] = metadata.get("pdf_date") or extract_pdf_footer_date(document.markdown_content)
+                item["metadata"] = metadata
+            continue
+        corrected_title = extract_document_title_from_markdown(
+            document.markdown_content,
+            Path(document.nombre or filename).stem,
+        )
+        item["title"] = corrected_title
+        metadata["title"] = corrected_title
+        metadata["pdf_date"] = metadata.get("pdf_date") or extract_pdf_footer_date(document.markdown_content)
+        metadata.setdefault("filename", document.nombre or filename)
+        item["metadata"] = metadata
+
+    if retrieved:
+        best = retrieved[0]
+        data["title"] = best.get("title", data.get("title", ""))
+        data["filename"] = best.get("filename", data.get("filename", ""))
+
+
+def _document_for_retrieved_item(item: dict, metadata: dict) -> Documento | None:
+    document_id = item.get("document_id") or metadata.get("document_id")
+    if document_id is not None:
+        try:
+            document = Documento.query.get(int(document_id))
+            if document is not None:
+                return document
+        except (TypeError, ValueError):
+            pass
+
+    chunk = Chunk.find_from_retrieved_item(item)
+    return getattr(chunk, "document", None) if chunk is not None else None
+
+
+def _title_looks_like_filename(title: str | None, filename: str | None) -> bool:
+    title = (title or "").strip()
+    filename = (filename or "").strip()
+    if not title:
+        return True
+    if not filename:
+        return False
+    return title in {filename, Path(filename).stem}
 
 
 def message_error(msg: str) -> dict[str, Any]:

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
@@ -61,6 +62,55 @@ def _normalize_text(value: str) -> str:
     """
     from app.main.code.model.documento import _normalize_document_text
     return _normalize_document_text(value)
+
+
+def extract_document_title_from_markdown(markdown_content: str | None, fallback: str = "") -> str:
+    """
+    Extrae un título documental legible desde Markdown convertido.
+    """
+    fallback = (fallback or "").strip()
+    ignored_prefixes = (
+        "ministerio ",
+        "secretaria ",
+        "secretaría ",
+        "direccion ",
+        "dirección ",
+        "codigo seguro ",
+        "código seguro ",
+        "csv ",
+        "firmante",
+        "fecha ",
+        "notas ",
+    )
+
+    for raw_line in (markdown_content or "").splitlines()[:80]:
+        line = re.sub(r"^#{1,6}\s+", "", raw_line or "").strip()
+        line = re.sub(r"^\d+\s+(?=[A-ZÁÉÍÓÚÜÑ])", "", line).strip()
+        if len(line) < 12:
+            continue
+        normalized = _normalize_text(line)
+        if not normalized or any(normalized.startswith(prefix) for prefix in ignored_prefixes):
+            continue
+        letters = [char for char in line if char.isalpha()]
+        if letters and sum(1 for char in letters if char.isupper()) / len(letters) >= 0.65:
+            return line
+        if raw_line.lstrip().startswith("#"):
+            return line
+
+    return fallback
+
+
+def extract_pdf_footer_date(markdown_content: str | None) -> str:
+    """
+    Extrae la fecha documental del pie de página cuando aparece como "FECHA : dd/mm/yyyy hh:mm".
+    """
+    matches = re.findall(
+        r"\bFECHA\s*:\s*(\d{1,2}/\d{1,2}/\d{4})(?:\s+\d{1,2}:\d{2})?",
+        markdown_content or "",
+        flags=re.IGNORECASE,
+    )
+    return matches[-1] if matches else ""
+
 
 def infer_document_metadata_from_filename(filename: str) -> tuple[str | None, str | None]:
     """
@@ -662,14 +712,17 @@ class DocumentosService:
             vector_docs = index_markdown(
                 doc.markdown_content or "",
                 filename=Path(doc.path).name,
-                title=Path(doc.nombre).stem,
+                title=extract_document_title_from_markdown(doc.markdown_content, Path(doc.nombre).stem),
+                pdf_date=extract_pdf_footer_date(doc.markdown_content),
                 sha256=getattr(doc, "hash", "") or "",
                 document_id=doc.id,
+                numero_expediente=getattr(doc, "numero_expediente", None),
             )
         else:
             vector_docs = index_pdf(
                 pdf_path,
                 document_id=doc.id,
+                numero_expediente=getattr(doc, "numero_expediente", None),
             )
 
         if not vector_docs:

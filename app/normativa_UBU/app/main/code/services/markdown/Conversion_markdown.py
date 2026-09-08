@@ -44,7 +44,7 @@ Rules:
   - Level 1: main section numbers like "1. DISPOSICIONES GENERALES", etc.
   - Level 2: "1.1.", "1.2.", etc.
   - Level 3: "1.1.1.", etc.
-- Also treat legal ordinal headings like "PRIMERA.", "SEGUNDA.", "DISPOSICIÓN ADICIONAL" or "ANEXO" as main headings.
+- Also treat legal ordinal headings like "PRIMERA.", "TERCERA:", "DISPOSICIÓN ADICIONAL" or "ANEXO" as main headings.
 - When there is a single number like "1.":
   - Only treat it as a title if the following words are mostly UPPERCASE.
 - When there are more numbers, like "1.1." or "1.1.1.":
@@ -907,17 +907,19 @@ def _process_level3_heading(stripped: str) -> str | None:
 
 def _process_spanish_ordinal_heading(stripped: str) -> str | None:
     """
-    Procesa encabezados jurídicos como "PRIMERA. Ámbito de aplicación.".
+    Procesa encabezados jurídicos como "PRIMERA. Ámbito de aplicación." o "TERCERA: Requisitos.".
     """
     marker_end = next((idx for idx, char in enumerate(stripped) if char.isspace()), len(stripped))
-    marker = stripped[:marker_end].rstrip(".")
+    raw_marker = stripped[:marker_end]
+    separator = raw_marker[-1:] if raw_marker.endswith((".", ":")) else ""
+    marker = raw_marker.rstrip(".:")
     title = stripped[marker_end:].strip()
 
-    if not title or not stripped[:marker_end].endswith("."):
+    if not title or not separator:
         return None
     if marker.upper() not in SPANISH_ORDINAL_HEADING_WORDS:
         return None
-    return f"# {marker}. {title}"
+    return f"# {marker}{separator} {title}"
 
 
 def _process_normative_heading(stripped: str) -> str | None:
@@ -949,7 +951,7 @@ def normalize_headings(markdown: str) -> str:
       (para un único número se exige MAYÚSCULAS).
     - '1.1. Texto' → '## 1.1. Texto'
     - '1.1.1. Texto' → '### 1.1.1. Texto'
-    - 'PRIMERA. Texto' → '# PRIMERA. Texto'
+    - 'PRIMERA. Texto' / 'TERCERA: Texto' → '# PRIMERA. Texto' / '# TERCERA: Texto'
     - 'DISPOSICIÓN ADICIONAL PRIMERA. Texto' → '# DISPOSICIÓN ADICIONAL PRIMERA. Texto'
     """
     lines = markdown.splitlines()

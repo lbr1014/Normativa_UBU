@@ -17,6 +17,7 @@ import os
 import re
 import time
 from collections.abc import Iterable
+from collections import Counter
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import cached_property
@@ -87,6 +88,17 @@ QUERY_CANCELLED_MESSAGE = "Consulta cancelada por el usuario."
 DEFAULT_RAG_MIN_SIMILARITY = 0.5
 DEFAULT_RAG_MIN_CHUNKS = 5
 DEFAULT_RAG_MAX_CHUNKS = 20
+DEFAULT_HYBRID_VECTOR_WEIGHT = 0.7
+DEFAULT_HYBRID_KEYWORD_WEIGHT = 0.3
+DEFAULT_CONTEXT_EXPANSION_NEIGHBORS = 1
+KEYWORD_STOPWORDS = {
+    "ademas", "ante", "articulo", "cada", "como", "con", "contra", "cual",
+    "cuando", "debe", "deben", "del", "desde", "donde", "dos", "el", "ella",
+    "ellos", "entre", "era", "eran", "esa", "ese", "esta", "estas", "este",
+    "estos", "hay", "las", "los", "mas", "mediante", "muy", "para", "pero",
+    "por", "que", "segun", "ser", "sera", "seran", "sin", "sobre", "son",
+    "sus", "tambien", "una", "unas", "uno", "unos",
+}
 QDRANT_RECOVERABLE_ERRORS = (
     ResponseHandlingException,
     UnexpectedResponse,
@@ -238,6 +250,8 @@ class StructuralChunk:
     page: int | None = None
     level: int | None = None
     bbox: list[float] | None = None
+    section_hierarchy: dict[str, str] | None = None
+    section_path: list[str] | None = None
 
 
 def _embedding_execution_backend() -> str:
@@ -1583,20 +1597,149 @@ def chunk_text_with_structure(
     """
     Trocea texto preservando metadatos estructurales por chunk.
 
-    Para Markdown infiere encabezados por prefijo '#', listas por viñetas/numeración
-    y tablas por tuberías. Para PDF nativo se conserva al menos la página.
+    Inspirado en la salida JSON/chunks de marker, mantiene una jerarquía de
+    secciones activa y la asocia a cada bloque antes de crear el chunk final.
     """
-    chunks = chunk_text(text, overlap_ratio=overlap_ratio)
-    return [
-        StructuralChunk(
-            text=chunk,
-            type=_infer_chunk_type(chunk, source=source),
-            page=page,
-            level=_infer_heading_level(chunk),
-            bbox=None,
-        )
-        for chunk in chunks
-    ]
+    if source != "markdown":
+        if any(_infer_heading_level(line) is not None for line in iter_clean_lines(text)):
+            return _chunk_markdown_with_section_hierarchy(text, page=page, overlap_ratio=overlap_ratio)
+        chunks = chunk_text(text, overlap_ratio=overlap_ratio)
+        return [
+            StructuralChunk(
+                text=chunk,
+                type=_infer_chunk_type(chunk, source=source),
+                page=page,
+                level=_infer_heading_level(chunk),
+                bbox=None,
+            )
+            for chunk in chunks
+        ]
+
+    return _chunk_markdown_with_section_hierarchy(text, page=page, overlap_ratio=overlap_ratio)
+
+
+def _chunk_markdown_with_section_hierarchy(
+    text: str,
+    *,
+    page: int | None = None,
+    overlap_ratio: float = 0.1,
+) -> list[StructuralChunk]:
+    """
+    Segmenta Markdown manteniendo la jerarquía de encabezados que envuelve cada chunk.
+    """
+    tokenizer = embedding_model.tokenizer
+    max_len = int(embedding_model.max_input_length * 0.8)
+    overlap_tokens = max(1, int(max_len * overlap_ratio))
+
+    chunks: list[StructuralChunk] = []
+    current: list[tuple[str, int]] = []
+    current_tokens = 0
+    current_hierarchy: dict[str, str] | None = None
+    current_path: list[str] | None = None
+    section_stack: dict[int, str] = {}
+
+    def active_hierarchy() -> dict[str, str]:
+        return {str(level): title for level, title in sorted(section_stack.items())}
+
+    def active_path() -> list[str]:
+        return [title for _, title in sorted(section_stack.items())]
+
+    def flush() -> None:
+        nonlocal current, current_tokens, current_hierarchy, current_path
+        chunk = " ".join(line for line, _ in current).strip()
+        if chunk:
+            chunks.append(
+                StructuralChunk(
+                    text=chunk,
+                    type=_infer_chunk_type(chunk, source="markdown"),
+                    page=page,
+                    level=_infer_heading_level(chunk),
+                    bbox=None,
+                    section_hierarchy=dict(current_hierarchy or active_hierarchy()),
+                    section_path=list(current_path or active_path()),
+                )
+            )
+        current, current_tokens = token_overlap(current, overlap_tokens)
+        if current:
+            current_hierarchy = dict(current_hierarchy or active_hierarchy())
+            current_path = list(current_path or active_path())
+            current_tokens = sum(tokens for _, tokens in current)
+        else:
+            current_hierarchy = None
+            current_path = None
+            current_tokens = 0
+
+    for line in iter_clean_lines(text):
+        heading_level = _infer_heading_level(line)
+        if heading_level is not None:
+            if current:
+                flush()
+                current = []
+                current_tokens = 0
+                current_hierarchy = None
+                current_path = None
+            heading_title = _clean_heading_title(line)
+            section_stack = {
+                level: title
+                for level, title in section_stack.items()
+                if level < heading_level
+            }
+            section_stack[heading_level] = heading_title
+            line_tokens = token_len(tokenizer, line)
+            if line_tokens is not None:
+                hierarchy = active_hierarchy()
+                chunks.append(
+                    StructuralChunk(
+                        text=line,
+                        type="heading",
+                        page=page,
+                        level=heading_level,
+                        bbox=None,
+                        section_hierarchy=dict(hierarchy),
+                        section_path=active_path(),
+                    )
+                )
+            continue
+
+        line_tokens = token_len(tokenizer, line)
+        if line_tokens is None:
+            continue
+
+        line_hierarchy = active_hierarchy()
+        line_path = active_path()
+        if current_tokens + line_tokens > max_len and current:
+            flush()
+
+        if not current:
+            current_hierarchy = dict(line_hierarchy)
+            current_path = list(line_path)
+
+        current.append((line, line_tokens))
+        current_tokens += line_tokens
+
+    if current:
+        chunk = " ".join(line for line, _ in current).strip()
+        if chunk:
+            chunks.append(
+                StructuralChunk(
+                    text=chunk,
+                    type=_infer_chunk_type(chunk, source="markdown"),
+                    page=page,
+                    level=_infer_heading_level(chunk),
+                    bbox=None,
+                    section_hierarchy=dict(current_hierarchy or active_hierarchy()),
+                    section_path=list(current_path or active_path()),
+                )
+            )
+
+    return chunks
+
+
+def _clean_heading_title(text: str) -> str:
+    """
+    Devuelve el texto legible de un encabezado Markdown.
+    """
+    return re.sub(r"^#{1,6}\s+", "", (text or "").strip()).strip()
 
 
 def _infer_heading_level(text: str) -> int | None:
@@ -1613,6 +1756,18 @@ def _infer_heading_level(text: str) -> int | None:
         return 2
     if re.match(r"^\d+\.\d+\.\d+\.\s+", first_line):
         return 3
+    if re.match(
+        r"^(PRIMER[AO]|SEGUND[AO]|TERCER[AO]|CUART[AO]|QUINT[AO]|SEXT[AO]|S[EÉ]PTIM[AO]|OCTAV[AO]|NOVEN[AO]|D[ÉE]CIM[AO])[\.:]\s+",
+        first_line,
+        flags=re.IGNORECASE,
+    ):
+        return 1
+    if re.match(
+        r"^(DISPOSICI[ÓO]N\s+(ADICIONAL|TRANSITORIA|DEROGATORIA|FINAL)|ANEXO)\b",
+        first_line,
+        flags=re.IGNORECASE,
+    ):
+        return 1
     return None
 
 
@@ -1644,8 +1799,79 @@ def _structural_metadata(chunk: StructuralChunk) -> dict[str, Any]:
         "page": chunk.page,
         "level": chunk.level,
         "bbox": chunk.bbox,
+        "section_hierarchy": chunk.section_hierarchy,
+        "section_path": chunk.section_path,
     }
     return {key: value for key, value in metadata.items() if value is not None}
+
+
+def extract_pdf_footer_date(text: str | None) -> str:
+    """
+    Extrae la fecha documental del pie de página cuando aparece como "FECHA : dd/mm/yyyy hh:mm".
+    """
+    matches = re.findall(
+        r"\bFECHA\s*:\s*(\d{1,2}/\d{1,2}/\d{4})(?:\s+\d{1,2}:\d{2})?",
+        text or "",
+        flags=re.IGNORECASE,
+    )
+    return matches[-1] if matches else ""
+
+
+def extract_keywords(text: str, *, max_keywords: int = 12) -> list[str]:
+    """
+    Extrae keywords estables para recuperación híbrida y auditoría de chunks.
+    """
+    normalized = _normalize_tipo_documento(text)
+    terms = re.findall(r"[a-z0-9áéíóúüñ]{3,}", normalized, flags=re.IGNORECASE)
+    counts = Counter(term for term in terms if term not in KEYWORD_STOPWORDS)
+    return [term for term, _ in counts.most_common(max_keywords)]
+
+
+def _keyword_overlap_score(query_keywords: list[str], payload: dict[str, Any]) -> float:
+    """
+    Calcula una señal léxica normalizada a partir de keywords y contenido del chunk.
+    """
+    if not query_keywords:
+        return 0.0
+    metadata = payload.get("metadata") or {}
+    chunk_keywords = {str(term).lower() for term in metadata.get("keywords", [])}
+    content_terms = set(extract_keywords(payload.get("content", ""), max_keywords=64))
+    matches = sum(1 for term in query_keywords if term in chunk_keywords or term in content_terms)
+    return matches / max(1, len(query_keywords))
+
+
+def rerank_hybrid_points(
+    points: list[qmodels.ScoredPoint],
+    user_query: str,
+    *,
+    vector_weight: float = DEFAULT_HYBRID_VECTOR_WEIGHT,
+    keyword_weight: float = DEFAULT_HYBRID_KEYWORD_WEIGHT,
+) -> list[qmodels.ScoredPoint]:
+    """
+    Reordena resultados combinando similitud vectorial con coincidencia léxica.
+    """
+    query_keywords = extract_keywords(user_query, max_keywords=16)
+    total_weight = max(vector_weight + keyword_weight, 0.0001)
+    vector_weight = vector_weight / total_weight
+    keyword_weight = keyword_weight / total_weight
+
+    reranked: list[tuple[float, qmodels.ScoredPoint]] = []
+    for point in points:
+        payload = getattr(point, "payload", None) or {}
+        try:
+            vector_score = float(getattr(point, "score", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            vector_score = 0.0
+        keyword_score = _keyword_overlap_score(query_keywords, payload)
+        hybrid_score = (vector_score * vector_weight) + (keyword_score * keyword_weight)
+        try:
+            point.score = hybrid_score
+        except (AttributeError, TypeError, ValueError):
+            pass
+        reranked.append((hybrid_score, point))
+
+    reranked.sort(key=lambda item: item[0], reverse=True)
+    return [point for _, point in reranked]
 
 def token_len(tokenizer, text: str) -> int | None:
     """
@@ -1755,15 +1981,29 @@ def build_metadata_filter(
     Construye un filtro de Qdrant a partir de metadatos estructurales.
     """
     must: list[Any] = []
-    if tipo_documento and not structure_type:
-        structure_type = str(tipo_documento).strip()
-    del numero_expediente
+    normalized_tipo = _normalize_tipo_documento(tipo_documento)
+    if normalized_tipo and not structure_type:
+        structure_type = normalized_tipo
 
     if document_id is not None:
         must.append(
             qmodels.FieldCondition(
                 key="metadata.document_id",
                 match=qmodels.MatchValue(value=int(document_id)),
+            )
+        )
+    if numero_expediente:
+        must.append(
+            qmodels.FieldCondition(
+                key="metadata.numero_expediente",
+                match=qmodels.MatchValue(value=str(numero_expediente).strip()),
+            )
+        )
+    if normalized_tipo:
+        must.append(
+            qmodels.FieldCondition(
+                key="metadata.tipo_documento",
+                match=qmodels.MatchValue(value=normalized_tipo),
             )
         )
 
@@ -1806,10 +2046,11 @@ def recuperacion_chunk(
         Lista de instancias de VectorBaseDocument que representan los chunks más similares encontrados en Qdrant, ordenados por similitud. 
         Cada instancia incluye el contenido del chunk, su embedding y metadatos asociados.
     """
-    del numero_expediente, tipo_documento
     points = recuperacion_chunk_con_scores(
         user_query=user_query,
         k=k,
+        numero_expediente=numero_expediente,
+        tipo_documento=tipo_documento,
         document_id=document_id,
         structure_type=structure_type,
         page=page,
@@ -1853,7 +2094,6 @@ def recuperacion_chunk_con_scores(
         Lista de objetos qmodels.ScoredPoint que representan los chunks más similares encontrados en Qdrant, ordenados por similitud. 
         Cada objeto incluye el id del punto, el score de similitud, y el payload con el contenido y metadatos del chunk.  
     """
-    del numero_expediente, tipo_documento
     logger.info(
         "Recuperando chunks para consulta RAG con embeddings en %s",
         _embedding_execution_backend(),
@@ -1861,6 +2101,8 @@ def recuperacion_chunk_con_scores(
     k = normalize_retrieval_k(k)
     query_vector = embedding_model(user_query, to_list=True)
     query_filter = build_metadata_filter(
+        numero_expediente=numero_expediente,
+        tipo_documento=tipo_documento,
         document_id=document_id,
         structure_type=structure_type,
         page=page,
@@ -1874,7 +2116,8 @@ def recuperacion_chunk_con_scores(
             k=k,
             query_filter=query_filter,
         )
-        return _filter_points_by_similarity(points, min_similarity=min_similarity, k=k)
+        points = _filter_points_by_similarity(points, min_similarity=min_similarity, k=k)
+        return rerank_hybrid_points(points, user_query)[:k]
     except QDRANT_RECOVERABLE_ERRORS as e:
         logger.warning("Qdrant no disponible para recuperar chunks: %s", e)
         return []
@@ -2162,10 +2405,11 @@ def obtener_chunk_de_query(
         Un diccionario con los detalles del chunk más relevante encontrado, incluyendo título del documento, nombre del archivo, índice de segmento y el texto del chunk.
         Si no se encuentra ningún chunk relevante, devuelve None.
     """
-    del numero_expediente, tipo_documento
     docs = recuperacion_chunk(
         user_query,
         k=1,
+        numero_expediente=numero_expediente,
+        tipo_documento=tipo_documento,
     )
     if not docs:
         return None
@@ -2215,7 +2459,6 @@ async def obtener_mejor_chunk(
         la respuesta indicará que no se encontraron fragmentos relevantes en la base de datos. 
     """
     user_query = (user_query or "").strip()
-    del numero_expediente, tipo_documento
     model_name = resolve_rag_llm_model(model)
     _raise_if_query_cancelled(should_cancel)
 
@@ -2228,6 +2471,8 @@ async def obtener_mejor_chunk(
     points = recuperacion_chunk_con_scores(
         user_query,
         k=retrieval_k,
+        numero_expediente=numero_expediente,
+        tipo_documento=tipo_documento,
         min_similarity=min_similarity,
     )
     if not points:
@@ -2241,6 +2486,8 @@ async def obtener_mejor_chunk(
             query_profile=query_profile,
             retrieval_k=retrieval_k,
             min_similarity=min_similarity,
+            numero_expediente=numero_expediente,
+            tipo_documento=tipo_documento,
         )
 
     retrieved, context_blocks = _build_retrieved_and_context(points, should_cancel=should_cancel)
@@ -2270,6 +2517,8 @@ async def obtener_mejor_chunk(
         query_profile=query_profile,
         retrieval_k=retrieval_k,
         min_similarity=min_similarity,
+        numero_expediente=numero_expediente,
+        tipo_documento=tipo_documento,
     )
 
 
@@ -2314,7 +2563,14 @@ def _empty_rag_result(
     Returns:
         dict: El resultado de RAG vacío.
     """
-    del numero_expediente, tipo_documento
+    applied_filters = {
+        key: value
+        for key, value in {
+            "numero_expediente": numero_expediente,
+            "tipo_documento": _normalize_tipo_documento(tipo_documento),
+        }.items()
+        if value not in (None, "")
+    }
     return {
         "answer": "No hay información disponible sobre tu consulta en la base de datos. Prueba con otra búsqueda o revisa que la normativa relevante esté cargada e indexada.",
         "title": "",
@@ -2327,7 +2583,7 @@ def _empty_rag_result(
         "query_profile": query_profile,
         "retrieval_k": retrieval_k,
         "min_similarity": min_similarity,
-        "applied_filters": {},
+        "applied_filters": applied_filters,
     }
 
 
@@ -2358,6 +2614,46 @@ def _to_jsonable(value: Any) -> Any:
     return str(value)
 
 
+def _expanded_context_for_point(point: Any, points: list[Any]) -> str:
+    """
+    Amplía un chunk con vecinos recuperados del mismo bloque estructural.
+    """
+    payload = getattr(point, "payload", None) or {}
+    meta = payload.get("metadata") or {}
+    content = payload.get("content", "") or ""
+    section_path = meta.get("section_path")
+    document_id = meta.get("document_id")
+    doc_sha = meta.get("sha256")
+    segment_index = meta.get("segment_index")
+    if not section_path or segment_index is None:
+        return content
+
+    expanded: list[tuple[int, str]] = []
+    for candidate in points:
+        cand_payload = getattr(candidate, "payload", None) or {}
+        cand_meta = cand_payload.get("metadata") or {}
+        if cand_meta.get("document_id") != document_id:
+            continue
+        if cand_meta.get("sha256") != doc_sha:
+            continue
+        if cand_meta.get("section_path") != section_path:
+            continue
+        try:
+            cand_segment = int(cand_meta.get("segment_index"))
+            base_segment = int(segment_index)
+        except (TypeError, ValueError):
+            continue
+        if abs(cand_segment - base_segment) <= DEFAULT_CONTEXT_EXPANSION_NEIGHBORS:
+            cand_content = cand_payload.get("content", "") or ""
+            if cand_content:
+                expanded.append((cand_segment, cand_content))
+
+    if len(expanded) <= 1:
+        return content
+    ordered = [text for _, text in sorted(expanded, key=lambda item: item[0])]
+    return "\n\n".join(dict.fromkeys(ordered))
+
+
 def _build_retrieved_and_context(points: list[Any], *, should_cancel=None) -> tuple[list[dict], list[str]]:
     """
     Construye las estructuras de datos para los chunks recuperados y los bloques de contexto a partir de los puntos devueltos por Qdrant.
@@ -2378,6 +2674,7 @@ def _build_retrieved_and_context(points: list[Any], *, should_cancel=None) -> tu
         payload = p.payload or {}
         meta = (payload.get("metadata") or {})
         content = payload.get("content", "") or ""
+        expanded_content = _expanded_context_for_point(p, points)
 
         try:
             score = float(getattr(p, "score", 0.0) or 0.0)
@@ -2397,6 +2694,7 @@ def _build_retrieved_and_context(points: list[Any], *, should_cancel=None) -> tu
             "title": meta.get("title", ""),
             "metadata": _to_jsonable(dict(meta)),
             "chunk": content,
+            "expanded_context": expanded_content,
         }
         retrieved.append(item)
         structure_hint = " | ".join(
@@ -2411,7 +2709,7 @@ def _build_retrieved_and_context(points: list[Any], *, should_cancel=None) -> tu
         structure_suffix = f" | {structure_hint}" if structure_hint else ""
         context_blocks.append(
             f"""[CHUNK #{idx} | score={item['similitud']:.6f} | file={item['filename']} | seg={item['segment_index']}{structure_suffix}]
-            \"\"\"{content}\"\"\""""
+            \"\"\"{expanded_content}\"\"\""""
         )
     return retrieved, context_blocks
 
@@ -2448,7 +2746,14 @@ def _rag_result_from_best(
         dict: Un diccionario con la respuesta generada por el modelo, detalles del chunk más relevante (título del documento, nombre del archivo, índice de segmento, texto del chunk), la lista de chunks recuperados con sus scores y metadatos, el modelo usado, 
         el dispositivo de ejecución, el perfil de consulta, los parámetros de recuperación y los filtros aplicados.
     """
-    del numero_expediente, tipo_documento
+    applied_filters = {
+        key: value
+        for key, value in {
+            "numero_expediente": numero_expediente,
+            "tipo_documento": _normalize_tipo_documento(tipo_documento),
+        }.items()
+        if value not in (None, "")
+    }
     return {
         "answer": answer,
         "model": model_name,
@@ -2461,7 +2766,7 @@ def _rag_result_from_best(
         "query_profile": query_profile,
         "retrieval_k": retrieval_k,
         "min_similarity": min_similarity,
-        "applied_filters": {},
+        "applied_filters": applied_filters,
     }
 
 def index_pdf(
@@ -2477,15 +2782,12 @@ def index_pdf(
         pdf_path: Ruta al archivo PDF que se va a indexar.
         document_id: (Opcional) Identificador numérico del documento, que se incluirá en los metadatos de cada chunk. Útil para trazabilidad y auditoría.
         numero_expediente: (Opcional) Número de expediente asociado al documento, que se incluirá en los metadatos de cada chunk. Permite filtrar por expediente en las consultas.
-        tipo_documento: (Opcional) Tipo de documento que se incluirá en los metadatos de cada chunk. Permite filtrar por tipo de documento en las consultas.
-    
     Returns:    
         Lista de instancias de VectorBaseDocument que representan los chunks indexados del PDF. Cada instancia incluye el contenido del chunk, su embedding y metadatos asociados 
         (nombre de archivo, título, hash, número de expediente, tipo de documento, etc.).
         Si ocurre un error durante el proceso de indexación (lectura del PDF, chunking, generación de embeddings, guardado en Qdrant), 
         se devuelve una lista vacía y se registran los errores correspondientes.
     """
-    del numero_expediente, tipo_documento
     with timed_block(f"total {pdf_path.name}"):
         logger.info("Procesando %s ...", pdf_path.name)
 
@@ -2546,15 +2848,21 @@ def index_pdf(
                 "title": title,
                 "sha256": doc_hash,
             }
+            pdf_date = extract_pdf_footer_date(full_text)
+            if pdf_date:
+                base_meta["pdf_date"] = pdf_date
             if document_id is not None:
                 base_meta["document_id"] = int(document_id)
-                
+            if numero_expediente:
+                base_meta["numero_expediente"] = str(numero_expediente).strip()
+
             for idx, (chunk, vec) in enumerate(zip(chunks, vectors)):
                 meta = dict(base_meta)
                 meta["segment_index"] = idx
                 structure = _structural_metadata(chunk)
                 meta.update(structure)
                 meta["structure"] = structure
+                meta["keywords"] = extract_keywords(" ".join([chunk.text, *list(chunk.section_path or [])]))
                 docs.append(
                     VectorBaseDocument(
                         content=chunk.text,
@@ -2576,6 +2884,7 @@ def index_markdown(
     tipo_documento: str | None = None,
     sha256: str | None = None,
     title: str | None = None,
+    pdf_date: str | None = None,
 ) -> list[VectorBaseDocument]:
     """
     Indexa contenido Markdown ya persistido (sin releer el PDF).
@@ -2588,7 +2897,6 @@ def index_markdown(
         filename: El nombre del archivo original del documento, que se incluirá en los metadatos de cada chunk. Es un campo obligatorio para mantener la trazabilidad.
         document_id: (Opcional) Identificador numérico del documento, que se incluirá en los metadatos de cada chunk. Útil para trazabilidad y auditoría.
         numero_expediente: (Opcional) Número de expediente asociado al documento, que se incluirá en los metadatos de cada chunk. Permite filtrar por expediente en las consultas.
-        tipo_documento: (Opcional) Tipo de documento que se incluirá en los metadatos de cada chunk. Permite filtrar por tipo de documento en las consultas.
         sha256: (Opcional) Hash SHA256 del documento original, que se incluirá en los metadatos de cada chunk. Permite verificar la integridad del documento y detectar cambios.
         title: (Opcional) Título del documento, que se incluirá en los metadatos de cada chunk. Si no se proporciona, se usará el nombre del archivo sin extensión como título.
     
@@ -2598,7 +2906,6 @@ def index_markdown(
         Si ocurre un error durante el proceso de indexación (chunking, generación de embeddings, guardado en Qdrant), 
         se devuelve una lista vacía y se registran los errores correspondientes.
     """
-    del numero_expediente, tipo_documento
     if not (markdown_content or "").strip():
         return []
 
@@ -2637,8 +2944,13 @@ def index_markdown(
             "sha256": safe_hash,
             "source": "markdown",
         }
+        safe_pdf_date = (pdf_date or "").strip() or extract_pdf_footer_date(markdown_content)
+        if safe_pdf_date:
+            base_meta["pdf_date"] = safe_pdf_date
         if document_id is not None:
             base_meta["document_id"] = int(document_id)
+        if numero_expediente:
+            base_meta["numero_expediente"] = str(numero_expediente).strip()
 
         for idx, (chunk, vec) in enumerate(zip(chunks, vectors)):
             meta = dict(base_meta)
@@ -2646,6 +2958,7 @@ def index_markdown(
             structure = _structural_metadata(chunk)
             meta.update(structure)
             meta["structure"] = structure
+            meta["keywords"] = extract_keywords(" ".join([chunk.text, *list(chunk.section_path or [])]))
             docs.append(VectorBaseDocument(content=chunk.text, embedding=vec, metadata=meta))
 
         VectorBaseDocument.save_many(docs)
