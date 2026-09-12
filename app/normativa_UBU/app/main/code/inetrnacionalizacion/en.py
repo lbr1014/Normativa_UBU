@@ -429,6 +429,7 @@ TRANSLATIONS_EN={
     "rag_default.question_explain_all": "Explain all sections",
     "rag_default.question_explain_section": "Explain one section",
     "rag_default.section_label": "Section",
+    "rag_default.section_any": "Select a section",
     "rag_default.section_placeholder": "Section name or number",
     "rag_default.section_tooltip": "Indicate the section you want the model to explain.",
     "rag_default.question_budget": "Budget and estimated value",

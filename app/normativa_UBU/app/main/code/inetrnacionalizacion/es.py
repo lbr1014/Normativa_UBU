@@ -430,6 +430,7 @@ TRANSLATIONS_ES = {
     "rag_default.question_explain_all": "Explicar todos los apartados",
     "rag_default.question_explain_section": "Explicar un apartado concreto",
     "rag_default.section_label": "Apartado",
+    "rag_default.section_any": "Selecciona un apartado",
     "rag_default.section_placeholder": "Nombre o numero del apartado",
     "rag_default.section_tooltip": "Indica el apartado que quieres que el modelo explique.",
     "rag_default.question_budget": "Presupuesto y valor estimado",

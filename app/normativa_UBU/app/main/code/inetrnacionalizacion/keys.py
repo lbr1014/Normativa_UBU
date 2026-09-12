@@ -1,4 +1,4 @@
-﻿"""
+"""
 Autora: Lydia Blanco Ruiz
 Script con las claves de traducción.
 """
@@ -61,7 +61,7 @@ DIRECT_RUNTIME_MESSAGE_MAP = {
     "Fallo la Conversión a Markdown.": MARKDOWN_FAILED,
     "Falló la Conversión a Markdown.": MARKDOWN_FAILED,
     "Cancelando Actualización vectorial...": VECTOR_CANCELLING,
-    "Cancelando ActualizaciÃ³n vectorial...": VECTOR_CANCELLING,
+    "Cancelando Actualización vectorial...": VECTOR_CANCELLING,
     "El job ya ha terminado.": JOBS_ALREADY_FINISHED,
 }
 
