@@ -1,4 +1,4 @@
-﻿"""
+"""
 Autora: Lydia Blanco Ruiz
 Script para las rutas principales, historial de consultas, perfil de usuario y estadísticas de uso.
 """
@@ -100,7 +100,7 @@ def paginate_consultas(base_query, per_page=10) -> tuple:
 def _history_filters() -> dict[str, str]:
     """
     Lee los filtros activos del historial.
-    
+
     Returns:
         dict: Diccionario con los filtros y el orden aplicados.
     """
@@ -126,11 +126,11 @@ def _history_filters() -> dict[str, str]:
 def _apply_history_filters(query, filters: dict[str, str]) -> object:
     """
     Aplica filtros de historial sobre la query de consultas.
-    
+
     Args:
         query: Query SQLAlchemy de consultas a filtrar.
         filters: Diccionario con los filtros a aplicar: user_id, date, model y device.
-        
+
     Returns:
         Query: Query SQLAlchemy con los filtros aplicados.
     """
@@ -183,7 +183,7 @@ def _apply_history_sort(query, sort_value: str):
 def _history_filter_options() -> tuple[list, list[str]]:
     """
     Devuelve usuarios y modelos disponibles para los filtros.
-    
+
     Returns:
         tuple: Lista de usuarios (solo para admin) y lista de modelos distintos usados en consultas.
     """
@@ -283,8 +283,8 @@ def pag_principal() -> str:
     dashboard_metrics = build_home_dashboard_metrics(current_user, consultas_usuario)
 
     return render_template(
-        "pag_principal.html", 
-        user=current_user,  
+        "pag_principal.html",
+        user=current_user,
         dashboard_metrics=dashboard_metrics,
     )
 
@@ -294,11 +294,11 @@ def build_activity_streak(user: User, consultas: list) -> int:
     Calcula la racha de días consecutivos con actividad reciente.
     Usa días con consultas y el último inicio de sesión del usuario. Si el usuario
     se ha conectado hoy, la racha puede continuar aunque todavía no haya consultado.
-    
+
     Args:
         user (User): Usuario para el que se calcula la racha.
         consultas (list): Lista de consultas del usuario, ordenadas por fecha ascendente.
-        
+
     Returns:
         int: Número de días consecutivos con actividad, contando desde hoy hacia atrás.
     """
@@ -325,12 +325,12 @@ def build_activity_streak(user: User, consultas: list) -> int:
 def build_home_dashboard_metrics(user: User, consultas: list) -> dict:
     """
     Construye las métricas resumidas que se muestran en la página principal.
-    
+
     Args:
         user (User): Usuario para el que se construyen las métricas.
         consultas (list): Lista de consultas del usuario.
-        
-    Returns:        
+
+    Returns:
         dict: Diccionario con métricas como racha de actividad, total de consultas,
             modelos usados, días activos, tiempo promedio de respuesta, fecha de última consulta,
             datos para el gráfico de anillo de consultas y calendario mensual.
@@ -366,12 +366,12 @@ def build_home_dashboard_metrics(user: User, consultas: list) -> dict:
 def build_home_month_calendar(consultas: list) -> dict:
     """
     Construye el calendario del mes actual para la tarjeta principal.
-    
+
     Args:
         consultas (list): Lista de consultas del usuario, ordenadas por fecha ascendente.
-    
+
     Returns:
-        dict: Diccionario con la estructura del calendario mensual, incluyendo el label del mes, los días de la semana y 
+        dict: Diccionario con la estructura del calendario mensual, incluyendo el label del mes, los días de la semana y
             las semanas con sus días y conteos de consultas.
     """
     today = datetime.now(timezone.utc).date()
@@ -439,11 +439,11 @@ def build_home_month_calendar(consultas: list) -> dict:
 def build_home_query_donut(user: User, user_total_queries: int) -> dict:
     """
     Construye el reparto del anillo de consultas de la páginas principal.
-    
+
     Args:
         user (User): Usuario para el que se construye el anillo.
         user_total_queries (int): Número total de consultas del usuario.
-        
+
     Returns:
         dict: Diccionario con el título del anillo, el total de consultas, el total central (consultas del usuario) y los segmentos para el gráfico.
     """
@@ -504,10 +504,10 @@ def build_home_query_donut(user: User, user_total_queries: int) -> dict:
 def display_name_for_donut(user: User) -> str:
     """
     Devuelve una etiqueta breve para la leyenda del anillo.
-    
+
     Args:
         user (User): Usuario para el que se genera la etiqueta.
-        
+
     Returns:
         str: Nombre para mostrar en el anillo, preferentemente el nombre del usuario, luego su email, o un fallback con su ID.
     """
@@ -517,10 +517,10 @@ def display_name_for_donut(user: User) -> str:
 def _profile_initial(user: User) -> str:
     """
     Devuelve la inicial visible para el avatar por defecto.
-    
+
     Args:
         user (User): Usuario para el que se genera la inicial.
-    
+
     Returns:
         str: Inicial para mostrar en el avatar, preferentemente la primera letra del nombre, luego del email, o "U" como fallback.
     """
@@ -531,10 +531,10 @@ def _profile_initial(user: User) -> str:
 def _profile_image_url(user: User) -> str | None:
     """
     Construye la URL estatica de la foto de perfil, si existe.
-    
+
     Args:
         user (User): Usuario para el que se genera la URL de la foto de perfil.
-        
+
     Returns:
         str | None: URL de la foto de perfil para usar en el src del img, o None si no hay foto de perfil.
     """
@@ -548,7 +548,7 @@ def _profile_image_url(user: User) -> str | None:
 def _delete_profile_image(filename: str | None) -> None:
     """
     Elimina una foto de perfil guardada dentro de la carpeta data/profiles.
-    
+
     Args:
         filename (str | None): Ruta relativa a la foto de perfil a eliminar.
     """
@@ -564,10 +564,10 @@ def _delete_profile_image(filename: str | None) -> None:
 def _save_profile_image(file_storage) -> str | None:
     """
     Guarda la imagen de perfil subida y devuelve su ruta relativa a static.
-    
+
     Args:
         file_storage: Archivo subido desde el formulario, esperado un FileStorage de Werkzeug.
-        
+
     Returns:
         str | None: Ruta relativa a la imagen guardada para almacenar en el perfil, o None si no se guardó ninguna imagen.
     """
@@ -590,10 +590,10 @@ def _save_profile_image(file_storage) -> str | None:
 def _render_edit_user(form: EditUserForm) -> str:
     """
     Renderiza la página de perfil con el avatar calculado.
-    
+
     Args:
         form (EditUserForm): Formulario de edición de usuario, con los datos y errores actuales.
-        
+
     Returns:
         str: HTML renderizado de la página de edición de usuario, con el formulario y la información del perfil.
     """
@@ -609,10 +609,10 @@ def _render_edit_user(form: EditUserForm) -> str:
 def _update_profile_name(form: EditUserForm) -> None:
     """
     Actualiza el nombre del usuario si el formulario lo incluye.
-    
+
     Args:
         form (EditUserForm): Formulario de edición de usuario, con los datos actuales.
-        
+
     Returns:
         None: Actualiza el nombre del usuario actual si el formulario tiene un nombre válido.
     """
@@ -623,10 +623,10 @@ def _update_profile_name(form: EditUserForm) -> None:
 def _update_profile_email(form: EditUserForm) -> bool:
     """
     Actualiza el email y devuelve False si ya existe en otro usuario.
-    
+
     Args:
         form (EditUserForm): Formulario de edición de usuario, con los datos actuales.
-        
+
     Returns:
         bool: True si el email se actualizó correctamente o no se cambió, False si el nuevo email ya existe en otro usuario.
     """
@@ -645,7 +645,7 @@ def _update_profile_email(form: EditUserForm) -> bool:
 def _update_profile_image(form: EditUserForm) -> None:
     """
     Guarda la nueva foto de perfil si el usuario ha subido una.
-    
+
     Args:
         form (EditUserForm): Formulario de edición de usuario, con los datos actuales.
     """
@@ -655,16 +655,16 @@ def _update_profile_image(form: EditUserForm) -> None:
 
     _delete_profile_image(current_user.profile_image)
     current_user.profile_image = uploaded_profile_image
-    
+
 @main_bp.get("/profile_image/<path:filename>")
 @login_required
 def profile_image(filename: str) -> Response:
     """
     Sirve imágenes de perfil almacenadas en data/profiles.
-    
+
     Args:
         filename (str): Nombre del archivo de imagen de perfil a servir, esperado que sea solo el nombre sin subdirectorios.
-        
+
     Returns:
         Response: Respuesta de Flask con la imagen solicitada, o error 404 si no se encuentra.
     """
@@ -680,10 +680,10 @@ def profile_image(filename: str) -> Response:
 def _update_profile_password(form: EditUserForm) -> None:
     """
     Actualiza la contraseña solo cuando se ha indicado una nueva.
-    
+
     Args:
         form (EditUserForm): Formulario de edición de usuario, con los datos actuales.
-        
+
     Returns:
         None: Actualiza la contraseña del usuario actual si el formulario tiene una nueva contraseña válida.
     """
@@ -694,10 +694,10 @@ def _update_profile_password(form: EditUserForm) -> None:
 def _apply_edit_user_form(form: EditUserForm) -> bool:
     """
     Aplica los cambios del formulario al usuario actual.
-    
+
     Args:
         form (EditUserForm): Formulario de edición de usuario, con los datos actuales.
-        
+
     Returns:
         bool: True si los cambios se aplicaron correctamente, False en caso contrario.
     """
@@ -711,7 +711,7 @@ def _apply_edit_user_form(form: EditUserForm) -> bool:
     current_user.language = form.language.data
     current_user.preferred_model = form.preferred_model.data
     session["lang"] = form.language.data
-        
+
     _update_profile_image(form)
 
     db.session.commit()
@@ -731,7 +731,7 @@ def edit_user() -> str | Response:
     Returns:
         str | Response: HTML renderizado del formulario de edición de usuario.
     """
-    
+
     if request.method == "GET":
         form = EditUserForm(obj=current_user)
         form.theme_mode.data = current_user.theme_mode
@@ -754,7 +754,7 @@ def edit_user() -> str | Response:
 def delete_own_account() -> Response:
     """
     Elimina la cuenta del usuario autenticado y cierra su sesion.
-    
+
     Returns:
         Response: Respuesta de Flask tras eliminar la cuenta. Redirige a la página de login.
     """
@@ -794,14 +794,14 @@ def historial() -> str:
 
     consultas, page, total_pages, total_consultas = paginate_consultas(
         q, per_page=10
-    )   
-    
+    )
+
     meta_by_consulta = build_meta_by_consulta(consultas)
     model_by_consulta = build_model_by_consulta(consultas)
     history_users, history_models = _history_filter_options()
-    
+
     return render_template(
-        "history.html", 
+        "history.html",
         consultas=consultas,
         meta_by_consulta=meta_by_consulta,
         model_by_consulta=model_by_consulta,
@@ -816,7 +816,7 @@ def historial() -> str:
 
 def _month_sequence(total_months: int = 12) -> list:
     """
-    Genera una secuencia de tuplas (aÃ±o, mes) hacia el pasado.
+    Genera una secuencia de tuplas (año, mes) hacia el pasado.
 
     Comienza desde el primer día del mes actual y retrocede el número
     de meses especificado, retornando la secuencia en orden ascendente.
@@ -825,7 +825,7 @@ def _month_sequence(total_months: int = 12) -> list:
         total_months (int, optional): Número de meses a generar. Defaults to 12.
 
     Returns:
-        list: Lista de tuplas (aÃ±o, mes) ordenadas ascendentemente.
+        list: Lista de tuplas (año, mes) ordenadas ascendentemente.
     """
     today = datetime.now(timezone.utc).date().replace(day=1)
     months = []
@@ -894,16 +894,16 @@ def _process_consulta_stats(
     if month_key in monthly_counts:
         monthly_counts[month_key] += 1
         monthly_times[month_key].append(float(consulta.tiempo_respuestas or 0))
-    
+
     day_key = created_at.date().isoformat()
     if day_key in daily_counts:
         daily_counts[day_key] += 1
         daily_times[day_key].append(float(consulta.tiempo_respuestas or 0))
         daily_hourly_counts[day_key][created_at.hour] += 1
-    
+
     weekday_counts[created_at.weekday()] += 1
     hourly_counts[created_at.hour] += 1
-    
+
     user_name = getattr(getattr(consulta, "user", None), "nombre", None)
     if user_name:
         user_counter[user_name] += 1
@@ -1044,10 +1044,10 @@ def build_user_comparison_payload(user_counter: dict[str, int]) -> dict:
     Construye la payload de comparación de usuarios con estadísticas de uso.
     Calcula la media, mediana y varianza del número de consultas por usuario
     y ordena a los usuarios por número de consultas para mostrar en la comparación.
-    
+
     Args:
         user_counter (dict): Diccionario con el número de consultas por usuario.
-    
+
     Returns:
         dict: Payload con la comparación de usuarios y estadísticas agregadas.
     """
@@ -1088,7 +1088,7 @@ def build_selected_user_comparison_payload(
 ) -> dict:
     """
     Construye la comparacion de usuarios que el administrador quiere ver.
-    
+
     Args:
         consultas (list[Consulta]): Lista de consultas a analizar.
         users (list[User]): Lista de usuarios registrados.
@@ -1276,7 +1276,7 @@ def stats_page() -> str:
         selected_comparison_user_ids=stats_payload.get("user_comparison", {}).get("selected_user_ids", []),
         usage_scope=usage_scope,
     )
-    
+
 def _load_admin_selection() -> tuple[list, User | None, int | None, list[int], bool, str]:
     """
     Carga la selección de usuarios para el administrador.
@@ -1309,9 +1309,9 @@ def _build_usage_query(selected_user: User | None, usage_scope: str) -> object:
     Construye la consulta de uso filtrada según el usuario seleccionado y el alcance de uso.
 
     Args:
-        selected_user (User | None): logica de filtrado para el usuario seleccionado, solo se aplica si el alcance de uso es "user". Si no se selecciona ningún usuario, 
+        selected_user (User | None): logica de filtrado para el usuario seleccionado, solo se aplica si el alcance de uso es "user". Si no se selecciona ningún usuario,
             se ignora este filtro y se muestran todas las consultas (en caso de ser admin) o solo las del usuario actual (en caso de no ser admin).
-        usage_scope (str): alcance de uso seleccionado, puede ser "user" para mostrar solo las consultas del usuario seleccionado o del usuario actual, o 
+        usage_scope (str): alcance de uso seleccionado, puede ser "user" para mostrar solo las consultas del usuario seleccionado o del usuario actual, o
             "global" para mostrar todas las consultas sin importar el usuario (solo para admin).
 
     Returns:
@@ -1391,7 +1391,7 @@ def _normalize_chunk_metadata(metadata: dict, document: Documento | None = None)
     if title:
         normalized["title"] = title
     return normalized
-    
+
 def build_meta_by_consulta(consultas: list[Consulta]) -> dict:
     """
     Construye un diccionario de metadatos indexado por ID de consulta.
@@ -1471,7 +1471,7 @@ def build_meta_by_consulta(consultas: list[Consulta]) -> dict:
                 ],
             }
 
-    return meta_by_consulta    
+    return meta_by_consulta
 
 @main_bp.post("/consulta/<int:consulta_id>/delete")
 @login_required
@@ -1509,7 +1509,7 @@ def delete_consulta(consulta_id: int) -> Response:
 def bulk_delete_consultas() -> Response:
     """
     Elimina varias consultas seleccionadas desde el historial.
-    
+
     Returns:
         Response: Redirección al referrer o al historial después de eliminar las consultas seleccionadas.
     """

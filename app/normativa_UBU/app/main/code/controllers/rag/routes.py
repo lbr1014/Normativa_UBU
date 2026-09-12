@@ -1,6 +1,6 @@
-﻿"""
+"""
 Autora: Lydia Blanco Ruiz
-Script para las rutas de consulta RAG, seguimiento de estado y cancelaciÃ³n de consultas.
+Script para las rutas de consulta RAG, seguimiento de estado y cancelación de consultas.
 """
 
 import asyncio
@@ -47,7 +47,7 @@ from . import rag_bp
 @login_required
 def rag_page() -> str:
     """
-    Muestra la pÃ¡gina de consulta RAG.
+    Muestra la página de consulta RAG.
 
     Returns:
         Respuesta HTML con el formulario de consulta.
@@ -59,11 +59,13 @@ def rag_page() -> str:
     configure_default_query_form(default_form)
 
     usage_payload = build_model_usage_index_payload()
+    guided_documents = get_guided_document_cards()
     return render_template(
         "rag.html",
         form=form,
         default_form=default_form,
         model_usage_payload=usage_payload,
+        guided_documents=guided_documents,
     )
 
 
@@ -71,10 +73,10 @@ def rag_page() -> str:
 @login_required
 def latest_rag_evaluation() -> ResponseReturnValue:
     """
-    Devuelve el Ãºltimo resultado de evaluaciÃ³n del RAG ejecutado por un admin.
-    
+    Devuelve el último resultado de evaluación del RAG ejecutado por un admin.
+
     Returns:
-        JSON con el resumen de la Ãºltima evaluaciÃ³n RAG, o un error si no hay resultados disponibles o si ocurre un problema al leerlos.
+        JSON con el resumen de la última evaluación RAG, o un error si no hay resultados disponibles o si ocurre un problema al leerlos.
     """
     job = (
         RAGEvaluationState.query.filter(RAGEvaluationState.status == "done")
@@ -89,7 +91,7 @@ def latest_rag_evaluation() -> ResponseReturnValue:
     try:
         results_path.relative_to(data_dir)
     except ValueError:
-        return jsonify({"error": "Ruta de resultados invÃ¡lida."}), 400
+        return jsonify({"error": "Ruta de resultados inválida."}), 400
 
     if not results_path.exists():
         return jsonify({"error": t("rag.evaluation.no_results")}), 404
@@ -114,10 +116,10 @@ def latest_rag_evaluation() -> ResponseReturnValue:
 @login_required
 def rag_evaluation_detail(job_id: int) -> ResponseReturnValue:
     """
-    Renderiza el detalle de una evaluaciÃ³n (resumen + filas por pregunta).
-    
+    Renderiza el detalle de una evaluación (resumen + filas por pregunta).
+
     Returns:
-        Respuesta HTML con el detalle de la evaluaciÃ³n, o un error si el job no existe, no estÃ¡ terminado o si hay problemas al leer los resultados.
+        Respuesta HTML con el detalle de la evaluación, o un error si el job no existe, no está terminado o si hay problemas al leer los resultados.
     """
     job = RAGEvaluationState.query.get_or_404(job_id)
     if job.status != "done" or not job.results_json_path or not job.row_results_json_path:
@@ -149,7 +151,7 @@ def rag_evaluation_detail(job_id: int) -> ResponseReturnValue:
 
 def _resolve_data_dir() -> Path:
     """
-    Resuelve la ruta del directorio de datos desde la configuraciÃ³n de la aplicaciÃ³n, asegurÃ¡ndose de que es una ruta absoluta y vÃ¡lida.
+    Resuelve la ruta del directorio de datos desde la configuración de la aplicación, asegurándose de que es una ruta absoluta y válida.
 
     Returns:
         Path: La ruta absoluta al directorio de datos, o el directorio actual si no se ha configurado.
@@ -159,13 +161,13 @@ def _resolve_data_dir() -> Path:
 
 def _resolve_job_paths(job: RAGEvaluationState) -> tuple[Path, Path, Path | None]:
     """
-    Resuelve las rutas de los archivos de resultados, filas y configuraciÃ³n asociados a una evaluaciÃ³n RAG, asegurÃ¡ndose de que son rutas absolutas.
+    Resuelve las rutas de los archivos de resultados, filas y configuración asociados a una evaluación RAG, asegurándose de que son rutas absolutas.
 
     Args:
-        job (RAGEvaluationState): El estado de la evaluaciÃ³n RAG que contiene las rutas relativas a los archivos de resultados, filas y configuraciÃ³n.
+        job (RAGEvaluationState): El estado de la evaluación RAG que contiene las rutas relativas a los archivos de resultados, filas y configuración.
 
     Returns:
-        tuple[Path, Path, Path | None]: Las rutas absolutas a los archivos de resultados, filas y configuraciÃ³n.
+        tuple[Path, Path, Path | None]: Las rutas absolutas a los archivos de resultados, filas y configuración.
     """
     results_path = Path(job.results_json_path).resolve()
     rows_path = Path(job.row_results_json_path).resolve()
@@ -177,13 +179,13 @@ def _ensure_paths_inside_data_dir(
     data_dir: Path, results_path: Path, rows_path: Path, config_path: Path | None
 ) -> None:
     """
-Verifica que las rutas proporcionadas para los archivos de resultados, filas y configuraciÃ³n estÃ©n dentro del directorio de datos permitido. Si alguna ruta no estÃ¡ dentro del directorio de datos, se aborta la solicitud con un error 400.  
+Verifica que las rutas proporcionadas para los archivos de resultados, filas y configuración estén dentro del directorio de datos permitido. Si alguna ruta no está dentro del directorio de datos, se aborta la solicitud con un error 400.
 
     Args:
-        data_dir (Path): El directorio de datos permitido, resuelto desde la configuraciÃ³n de la aplicaciÃ³n.
+        data_dir (Path): El directorio de datos permitido, resuelto desde la configuración de la aplicación.
         results_path (Path): La ruta absoluta al archivo de resultados.
         rows_path (Path): La ruta absoluta al archivo de filas.
-        config_path (Path | None): La ruta absoluta al archivo de configuraciÃ³n, si existe.
+        config_path (Path | None): La ruta absoluta al archivo de configuración, si existe.
     """
     for path in (results_path, rows_path, config_path):
         if not path:
@@ -196,7 +198,7 @@ Verifica que las rutas proporcionadas para los archivos de resultados, filas y c
 
 def _load_json_file(path: Path) -> object:
     """
-    Lee un archivo JSON desde la ruta proporcionada y devuelve su contenido como un objeto de Python. Si el archivo no se puede leer o no es un JSON vÃ¡lido, se aborta la solicitud con un error 500.
+    Lee un archivo JSON desde la ruta proporcionada y devuelve su contenido como un objeto de Python. Si el archivo no se puede leer o no es un JSON válido, se aborta la solicitud con un error 500.
 
     Args:
         path (Path): La ruta absoluta al archivo JSON.
@@ -212,11 +214,11 @@ def _load_json_file(path: Path) -> object:
 
 def _load_json_file_or_default(path: Path, default: object) -> object:
     """
-    Lee un archivo JSON desde la ruta proporcionada y devuelve su contenido como un objeto de Python. Si el archivo no se puede leer o no es un JSON vÃ¡lido, devuelve el valor predeterminado.
+    Lee un archivo JSON desde la ruta proporcionada y devuelve su contenido como un objeto de Python. Si el archivo no se puede leer o no es un JSON válido, devuelve el valor predeterminado.
 
     Args:
         path (Path): La ruta absoluta al archivo JSON.
-        default (object): El valor predeterminado a devolver si el archivo no se puede leer o no es un JSON vÃ¡lido.
+        default (object): El valor predeterminado a devolver si el archivo no se puede leer o no es un JSON válido.
 
     Returns:
         object: El contenido del archivo JSON como un objeto de Python, o el valor predeterminado si no se puede leer.
@@ -230,9 +232,9 @@ def build_model_usage_index_payload(months: int = 12) -> dict:
     """
     Construye un payload simple de uso por modelo a lo largo del tiempo, para
     dibujarlo con D3 en la pantalla RAG.
-    
+
     Args:
-        months: NÃºmero de meses hacia atrÃ¡s a incluir en el Ã­ndice (incluyendo el actual).
+        months: Número de meses hacia atrás a incluir en el índice (incluyendo el actual).
 
     Returns:
         dict con:
@@ -243,7 +245,7 @@ def build_model_usage_index_payload(months: int = 12) -> dict:
 
     jobs = base_query.order_by(RAGQueryState.created_at.asc()).all()
 
-    # Etiquetas de los Ãºltimos N meses (incluyendo el actual)
+    # Etiquetas de los últimos N meses (incluyendo el actual)
     from datetime import datetime, timezone
 
     now = datetime.now(timezone.utc)
@@ -283,9 +285,9 @@ def model_comparison_page() -> ResponseReturnValue:
     Muestra comparativas de uso y rendimiento por modelo RAG.
     Los administradores ven el uso global y los usuarios normales ven sus propias
     consultas terminadas.
-    
+
     Returns:
-        Respuesta HTML con la comparaciÃ³n de modelos y estadÃ­sticas agregadas.
+        Respuesta HTML con la comparación de modelos y estadísticas agregadas.
     """
     payload = build_model_comparison_payload()
     return render_template("model_comparison.html", model_stats_payload=payload)
@@ -299,7 +301,7 @@ def build_model_comparison_payload() -> dict:
     en el texto de entrada y salida para poder comparar consultas historicas.
 
     Returns:
-        dict: Payload con comparaciÃ³n de modelos y estadÃ­sticas agregadas.
+        dict: Payload con comparación de modelos y estadísticas agregadas.
     """
     base_query = RAGQueryState.query.filter(RAGQueryState.status == "done")
 
@@ -373,11 +375,11 @@ def build_model_comparison_payload() -> dict:
 def extract_response_time(job: RAGQueryState, result: dict) -> float | None:
     """
     Extrae el tiempo de respuesta en segundos desde el payload ("elapsed_s") o las marcas del job.
-    
+
     Args:
         job (RAGQueryState): El estado de la consulta RAG.
         result (dict): El resultado de la consulta que puede contener un campo "elapsed_s".
-    
+
     Returns:
         float | None: El tiempo de respuesta en segundos, o None si no se puede determinar.
     """
@@ -395,13 +397,13 @@ def extract_response_time(job: RAGQueryState, result: dict) -> float | None:
 def extract_token_count(job: RAGQueryState, result: dict) -> int:
     """
     Extrae tokens reales si existen o calcula una estimacion sencilla.
-    
+
     Args:
-        job (RAGQueryState): El estado de la consulta RAG. 
+        job (RAGQueryState): El estado de la consulta RAG.
         result (dict): El resultado de la consulta que puede contener campos de conteo de tokens.
-    
+
     Returns:
-        int: El nÃºmero de tokens usados, o una estimaciÃ³n basada en el texto si no se dispone de contadores reales.
+        int: El número de tokens usados, o una estimación basada en el texto si no se dispone de contadores reales.
     """
     for key in ("total_tokens", "tokens", "eval_count"):
         value = result.get(key)
@@ -421,7 +423,7 @@ def extract_token_count(job: RAGQueryState, result: dict) -> int:
 def configure_model_choices(form: RAGQueryForm) -> None:
     """
     Carga en el formulario los modelos LLM disponibles para Ollama.
-    
+
     Args:
         form (RAGQueryForm): El formulario a configurar.
     """
@@ -439,7 +441,7 @@ def configure_model_choices(form: RAGQueryForm) -> None:
 def configure_default_query_form(form: RAGDefaultQueryForm) -> None:
     """
     Carga opciones de expedientes, preguntas frecuentes y modelos.
-    
+
     Args:
         form (RAGDefaultQueryForm): El formulario a configurar.
     """
@@ -450,21 +452,23 @@ def configure_default_query_form(form: RAGDefaultQueryForm) -> None:
         ("explain_all", t("rag_default.question_explain_all")),
         ("explain_section", t("rag_default.question_explain_section")),
     ]
+    form.section.choices = [("", t("rag_default.section_any"))]
 
 
 GUIDED_QUESTION_TEXTS = {
     "summary": "elabora un resumen general y detallado del documento completo.",
     "explain_all": "explica todos los apartados del documento de forma ordenada y comprensible.",
     "explain_section": "explica el apartado indicado del documento, aclarando su finalidad, requisitos y efectos practicos.",
+    "amounts": "resume las cantidades economicas, presupuesto, valor estimado e importes relevantes.",
 }
 
 
 def is_guided_query_request() -> bool:
     """
-    Detecta si la peticiÃ³n procede del formulario de consultas guiadas.
-    
+    Detecta si la petición procede del formulario de consultas guiadas.
+
     Returns:
-        bool: True si la peticiÃ³n contiene campos especÃ­ficos del formulario guiado, False en caso contrario.
+        bool: True si la petición contiene campos específicos del formulario guiado, False en caso contrario.
     """
     return any(field in request.form for field in ("expediente", "question_kind", "section"))
 
@@ -472,10 +476,10 @@ def is_guided_query_request() -> bool:
 def build_guided_question(form: RAGDefaultQueryForm) -> str:
     """
     Construye en servidor la pregunta del formulario guiado para evita depender exclusivamente del JavaScript del template.
-    
+
     Args:
         form (RAGDefaultQueryForm): El formulario con los datos enviados por el usuario.
-        
+
     Returns:
         str: La pregunta construida para la consulta RAG basada en las opciones seleccionadas.
     """
@@ -483,7 +487,16 @@ def build_guided_question(form: RAGDefaultQueryForm) -> str:
     question_kind = (form.question_kind.data or "summary").strip() or "summary"
     section = (form.section.data or "").strip()
 
-    scope = f"Para el documento seleccionado {document_scope}" if document_scope else "Para la normativa disponible de forma general"
+    legacy_doc_type = (request.form.get("doc_type") or "").strip()
+    legacy_scope = (form.expediente.data or "").strip()
+    if document_scope:
+        scope = f"Para el documento seleccionado {document_scope}"
+    elif legacy_scope:
+        scope = f"Para el expediente {legacy_scope}"
+    else:
+        scope = "Para la normativa disponible de forma general"
+    if legacy_doc_type:
+        scope = f"{scope} doc_type={legacy_doc_type}"
 
     task = GUIDED_QUESTION_TEXTS.get(question_kind, GUIDED_QUESTION_TEXTS["summary"])
     if question_kind == "explain_section" and section:
@@ -500,7 +513,7 @@ def guided_document_scope(document_id: str) -> str:
     except (TypeError, ValueError):
         doc = None
     if doc is None:
-        return document_id
+        return f"expediente {document_id}"
 
     filename = str(doc.nombre or "").strip()
     filename_stem = filename[:-4] if filename.lower().endswith(".pdf") else filename
@@ -529,6 +542,58 @@ def get_expediente_choices() -> list[tuple[str, str]]:
         choices.append((str(doc.id), " | ".join(label_parts)))
     return choices
 
+
+def get_guided_document_cards() -> list[dict[str, object]]:
+    """Devuelve documentos y apartados en formato adecuado para el formulario guiado."""
+    cards: list[dict[str, object]] = [
+        {
+            "id": "",
+            "filename": t("rag_default.expediente_any"),
+            "title": t("rag_default.expediente_help"),
+            "date": "",
+            "sections": [],
+        }
+    ]
+    rows = Documento.query.order_by(Documento.nombre.asc()).all()
+    for doc in rows:
+        filename = str(doc.nombre or "").strip()
+        if not filename:
+            continue
+        filename_stem = filename[:-4] if filename.lower().endswith(".pdf") else filename
+        title = extract_document_title_from_markdown(doc.markdown_content, filename_stem)
+        pdf_date = extract_pdf_footer_date(doc.markdown_content)
+        cards.append(
+            {
+                "id": str(doc.id),
+                "filename": filename,
+                "title": title if title and title != filename_stem else "",
+                "date": pdf_date,
+                "sections": extract_markdown_sections(doc.markdown_content),
+            }
+        )
+    return cards
+
+
+def extract_markdown_sections(markdown_content: str | None, limit: int = 80) -> list[str]:
+    """Extrae encabezados Markdown para proponer apartados seleccionables."""
+    sections: list[str] = []
+    seen: set[str] = set()
+    for raw_line in (markdown_content or "").splitlines():
+        match = re.match(r"^\s{0,3}#{1,6}\s+(.+?)\s*$", raw_line)
+        if not match:
+            continue
+        section = re.sub(r"\s+", " ", match.group(1)).strip(" #\t\r\n")
+        if not section or len(section) > 180:
+            continue
+        key = section.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        sections.append(section)
+        if len(sections) >= limit:
+            break
+    return sections
+
 def type_label(type_value: str) -> str:
     return (type_value or "").strip() or "-"
 
@@ -536,10 +601,10 @@ def process_rows(by_expediente: dict[str, dict[str, object]], rows: list[tuple[s
     return None
 def get_user_job_or_404(job_id: int) -> RAGQueryState:
     """
-    Obtiene una consulta asÃ­ncrona del usuario actual o aborta.
+    Obtiene una consulta asíncrona del usuario actual o aborta.
 
     Args:
-        job_id: Identificador de la consulta asÃ­ncrona.
+        job_id: Identificador de la consulta asíncrona.
 
     Returns:
         Estado de la consulta RAG perteneciente al usuario autenticado.
@@ -578,7 +643,7 @@ def _get_active_job(user_id: int) -> RAGQueryState | None:
 @login_required
 def rag_ask() -> ResponseReturnValue:
     """
-    Crea o reutiliza una consulta RAG asÃ­ncrona.
+    Crea o reutiliza una consulta RAG asíncrona.
 
     Returns:
         Respuesta JSON con el identificador del trabajo creado o reutilizado.
@@ -588,6 +653,7 @@ def rag_ask() -> ResponseReturnValue:
     if guided_request:
         configure_default_query_form(form)
         form.question.data = build_guided_question(form)
+        form.question.raw_data = [form.question.data]
     else:
         configure_model_choices(form)
     if not form.validate_on_submit():
@@ -601,7 +667,7 @@ def rag_ask() -> ResponseReturnValue:
         return jsonify({"error": invalid.get("answer") or t("rag.invalid_question")}), 400
 
     active_job = _get_active_job(int(current_user.id))
-    
+
     if active_job:
         return jsonify({"job_id": active_job.id, "reused": True}), 202
 
@@ -640,7 +706,7 @@ def rag_status(job_id: int) -> ResponseReturnValue:
     Devuelve el estado de una consulta RAG.
 
     Args:
-        job_id: Identificador de la consulta asÃ­ncrona.
+        job_id: Identificador de la consulta asíncrona.
 
     Returns:
         Respuesta JSON con estado, mensaje, error y resultado.
@@ -661,8 +727,8 @@ def rag_status(job_id: int) -> ResponseReturnValue:
 def rag_active() -> ResponseReturnValue:
     """
     Devuelve el job RAG activo del usuario autenticado (si existe).
-    Se usa para reanudar el polling de la UI tras recargar la pÃ¡gina.
-    
+    Se usa para reanudar el polling de la UI tras recargar la página.
+
     Returns:
         Respuesta JSON con el identificador y estado del job activo, o null si no hay
     """
@@ -685,10 +751,10 @@ def rag_active() -> ResponseReturnValue:
 @login_required
 def rag_cancel(job_id: int) -> ResponseReturnValue:
     """
-    Solicita la cancelaciÃ³n de una consulta RAG.
+    Solicita la cancelación de una consulta RAG.
 
     Args:
-        job_id: Identificador de la consulta asÃ­ncrona.
+        job_id: Identificador de la consulta asíncrona.
 
     Returns:
         Respuesta JSON con el estado actualizado.
@@ -714,11 +780,11 @@ def rag_cancel(job_id: int) -> ResponseReturnValue:
 
 def run_rag_query_async(app, job_id: int, user_id: int, lang: str = "es") -> None:
     """
-    Ejecuta una consulta RAG dentro de un contexto de aplicaciÃ³n.
+    Ejecuta una consulta RAG dentro de un contexto de aplicación.
 
     Args:
-        app: AplicaciÃ³n Flask usada para abrir el contexto.
-        job_id: Identificador de la consulta asÃ­ncrona.
+        app: Aplicación Flask usada para abrir el contexto.
+        job_id: Identificador de la consulta asíncrona.
         user_id: Identificador del usuario propietario.
         lang: Idioma usado para mensajes de estado.
     """
@@ -761,7 +827,7 @@ def run_rag_query_async(app, job_id: int, user_id: int, lang: str = "es") -> Non
             )
 
             db.session.refresh(job)
-            
+
             if job.cancel_requested:
                 job.mark_cancelled(message=localize_runtime_message("Consulta cancelada.", lang))
                 db.session.commit()

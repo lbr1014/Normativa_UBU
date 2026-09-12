@@ -81,11 +81,11 @@ RAG_EVAL_JOB_TYPE = "rag_evaluation"
 def _normalize_dt_for_compare(dt: datetime | None, *, reference: datetime) -> datetime | None:
     """
     Normaliza dt para poder compararlo con reference evitando errores de naive/aware (frecuente en tests con SQLite).
-    
+
     Args:
         dt: Fecha a normalizar.
         reference: Fecha de referencia para determinar si dt debe ser naive o aware.
-        
+
     Returns:
         La fecha dt normalizada para ser comparable con reference, o None si dt era None.
     """
@@ -102,11 +102,11 @@ def _job_is_stale_since_boot(job: Any, *, boot_at: datetime | None) -> bool:
     """
     Un job 'stale' es uno que aparece como queued/running pero fue creado o
     iniciado antes del arranque actual del servicio.
-    
+
     Args:
         job: Instancia del job a evaluar, que debe tener atributos 'status', 'created_at' y 'started_at'.
         boot_at: Fecha y hora del arranque actual del servicio.
-        
+
     Returns:
         ``True`` si el job es stale y por tanto se considera interrumpido por el reinicio, ``False`` en caso contrario.
     """
@@ -121,16 +121,16 @@ def _job_is_stale_since_boot(job: Any, *, boot_at: datetime | None) -> bool:
 
     if started_at and started_at < boot_cmp:
         return True
-    
+
     return not started_at and created_at and created_at < boot_cmp
 
 def _mark_job_as_stale(job: Any) -> None:
     """
     Marca un job como interrumpido por reinicio del servicio.
-    
+
     Args:
         job: Instancia del job a actualizar, que idealmente debería implementar un método mark_failed(message) o atributos status, error y finished_at.
-        
+
     Returns:
         None. El job se actualiza para reflejar que fue interrumpido por el reinicio.
     """
@@ -152,7 +152,7 @@ def _mark_job_as_stale(job: Any) -> None:
 def active_jobs_status() -> ResponseReturnValue:
     """
     Devuelve el job activo (queued/running) por tipo para reanudar el tracking.
-    
+
     Returns:
         Una respuesta JSON con el estado del job activo de cada tipo o ``null`` si no hay ninguno. Si el job activo es anterior al ultimo reinicio del servicio, se marca como fallido por interrupcion.
     """
@@ -167,7 +167,7 @@ def active_jobs_status() -> ResponseReturnValue:
         Returns:
             Any: La instancia del job activo más reciente o ``None`` si no hay ninguno. Si el job activo es antiguo, se marca como fallido y se devuelve ``None``.
         """
-        
+
         job = (
             model.query.filter(model.status.in_(["queued", "running"]))
             .order_by(model.id.desc())
@@ -394,10 +394,10 @@ def _send_email_safe(send_fn, log_message: str, **kwargs) -> None:
 def _validate_post_action(*, json_response: bool = False) -> ResponseReturnValue | None:
     """
     Valida el CSRF de acciones POST sin campos propios.
-    
+
     Args:
         json_response: Indica si la respuesta de error debe ser JSON en lugar de HTML.
-    
+
     Returns:
         None o una respuesta JSON de error si la validacion falla.
     """
@@ -412,10 +412,10 @@ def _validate_post_action(*, json_response: bool = False) -> ResponseReturnValue
 def _users_query_from_filters(filters: dict[str, str]) -> Any:
     """
     Construye la consulta de usuarios aplicando los filtros de la pagina.
-    
+
     Args:
         filters: Diccionario con los filtros activos (nombre, pais, rol).
-        
+
     Returns:
         La consulta SQLAlchemy con los filtros aplicados.
     """
@@ -439,7 +439,7 @@ def _users_query_from_filters(filters: dict[str, str]) -> Any:
 def _current_user_filters() -> dict[str, str]:
     """
     Lee y normaliza los filtros activos de la lista de usuarios.
-    
+
     Returns:
         Un diccionario con los valores de los filtros de nombre, pais y rol.
     """
@@ -453,10 +453,10 @@ def _current_user_filters() -> dict[str, str]:
 def _render_users_page(form=None) -> ResponseReturnValue:
     """
     Renderiza la gestion de usuarios con formulario de alta y listado.
-    
+
     Args:
         form: Instancia del formulario de creacion de usuario, opcionalmente con errores.
-        
+
     Returns:
         La pagina HTML con el listado de usuarios y el formulario.
     """
@@ -649,7 +649,7 @@ def documents_page_url() -> str:
 def _document_filters() -> dict[str, str]:
     """
     Lee los filtros activos de la administracion de documentos.
-    
+
     Returns:
         Un diccionario con los valores de los filtros de nombre, estado y markdown.
     """
@@ -663,11 +663,11 @@ def _document_filters() -> dict[str, str]:
 def _apply_document_filters(query, filters: dict[str, str]) -> Any:
     """
     Aplica filtros sobre la query de documentos.
-    
+
     Args:
         query: Consulta SQLAlchemy base sobre la que aplicar los filtros.
         filters: Diccionario con los filtros activos (nombre, estado, markdown).
-        
+
     Returns:
         La consulta SQLAlchemy con los filtros aplicados.
     """
@@ -694,7 +694,7 @@ def _apply_document_filters(query, filters: dict[str, str]) -> Any:
 def _document_filter_options() -> list[str]:
     """
     Devuelve estados disponibles para los filtros.
-    
+
     Returns:
         Lista de estados disponibles.
     """
@@ -1059,7 +1059,7 @@ def _handle_markdown_exception(app, job_id: int, user_email: str, docs_url: str,
     Gestiona un error inesperado en un job de Markdown.
 
     Args:
-        app: Aplicacion Flask activa.
+        app: Aplicación Flask activa.
         job_id: Identificador del job fallido.
         user_email: Correo del usuario que inicio el job.
         docs_url: URL de la pagina de documentos.
@@ -1094,7 +1094,7 @@ def markdown_async(app, job_id: int, user_email: str, docs_url: str, lang: str =
     Ejecuta en segundo plano la conversion de documentos a Markdown.
 
     Args:
-        app: Aplicacion Flask activa.
+        app: Aplicación Flask activa.
         job_id: Identificador del job de conversion.
         user_email: Correo del usuario que inicio el job.
         docs_url: URL de la pagina de documentos.
@@ -1192,7 +1192,7 @@ def rag_evaluation_status(job_id: int) -> ResponseReturnValue:
     Returns:
         ResponseReturnValue: Respuesta JSON con el estado actual del job, incluyendo progreso, mensaje, error y rutas a los resultados si están disponibles.
     """
-    
+
     job = RAGEvaluationState.query.get(job_id)
     if not job:
         abort(404)
@@ -1229,11 +1229,11 @@ def download_rag_evaluation_artifact(job_id: int, artifact: str) -> ResponseRetu
         - ares_questions
         - ares_dataset_json
         - ares_dataset_tsv
-        
+
     Args:
         job_id (int): Identificador del job de evaluación del RAG.
         artifact (str): Nombre del artefacto a descargar.
-        
+
     Returns:
         ResponseReturnValue: Archivo para descargar o error 404/400 si no se encuentra o es una ruta no permitida.
     """
@@ -1266,7 +1266,7 @@ def download_rag_evaluation_artifact(job_id: int, artifact: str) -> ResponseRetu
 def rag_evaluation_async(*, app, job_id: int, lang: str) -> None:
     """
     Ejecuta la evaluación del RAG dentro de un contexto de aplicación Flask.
-    
+
     Args:
         app: Aplicación Flask activa.
         job_id: Identificador del job de evaluación del RAG.
@@ -1386,7 +1386,7 @@ def documentos_async(app, job_id: int, user_email: str, docs_url: str, lang: str
     Ejecuta en segundo plano la indexacion vectorial de documentos.
 
     Args:
-        app: Aplicacion Flask activa.
+        app: Aplicación Flask activa.
         job_id: Identificador del job vectorial.
         user_email: Correo del usuario que inicio el job.
         docs_url: URL de la pagina de documentos.
@@ -1673,7 +1673,7 @@ def documents_list_page() -> ResponseReturnValue:
 def bulk_delete_documents() -> ResponseReturnValue:
     """
     Elimina varios documentos seleccionados.
-    
+
     Returns:
         Una redireccion a la pagina de documentos.
     """
