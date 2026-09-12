@@ -1,4 +1,4 @@
-﻿"""
+"""
 Autora: Lydia Blanco Ruiz
 Script con los formularios Flask-WTF usados por autenticación, administración, documentos y consultas RAG.
 """
@@ -372,7 +372,7 @@ class EditUserForm(LocalizedFlaskForm):
     preferred_model = SelectField("Modelo de lenguaje", choices=[], default="llama3.1:8b-instruct-q4_K_M", validators=[Optional()], validate_choice=False)
     language = SelectField("Idioma", choices=[], default="es", validators=[Optional()])
     submit = SubmitField("Guardar cambios")
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -421,7 +421,7 @@ class RAGQueryForm(LocalizedFlaskForm):
     }
 
     question = TextAreaField("Pregunta", validators=[DataRequired(), Length(max=2000)])
-    model = SelectField("Modelo", choices=[], validators=[Optional(), Length(max=255)])
+    model = SelectField("Modelo", choices=[], validators=[Optional(), Length(max=255)], validate_choice=False)
     submit = SubmitField("Preguntar")
 
 
@@ -432,9 +432,8 @@ class RAGDefaultQueryForm(LocalizedFlaskForm):
 
     i18n_fields: ClassVar[dict[str, str]] = {
         "expediente": "rag_default.expediente_label",
-        "summary": "rag_default.summary_label",
-        "doc_type": "rag_default.doc_type_label",
         "question_kind": "rag_default.question_kind_label",
+        "section": "rag_default.section_label",
         "model": "rag.model_label",
         "question": "rag.question_label",
         "submit": "rag.ask_button",
@@ -446,12 +445,11 @@ class RAGDefaultQueryForm(LocalizedFlaskForm):
         },
     }
 
-    expediente = SelectField("Expediente", choices=[], validators=[Optional(), Length(max=255)])
-    summary = BooleanField("Resumen del documento")
-    doc_type = SelectField("Tipo de documento", choices=[], validators=[Optional(), Length(max=30)])
-    question_kind = SelectField("Pregunta tipo", choices=[], validators=[Optional(), Length(max=60)])
+    expediente = SelectField("Expediente", choices=[], validators=[Optional(), Length(max=255)], validate_choice=False)
+    question_kind = SelectField("Pregunta tipo", choices=[], validators=[Optional(), Length(max=60)], validate_choice=False)
+    section = SelectField("Apartado", choices=[], validators=[Optional(), Length(max=255)], validate_choice=False)
     question = HiddenField("Pregunta", validators=[DataRequired(), Length(max=2000)])
-    model = SelectField("Modelo", choices=[], validators=[Optional(), Length(max=255)])
+    model = SelectField("Modelo", choices=[], validators=[Optional(), Length(max=255)], validate_choice=False)
     submit = SubmitField("Preguntar")
 
 
