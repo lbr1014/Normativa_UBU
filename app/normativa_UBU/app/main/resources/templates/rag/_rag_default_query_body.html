@@ -15,13 +15,30 @@
 
       <div class="rag-field-stack">
         <div class="rag-field-row">
-          {{ form.expediente.label(class="form-label rag-label mb-0", for=form.expediente.id) }}
-          <div class="rag-model-select-shell">
-            {{ form.expediente(
-              class="form-select rag-model-select",
-              data_bs_toggle="tooltip",
-              data_bs_title=t("rag_default.expediente_tooltip")
-            ) }}
+          <span class="form-label rag-label mb-2 d-block">{{ form.expediente.label.text }}</span>
+          <div class="rag-document-choice-list" data-guided-documents>
+            {% for doc in guided_documents %}
+              {% set input_id = "guided-doc-" ~ loop.index0 %}
+              <label class="rag-document-choice">
+                <input
+                  id="{{ input_id }}"
+                  class="form-check-input rag-document-choice-input"
+                  type="radio"
+                  name="{{ form.expediente.name }}"
+                  value="{{ doc.id }}"
+                  {% if form.expediente.data == doc.id or (not form.expediente.data and loop.first) %}checked{% endif %}
+                  data-bs-toggle="tooltip"
+                  data-bs-title="{{ t('rag_default.expediente_tooltip') }}">
+                <span class="rag-document-choice-body">
+                  <span class="rag-document-choice-name">{{ doc.filename }}</span>
+                  <span class="rag-document-choice-meta">
+                    {% if doc.title %}<span>{{ doc.title }}</span>{% endif %}
+                    {% if doc.date %}<span>{{ doc.date }}</span>{% endif %}
+                    {% if doc.sections %}<span>{{ doc.sections|length }} apartados</span>{% endif %}
+                  </span>
+                </span>
+              </label>
+            {% endfor %}
           </div>
         </div>
       </div>
@@ -47,11 +64,11 @@
       <div class="rag-field-row" data-section-field>
         {{ form.section.label(class="form-label rag-label mb-0", for=form.section.id) }}
         {{ form.section(
-          class="form-control rag-input",
-          placeholder=t("rag_default.section_placeholder"),
+          class="form-select rag-model-select",
           data_bs_toggle="tooltip",
           data_bs_title=t("rag_default.section_tooltip")
         ) }}
+        <p class="rag-field-help" data-section-empty>{{ t("rag_default.section_tooltip") }}</p>
       </div>
     </section>
 

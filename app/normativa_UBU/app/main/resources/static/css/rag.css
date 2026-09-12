@@ -266,6 +266,80 @@ body[data-theme="light"] .rag-eval-ring-value{
   line-height: 1.45;
 }
 
+.rag-document-choice-list{
+  display: grid;
+  gap: .75rem;
+  max-height: 360px;
+  overflow: auto;
+  padding-right: .25rem;
+}
+
+.rag-document-choice{
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: .75rem;
+  align-items: start;
+  margin: 0;
+  padding: .85rem .95rem;
+  border: 1px solid rgba(var(--app-primary-rgb), .16);
+  border-radius: var(--app-radius-sm);
+  background: rgba(255, 255, 255, .035);
+  cursor: pointer;
+  transition: border-color .18s ease, background-color .18s ease, box-shadow .18s ease;
+}
+
+.rag-document-choice:hover,
+.rag-document-choice:focus-within{
+  border-color: rgba(var(--app-primary-rgb), .4);
+  background: rgba(var(--app-primary-rgb), .075);
+}
+
+.rag-document-choice:focus-within{
+  box-shadow: var(--app-input-focus-ring);
+}
+
+.rag-document-choice-input{
+  margin-top: .2rem;
+}
+
+.rag-document-choice:has(.rag-document-choice-input:checked){
+  border-color: var(--app-primary);
+  background: rgba(var(--app-primary-rgb), .12);
+}
+
+.rag-document-choice-body{
+  display: grid;
+  min-width: 0;
+  gap: .35rem;
+}
+
+.rag-document-choice-name{
+  color: var(--app-text);
+  font-weight: 820;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.rag-document-choice-meta{
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem .5rem;
+  color: var(--app-text-soft);
+  font-size: .84rem;
+  line-height: 1.35;
+}
+
+.rag-document-choice-meta span{
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rag-document-choice-meta span + span::before{
+  content: "·";
+  margin-right: .5rem;
+  opacity: .7;
+}
+
 .rag-summary-switch{
   display: grid;
   grid-template-columns: 52px minmax(0, 1fr);
@@ -634,6 +708,17 @@ body[data-theme="light"] .rag-eval-ring-value{
   .rag-top-grid{
     grid-template-columns: minmax(360px, .85fr) minmax(380px, 1.15fr);
     align-items: stretch;
+  }
+}
+
+@media (max-width: 575.98px){
+  .rag-document-choice{
+    grid-template-columns: 20px minmax(0, 1fr);
+    padding: .75rem;
+  }
+
+  .rag-document-choice-list{
+    max-height: 420px;
   }
 }
 

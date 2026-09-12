@@ -1,12 +1,12 @@
 :root {
   color-scheme: light;
-  --md-bg: #0b1220;
-  --md-surface: #0f172a;
-  --md-text: #e5e7eb;
-  --md-muted: #9ca3af;
-  --md-border: rgba(148, 163, 184, 0.22);
+  --md-bg: #120204;
+  --md-surface: #24070c;
+  --md-text: #fbe9ea;
+  --md-muted: rgba(251, 233, 234, 0.62);
+  --md-border: rgba(224, 114, 114, 0.22);
   --md-link: #e7b2b2;
-  --md-code-bg: rgba(148, 163, 184, 0.12);
+  --md-code-bg: rgba(184, 86, 86, 0.12);
 }
 
 html,
@@ -49,7 +49,7 @@ body {
 
 .markdown-body {
   border: 1px solid var(--md-border);
-  background: rgba(15, 23, 42, 0.55);
+  background: rgba(36, 7, 12, 0.68);
   backdrop-filter: blur(10px);
   border-radius: 16px;
   padding: 18px 18px;
@@ -115,7 +115,7 @@ body {
 }
 
 .markdown-body pre {
-  background: rgba(2, 6, 23, 0.55);
+  background: rgba(18, 2, 4, 0.62);
   border: 1px solid var(--md-border);
   border-radius: 12px;
   padding: 14px 14px;

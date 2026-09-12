@@ -5,21 +5,21 @@
   --app-primary-hover: #8d0d26;
   --app-primary-soft: rgba(105, 2, 21, 0.18);
   --app-primary-soft-strong: rgba(105, 2, 21, 0.28);
-  --app-bg-top: #2a060b;
-  --app-bg-mid: #430b13;
-  --app-bg-bottom: #180306;
-  --app-bg-accent: #5f0d18;
-  --app-bg-glow: rgba(105, 2, 21, 0.28);
-  --app-bg-glow-soft: rgba(105, 2, 21, 0.08);
+  --app-bg-top: #200407;
+  --app-bg-mid: #3a0710;
+  --app-bg-bottom: #120204;
+  --app-bg-accent: #5a0a16;
+  --app-bg-glow: rgba(184, 86, 86, 0.24);
+  --app-bg-glow-soft: rgba(184, 86, 86, 0.07);
   --app-bg-glow-stop-1: 24%;
   --app-bg-glow-stop-2: 52%;
   --app-text: #fbe9ea;
   --app-text-soft: rgba(251, 233, 234, 0.82);
   --app-text-muted: rgba(251, 233, 234, 0.64);
   --app-heading: #fff6f7;
-  --app-surface-bg: linear-gradient(180deg, rgba(25, 5, 10, 0.84) 0%, rgba(58, 10, 17, 0.74) 100%);
-  --app-surface-border: 1px solid rgba(184, 86, 86, 0.18);
-  --app-surface-shadow: 0 22px 64px rgba(2, 6, 23, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --app-surface-bg: linear-gradient(180deg, rgba(36, 7, 12, 0.92) 0%, rgba(78, 13, 22, 0.78) 100%);
+  --app-surface-border: 1px solid rgba(224, 114, 114, 0.22);
+  --app-surface-shadow: 0 22px 64px rgba(18, 2, 4, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   --app-surface-blur: blur(10px);
   --app-inset-bg: rgba(184, 86, 86, 0.12);
   --app-inset-border: 1px solid rgba(184, 86, 86, 0.16);
@@ -43,7 +43,7 @@
   --app-header-btn-outline-hover-bg: rgba(255, 228, 229, 0.12);
   --app-header-btn-outline-hover-text: #ffffff;
   --app-header-btn-outline-hover-border: rgba(255, 228, 229, 0.72);
-  --app-input-bg: rgba(25, 5, 10, 0.72);
+  --app-input-bg: rgba(18, 2, 4, 0.72);
   --app-input-text: #fff6f7;
   --app-input-border: rgba(184, 86, 86, 0.22);
   --app-input-hover-bg: rgba(25, 5, 10, 0.9);
@@ -194,14 +194,14 @@ body {
   --bs-primary-rgb: var(--app-primary-rgb);
   --bs-link-color: var(--app-link);
   --bs-link-hover-color: var(--app-primary-hover);
-  --bs-border-color: rgba(148, 163, 184, 0.18);
+  --bs-border-color: rgba(224, 114, 114, 0.18);
   --bs-secondary-bg: var(--app-inset-bg);
   --bs-tertiary-bg: var(--app-inset-bg);
   --bs-emphasis-color: var(--app-heading);
   --bs-heading-color: var(--app-heading);
   --bs-card-bg: transparent;
   --bs-card-border-color: transparent;
-  --bs-light-rgb: 248, 251, 255;
+  --bs-light-rgb: 255, 246, 247;
 }
 
 .app-main-shell {
@@ -217,20 +217,20 @@ body {
   --bs-tooltip-max-width: 280px;
   --bs-tooltip-padding-x: 0.75rem;
   --bs-tooltip-padding-y: 0.5rem;
-  --bs-tooltip-bg: #f8fbff;
-  --bs-tooltip-color: #0f172a;
+  --bs-tooltip-bg: #fff6f7;
+  --bs-tooltip-color: #2f050a;
   --bs-tooltip-opacity: 1;
   --bs-tooltip-border-radius: 0.65rem;
   filter: drop-shadow(0 10px 22px rgba(2, 6, 23, 0.24));
 }
 
 .tooltip .tooltip-inner {
-  border: 1px solid rgba(219, 234, 254, 0.44);
+  border: 1px solid rgba(246, 221, 221, 0.7);
   font-weight: 700;
 }
 
 body[data-theme="light"] .tooltip {
-  --bs-tooltip-bg: #1f2a44;
+  --bs-tooltip-bg: #4b0c14;
   --bs-tooltip-color: #ffffff;
   filter: drop-shadow(0 10px 22px rgba(var(--app-primary-rgb), 0.28));
 }
@@ -349,13 +349,13 @@ a:focus {
 .app-navbar-offcanvas {
   background: var(--app-header-bg);
   color: var(--app-text);
-  border-left: 1px solid rgba(148, 163, 184, 0.14);
+  border-left: 1px solid rgba(224, 114, 114, 0.18);
   box-shadow: -20px 0 48px rgba(15, 23, 42, 0.22);
   width: min(88vw, 380px);
 }
 
 .app-navbar-offcanvas .offcanvas-header {
-  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+  border-bottom: 1px solid rgba(224, 114, 114, 0.18);
   padding: 1rem 1rem 0.9rem;
 }
 
@@ -517,7 +517,7 @@ body[data-theme="light"] .main-header .last-login {
 
 .app-offcanvas-group .list-group-item + .list-group-item,
 .app-offcanvas-group form + form .list-group-item {
-  border-top: 1px solid rgba(148, 163, 184, 0.12);
+  border-top: 1px solid rgba(224, 114, 114, 0.14);
 }
 
 .app-offcanvas-group .list-group-item:hover,
@@ -576,8 +576,8 @@ body[data-theme="light"] .main-header .last-login {
   font-weight: 700;
   min-height: 52px;
 
-  background: rgba(148, 163, 184, 0.14);
-  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: rgba(255, 228, 229, 0.1);
+  border: 1px solid rgba(255, 228, 229, 0.2);
   color: var(--app-text);
 
   transition:
@@ -589,8 +589,8 @@ body[data-theme="light"] .main-header .last-login {
 
 .app-btn-cancel:hover,
 .app-btn-cancel:focus{
-  background: rgba(148, 163, 184, 0.22);
-  border-color: rgba(148, 163, 184, 0.38);
+  background: rgba(255, 228, 229, 0.16);
+  border-color: rgba(255, 228, 229, 0.34);
   color: var(--app-heading);
 
   transform: translateY(-1px);
@@ -600,14 +600,14 @@ body[data-theme="light"] .main-header .last-login {
 body[data-theme="light"] .app-btn-cancel{
   background: rgba(var(--app-primary-rgb), 0.08);
   border-color: rgba(var(--app-primary-rgb), 0.22);
-  color: #1a2233;
+  color: #4b0c14;
 }
 
 body[data-theme="light"] .app-btn-cancel:hover,
 body[data-theme="light"] .app-btn-cancel:focus{
   background: rgba(var(--app-primary-rgb), 0.14);
   border-color: rgba(var(--app-primary-rgb), 0.34);
-  color: #111827;
+  color: #2f050a;
 
   box-shadow: 0 10px 24px rgba(var(--app-primary-rgb), 0.14);
 }
@@ -936,7 +936,7 @@ body[data-theme="light"] .app-main-shell .btn-outline-light {
   text-align: center;
   padding: clamp(1.5rem, 4vw, 2.2rem);
   background:
-    linear-gradient(180deg, rgba(148, 163, 184, 0.18), rgba(148, 163, 184, 0.08)),
+    linear-gradient(180deg, rgba(var(--app-primary-rgb), 0.14), rgba(var(--app-primary-rgb), 0.05)),
     var(--app-surface-bg);
 }
 
@@ -946,14 +946,14 @@ body[data-theme="light"] .app-main-shell .btn-outline-light {
   place-items: center;
   overflow: hidden;
   border-radius: 50%;
-  background: rgba(15, 23, 42, 0.72);
+  background: rgba(18, 2, 4, 0.72);
 }
 
 .profile-avatar-wrap {
   width: 164px;
   height: 164px;
   padding: 6px;
-  border: 5px solid #fb923c;
+  border: 5px solid #e7b2b2;
   box-shadow: 0 20px 36px rgba(2, 6, 23, 0.22);
 }
 
@@ -1074,7 +1074,7 @@ body[data-theme="light"] .app-main-shell .btn-outline-light {
 .profile-photo-preview {
   width: 76px;
   height: 76px;
-  border: 3px solid #fb923c;
+  border: 3px solid #e7b2b2;
   flex: 0 0 auto;
 }
 
@@ -1155,7 +1155,7 @@ body[data-theme="light"] .invalid-feedback.d-block {
 .dropdown-menu {
   background: var(--app-dropdown-bg);
   color: var(--app-dropdown-text);
-  border: 1px solid rgba(148, 163, 184, 0.14);
+  border: 1px solid rgba(224, 114, 114, 0.18);
   border-radius: 16px;
   box-shadow: 0 16px 36px rgba(15, 23, 42, 0.18);
   padding: 0.5rem;

@@ -112,6 +112,7 @@
           referrerpolicy="no-referrer"></script>
   <script>
   const sharedModelSelector = document.getElementById("rag-model-selector");
+  const guidedDocuments = {{ (guided_documents or [])|tojson }};
 
   function tr(key, params) {
     return window.pythiaTranslate ? window.pythiaTranslate(key, params) : key;
@@ -281,10 +282,11 @@
     let lastTracePayload = null;
 
     const isGuided = form.id === "rag-default-form";
-    const expedienteEl = isGuided ? form.querySelector("select[name='expediente']") : null;
+    const expedienteEls = isGuided ? Array.from(form.querySelectorAll("input[name='expediente']")) : [];
     const questionKindEl = isGuided ? form.querySelector("select[name='question_kind']") : null;
-    const sectionEl = isGuided ? form.querySelector("input[name='section']") : null;
+    const sectionEl = isGuided ? form.querySelector("select[name='section']") : null;
     const sectionFieldEl = isGuided ? form.querySelector("[data-section-field]") : null;
+    const sectionEmptyEl = isGuided ? form.querySelector("[data-section-empty]") : null;
 
     const guidedQuestions = {
       summary: "elabora un resumen general y detallado del documento completo.",
@@ -293,12 +295,38 @@
     };
 
     function selectedDocumentLabel() {
-      const option = expedienteEl?.selectedOptions?.[0];
-      return (option?.textContent || "").trim();
+      const selected = expedienteEls.find((control) => control.checked);
+      const doc = guidedDocuments.find((item) => String(item.id || "") === String(selected?.value || ""));
+      if (!doc) return "";
+      return [doc.filename, doc.title, doc.date].filter(Boolean).join(" | ");
+    }
+
+    function selectedDocumentSections() {
+      const selected = expedienteEls.find((control) => control.checked);
+      const doc = guidedDocuments.find((item) => String(item.id || "") === String(selected?.value || ""));
+      return Array.isArray(doc?.sections) ? doc.sections : [];
+    }
+
+    function syncSectionOptions() {
+      if (!isGuided || !sectionEl) return;
+      const previous = sectionEl.value;
+      const sections = selectedDocumentSections();
+      sectionEl.innerHTML = `<option value="">${escapeHtml(tr("rag_default.section_any"))}</option>`;
+      sections.forEach((section) => {
+        const option = document.createElement("option");
+        option.value = section;
+        option.textContent = section;
+        sectionEl.appendChild(option);
+      });
+      if (sections.includes(previous)) {
+        sectionEl.value = previous;
+      }
+      sectionEl.disabled = questionKindEl?.value !== "explain_section" || sections.length === 0;
+      if (sectionEmptyEl) sectionEmptyEl.classList.toggle("d-none", sections.length > 0);
     }
 
     function composeGuidedQuestion() {
-      const expediente = (expedienteEl?.value || "").trim();
+      const expediente = (expedienteEls.find((control) => control.checked)?.value || "").trim();
       const kind = (questionKindEl?.value || "summary").trim() || "summary";
       const section = (sectionEl?.value || "").trim();
       const scope = expediente ? `Para el documento seleccionado ${selectedDocumentLabel()}` : "Para la normativa disponible de forma general";
@@ -317,7 +345,8 @@
       if (!isGuided) return;
       const needsSection = questionKindEl?.value === "explain_section";
       sectionFieldEl?.classList.toggle("d-none", !needsSection);
-      if (sectionEl) sectionEl.disabled = !needsSection;
+      syncSectionOptions();
+      if (sectionEl) sectionEl.disabled = !needsSection || sectionEl.options.length <= 1;
       syncGuidedQuestion();
     }
 
@@ -645,7 +674,7 @@
     });
 
     if (isGuided) {
-      [expedienteEl, questionKindEl, sectionEl].filter(Boolean).forEach((control) => {
+      [...expedienteEls, questionKindEl, sectionEl].filter(Boolean).forEach((control) => {
         control.addEventListener("input", () => applyGuidedQuestionMode());
         control.addEventListener("change", () => applyGuidedQuestionMode());
       });

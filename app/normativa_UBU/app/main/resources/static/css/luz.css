@@ -116,7 +116,7 @@ body[data-theme="light"] .btn.luz:not(.btn-light):not(.btn-hero-primary):hover{
   background: radial-gradient(
     circle at var(--x, 50%) var(--y, 50%),
     rgba(255,255,255,0.30) 0%,
-    rgba(191,219,254,0.18) 18%,
+    rgba(246,221,221,0.22) 18%,
     rgba(105,2,21,0.10) 34%,
     transparent 66%
   );
@@ -157,7 +157,7 @@ body[data-theme="light"] .app-query-card.luz::before{
   background: radial-gradient(
     circle at var(--x, 50%) var(--y, 50%),
     rgba(255,255,255,0.60) 0%,
-    rgba(219,234,254,0.58) 18%,
+    rgba(246,221,221,0.62) 18%,
     rgba(105,2,21,0.16) 36%,
     transparent 68%
   );
@@ -169,6 +169,6 @@ body[data-theme="light"] .app-query-card.luz::after{
     rgba(255,255,255,0.22),
     transparent 28%,
     transparent 72%,
-    rgba(219,234,254,0.18)
+    rgba(246,221,221,0.2)
   );
 }
