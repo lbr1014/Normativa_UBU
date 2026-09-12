@@ -137,6 +137,15 @@ SPANISH_ORDINAL_HEADING_WORDS = {
     "ANEXO",
 }
 
+GENERIC_NORMATIVE_HEADING_PATTERNS = (
+    (1, re.compile(r"^(PREÁMBULO|PREAMBULO|EXPOSICIÓN DE MOTIVOS|EXPOSICION DE MOTIVOS)\.?\b", re.IGNORECASE)),
+    (1, re.compile(r"^(TÍTULO|TITULO)\s+(PRELIMINAR|[IVXLCDM]+|\d+)\.?\b", re.IGNORECASE)),
+    (1, re.compile(r"^(CAPÍTULO|CAPITULO)\s+([IVXLCDM]+|\d+)\.?\b", re.IGNORECASE)),
+    (2, re.compile(r"^(SECCIÓN|SECCION)\s+([IVXLCDM]+|\d+|[A-ZÁÉÍÓÚÜÑ]+)\.?\b", re.IGNORECASE)),
+    (2, re.compile(r"^ART[ÍI]CULO\s+\d+[.\-ºª]?\s+", re.IGNORECASE)),
+    (1, re.compile(r"^(RESUELVE|ACUERDA|DISPONE|CERTIFICA|INFORMA|EXPONE|SOLICITA)\s*:?\s*$", re.IGNORECASE)),
+)
+
 
 @dataclass(frozen=True)
 class MarkdownBlock:
@@ -202,14 +211,14 @@ def _pct(values: list[float], percentile: float) -> float:
 
 def _log_timing_summary(pdf_path: Path, total_pages: int, timings: dict[str, list[float]]) -> None:
     """
-    Registra un resumen de los tiempos de procesamiento para cada etapa del OCR. 
-    
+    Registra un resumen de los tiempos de procesamiento para cada etapa del OCR.
+
     Args:
         pdf_path: Ruta al archivo PDF procesado.
         total_pages: Número total de páginas del PDF.
         timings: Diccionario con listas de tiempos para cada etapa (render_s, ocr_s, etc.).
     """
-    
+
     parts = []
     for key in ("render_s", "ocr_s", "resize_s", "cleanup_s"):
         values = timings.get(key) or []
@@ -240,10 +249,10 @@ def resolve_ocr_model(model_name: str | None = None) -> str:
     Resuelve el modelo visual de Ollama que se usara para OCR.
 
     Si no se le pasa ningun valor, se usa el modelo configurado.
-    
+
     Args:
         model: nombre del modelo a usar (opcional).
-        
+
     Returns:
         El nombre del modelo a usar, limpio de espacios.
     """
@@ -436,7 +445,7 @@ def _native_text_quality(text: str) -> dict[str, float]:
         return {"chars": 0, "alpha_ratio": 0.0, "garbled_ratio": 1.0}
 
     alpha = sum(1 for char in compact if char.isalpha())
-    garbled = sum(1 for char in compact if char in "\ufffd■□�")
+    garbled = sum(1 for char in compact if char in "\ufffd■□")
     return {
         "chars": float(len(compact)),
         "alpha_ratio": alpha / len(compact),
@@ -939,6 +948,18 @@ def _process_normative_heading(stripped: str) -> str | None:
     return None
 
 
+def _process_generic_normative_heading(stripped: str) -> str | None:
+    """
+    Procesa encabezados frecuentes en normativa universitaria y administrativa general.
+    """
+    if len(stripped) > 180:
+        return None
+    for level, pattern in GENERIC_NORMATIVE_HEADING_PATTERNS:
+        if pattern.match(stripped):
+            return f"{'#' * level} {stripped}"
+    return None
+
+
 def normalize_headings(markdown: str) -> str:
     """
     Asegura que las secciones numeradas se convierten en títulos Markdown,
@@ -971,7 +992,8 @@ def normalize_headings(markdown: str) -> str:
             _process_level2_heading(stripped) or
             _process_level3_heading(stripped) or
             _process_spanish_ordinal_heading(stripped) or
-            _process_normative_heading(stripped)
+            _process_normative_heading(stripped) or
+            _process_generic_normative_heading(stripped)
         )
 
         if processed_line:

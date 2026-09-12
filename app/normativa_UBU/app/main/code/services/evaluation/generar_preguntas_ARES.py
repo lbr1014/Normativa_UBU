@@ -105,7 +105,7 @@ def good_chunk(text: str) -> bool:
 
     Comprueba que el chunk cumpla criterios de longitud y calidad:
     - Longitud entre 500 y 4000 caracteres.
-    - No está dominado por saltos de página (máximo 5 apariciones de \"Pagina\").
+    - No está dominado por saltos de página (máximo 5 apariciones de \"Página\").
 
     Args:
         text: Texto del chunk a validar.
@@ -119,7 +119,7 @@ def good_chunk(text: str) -> bool:
         return False
     if len(text) > 4000:
         return False
-    return not (text.count("Pagina") > 5 or text.count("Pág") > 5)
+    return not (text.count("Página") > 5 or text.count("Pág") > 5)
 
 
 def generate_qas_for_chunk(chunk: str, n: int = 2, model: str | None = None) -> list[dict]:
@@ -179,7 +179,7 @@ def pass_quality(question: str, answer: str, evidence: str, chunk: str) -> bool:
 def _build_shuffle_rng() -> secrets.SystemRandom | random.Random:
     """
     Construye un generador de números aleatorios para mezclar los chunks.
-    
+
     Returns:
         secrets.SystemRandom: Si no se especifica una semilla, se utiliza un generador criptográficamente seguro.
         random.Random: Si se especifica una semilla a través de ARES_SHUFFLE_SEED, se utiliza un generador determinista con esa semilla.
@@ -326,7 +326,7 @@ def main() -> None:
     questions = _accumulate_questions(chunks)
 
     if not questions:
-        raise SystemExit("No se pudieron generar preguntas automaticamente.")
+        raise SystemExit("No se pudieron generar preguntas automáticamente.")
 
     with open(QUESTIONS_PATH, "w", encoding="utf-8") as fh:
         json.dump(questions, fh, ensure_ascii=False, indent=2)

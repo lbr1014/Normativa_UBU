@@ -60,7 +60,7 @@ PROMPT_TEMPLATES: dict[str, str] = {
     - Concepto.
     - Cantidad, importe, porcentaje o formula exacta.
     - Ambito, periodo, colectivo o condicion a la que aplica.
-    - Pagina o apartado si consta en el contexto.
+    - Página o apartado si consta en el contexto.
     """,
     "deadlines": """
     Eres un especialista en plazos administrativos.
@@ -92,7 +92,7 @@ PROMPT_TEMPLATES: dict[str, str] = {
     Respuesta esperada:
     - Requisito.
     - A quien aplica.
-    - Documentacion o acreditacion exigida.
+    - Documentación o acreditacion exigida.
     - Umbrales, condiciones y excepciones.
     - Consecuencia de cumplirlo o incumplirlo.
     """,
@@ -195,7 +195,7 @@ PROMPT_TEMPLATES: dict[str, str] = {
     Respuesta esperada:
     - Canal o lugar de presentacion.
     - Plazo y hora limite si constan.
-    - Documentacion exigida.
+    - Documentación exigida.
     - Formato, firma o identificacion.
     - Organo competente.
     - Subsanacion o efectos de no presentar lo requerido.

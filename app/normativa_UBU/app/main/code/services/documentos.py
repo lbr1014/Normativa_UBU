@@ -1,6 +1,6 @@
-﻿"""
+"""
 Autora: Lydia Blanco Ruiz
-Script para gestionar documentos PDF, su sincronizaciÃ³n, conversiÃ³n a Markdown e indexaciÃ³n en la base de datos vectorial.
+Script para gestionar documentos PDF, su sincronización, conversión a Markdown e indexación en la base de datos vectorial.
 """
 
 from __future__ import annotations
@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
+from dataclasses import dataclass
 from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
@@ -26,9 +27,41 @@ DOCUMENTOS_RECOVERABLE_ERRORS = (OSError, RuntimeError, SQLAlchemyError, ValueEr
 REMOTE_CHUNKS_DELETE_ERROR = "No se pudieron eliminar chunks remotos de %s"
 UPLOAD_RESTORE_POSITION_ERROR = "Upload: could not restore stream position (%s): %s"
 
+
+@dataclass(frozen=True)
+class DocumentMetadata:
+    """
+    Metadatos documentales inferidos desde Markdown convertido.
+    """
+
+    title: str = ""
+    date: str = ""
+    issuing_body: str = ""
+    document_code: str = ""
+
+
+METADATA_SCAN_LINE_LIMIT = 140
+TITLE_MAX_LENGTH = 220
+DOCUMENT_CODE_PATTERNS = (
+    re.compile(r"\bCSV\s*[:\-]?\s*([A-Z0-9\-/]{8,})\b", re.IGNORECASE),
+    re.compile(r"\bC[ÓO]DIGO\s+SEGURO\s+DE\s+VERIFICACI[ÓO]N\s*[:\-]?\s*([A-Z0-9\-/]{8,})\b", re.IGNORECASE),
+    re.compile(r"\bEXP(?:EDIENTE)?\.?\s*(?:N[ÚU]M\.?|N[ºO]\.?|:)?\s*([A-Z0-9][A-Z0-9./\-_ ]{2,60})", re.IGNORECASE),
+)
+DATE_PATTERNS = (
+    re.compile(r"\bFECHA\s*:\s*(\d{1,2}/\d{1,2}/\d{4})(?:\s+\d{1,2}:\d{2})?", re.IGNORECASE),
+    re.compile(r"\b(\d{1,2}\s+de\s+[a-záéíóúñ]+\s+de\s+\d{4})\b", re.IGNORECASE),
+    re.compile(r"\b(\d{1,2}/\d{1,2}/\d{4})\b"),
+)
+ISSUING_BODY_PATTERNS = (
+    re.compile(r"\b(UNIVERSIDAD\s+DE\s+BURGOS)\b", re.IGNORECASE),
+    re.compile(r"\b(SECRETAR[ÍI]A\s+GENERAL)\b", re.IGNORECASE),
+    re.compile(r"\b(VICERRECTORADO\s+DE\s+[^#\n]{3,90})", re.IGNORECASE),
+    re.compile(r"\b(GERENCIA|RECTORADO|CONSEJO\s+DE\s+GOBIERNO|CLAUSTRO\s+UNIVERSITARIO)\b", re.IGNORECASE),
+)
+
 class JobCancelledError(RuntimeError):
     """
-    ExcepciÃ³n lanzada cuando un proceso largo se cancela manualmente.
+    Excepción lanzada cuando un proceso largo se cancela manualmente.
     """
 
 
@@ -64,11 +97,41 @@ def _normalize_text(value: str) -> str:
     return _normalize_document_text(value)
 
 
-def extract_document_title_from_markdown(markdown_content: str | None, fallback: str = "") -> str:
+def _strip_markdown_line(raw_line: str) -> str:
     """
-    Extrae un título documental legible desde Markdown convertido.
+    Limpia sintaxis Markdown/HTML simple para evaluar una línea como metadato.
     """
-    fallback = (fallback or "").strip()
+    line = re.sub(r"<!--.*?-->", " ", raw_line or "")
+    line = re.sub(r"^#{1,6}\s+", "", line).strip()
+    line = re.sub(r"^\s*[-*]\s+", "", line).strip()
+    line = re.sub(r"<[^>]+>", " ", line)
+    line = re.sub(r"\*\*([^*]+)\*\*", r"\1", line)
+    line = re.sub(r"\s+", " ", line).strip(" \t\r\n:-")
+    return line
+
+
+def _document_metadata_lines(markdown_content: str | None, limit: int = METADATA_SCAN_LINE_LIMIT) -> list[tuple[str, bool, int]]:
+    """
+    Devuelve líneas iniciales limpias con señal de si proceden de un encabezado Markdown.
+    """
+    lines: list[tuple[str, bool, int]] = []
+    for index, raw_line in enumerate((markdown_content or "").splitlines()):
+        if len(lines) >= limit:
+            break
+        line = _strip_markdown_line(raw_line)
+        if not line:
+            continue
+        lines.append((line, raw_line.lstrip().startswith("#"), index))
+    return lines
+
+
+def _is_metadata_noise(line: str) -> bool:
+    """
+    Detecta cabeceras, pies y campos administrativos que no deben convertirse en título.
+    """
+    normalized = _normalize_text(line)
+    if not normalized:
+        return True
     ignored_prefixes = (
         "ministerio ",
         "secretaria ",
@@ -81,35 +144,116 @@ def extract_document_title_from_markdown(markdown_content: str | None, fallback:
         "firmante",
         "fecha ",
         "notas ",
+        "pagina ",
+        "página ",
+        "universidad de burgos",
+        "sede electronica",
+        "sede electrónica",
+    )
+    if any(normalized.startswith(prefix) for prefix in ignored_prefixes):
+        return True
+    if re.fullmatch(r"[\W\d_]+", line):
+        return True
+    if re.search(r"\b\d{1,2}/\d{1,2}/\d{4}\b", line) and len(line) < 45:
+        return True
+    return bool(re.match(r"^(CSV|C[ÓO]DIGO SEGURO|FIRMADO POR|FECHA|P[ÁA]GINA)\b", line, flags=re.IGNORECASE))
+
+
+def _title_candidate_score(line: str, is_heading: bool, position: int) -> int:
+    """
+    Puntúa una línea como posible título documental.
+    """
+    if _is_metadata_noise(line) or len(line) < 8 or len(line) > TITLE_MAX_LENGTH:
+        return -100
+
+    normalized = _normalize_text(line)
+    score = 0
+    if is_heading:
+        score += 22
+    if position < 30:
+        score += max(0, 18 - position // 2)
+    if re.search(r"\b(reglamento|normativa|normas?|procedimiento|instrucci[oó]n|resoluci[oó]n|convocatoria|acuerdo|protocolo|plan|estatuto|carta|gu[ií]a|bases)\b", normalized):
+        score += 28
+    if re.search(r"\b(universidad de burgos|ubu|burgos)\b", normalized):
+        score += 6
+    if re.match(r"^(reglamento|normativa|normas?|procedimiento|instrucci[oó]n|resoluci[oó]n|convocatoria|acuerdo|protocolo|plan|estatuto|bases)\b", normalized):
+        score += 16
+    if re.match(r"^(t[ií]tulo|cap[ií]tulo|art[íi]culo|anexo|disposici[oó]n|secci[oó]n)\b", normalized):
+        score -= 18
+    if line.endswith(":"):
+        score -= 8
+
+    letters = [char for char in line if char.isalpha()]
+    if letters:
+        upper_ratio = sum(1 for char in letters if char.isupper()) / len(letters)
+        if upper_ratio >= 0.55:
+            score += 8
+        elif upper_ratio < 0.12 and not is_heading:
+            score -= 4
+
+    word_count = len(line.split())
+    if 3 <= word_count <= 24:
+        score += 8
+    elif word_count > 32:
+        score -= 12
+    return score
+
+
+def _best_title_candidate(markdown_content: str | None) -> str:
+    candidates = _document_metadata_lines(markdown_content)
+    if not candidates:
+        return ""
+    scored = [
+        (_title_candidate_score(line, is_heading, position), position, line)
+        for line, is_heading, position in candidates
+    ]
+    scored = [item for item in scored if item[0] >= 0]
+    if not scored:
+        return ""
+    scored.sort(key=lambda item: (-item[0], item[1]))
+    title = scored[0][2]
+    title = re.sub(r"^\d+\s+(?=[A-ZÁÉÍÓÚÜÑ])", "", title).strip()
+    return title
+
+
+def _first_pattern_match(lines: list[tuple[str, bool, int]], patterns: tuple[re.Pattern, ...]) -> str:
+    for line, _is_heading, _position in lines:
+        for pattern in patterns:
+            match = pattern.search(line)
+            if match:
+                return match.group(1).strip(" .;-")
+    return ""
+
+
+def extract_document_metadata_from_markdown(markdown_content: str | None, fallback_title: str = "") -> DocumentMetadata:
+    """
+    Extrae metadatos documentales básicos de forma tolerante a formatos distintos.
+    """
+    lines = _document_metadata_lines(markdown_content)
+    title = _best_title_candidate(markdown_content) or (fallback_title or "").strip()
+    return DocumentMetadata(
+        title=title,
+        date=_first_pattern_match(lines, DATE_PATTERNS),
+        issuing_body=_first_pattern_match(lines, ISSUING_BODY_PATTERNS),
+        document_code=_first_pattern_match(lines, DOCUMENT_CODE_PATTERNS),
     )
 
-    for raw_line in (markdown_content or "").splitlines()[:80]:
-        line = re.sub(r"^#{1,6}\s+", "", raw_line or "").strip()
-        line = re.sub(r"^\d+\s+(?=[A-ZÁÉÍÓÚÜÑ])", "", line).strip()
-        if len(line) < 12:
-            continue
-        normalized = _normalize_text(line)
-        if not normalized or any(normalized.startswith(prefix) for prefix in ignored_prefixes):
-            continue
-        letters = [char for char in line if char.isalpha()]
-        if letters and sum(1 for char in letters if char.isupper()) / len(letters) >= 0.65:
-            return line
-        if raw_line.lstrip().startswith("#"):
-            return line
 
-    return fallback
+def extract_document_title_from_markdown(markdown_content: str | None, fallback: str = "") -> str:
+    """
+    Extrae un título documental legible desde Markdown convertido.
+    """
+    return extract_document_metadata_from_markdown(markdown_content, fallback_title=fallback).title
 
 
 def extract_pdf_footer_date(markdown_content: str | None) -> str:
     """
     Extrae la fecha documental del pie de página cuando aparece como "FECHA : dd/mm/yyyy hh:mm".
     """
-    matches = re.findall(
-        r"\bFECHA\s*:\s*(\d{1,2}/\d{1,2}/\d{4})(?:\s+\d{1,2}:\d{2})?",
-        markdown_content or "",
-        flags=re.IGNORECASE,
-    )
-    return matches[-1] if matches else ""
+    metadata_date = extract_document_metadata_from_markdown(markdown_content).date
+    if metadata_date:
+        return metadata_date
+    return ""
 
 
 def infer_document_metadata_from_filename(filename: str) -> tuple[str | None, str | None]:
@@ -120,7 +264,7 @@ def infer_document_metadata_from_filename(filename: str) -> tuple[str | None, st
         filename: Nombre del archivo PDF.
 
     Returns:
-        Una tupla con el NÃºmero de expediente y el tipo de documento.
+        Una tupla con el Número de expediente y el tipo de documento.
     """
     inferred = Documento.infer_metadata_from_filename(filename)
     if inferred is None:
@@ -136,8 +280,8 @@ def infer_document_metadata_from_filename(filename: str) -> tuple[str | None, st
 
 class DocumentosService:
     """
-    Servicio de gestion documental para archivos, Markdown e indexaciÃ³n.
-    Proporciona mÃ©todos para guardar archivos, sincronizar con el sistema de archivos, convertir a Markdown y preparar documentos para indexaciÃ³n vectorial.
+    Servicio de gestion documental para archivos, Markdown e indexación.
+    Proporciona métodos para guardar archivos, sincronizar con el sistema de archivos, convertir a Markdown y preparar documentos para indexación vectorial.
     """
 
     def __init__(
@@ -154,8 +298,8 @@ class DocumentosService:
         Args:
             docs_dir: Directorio base donde se almacenan los PDFs.
             index_documents_dir: Dependencia para indexar documentos por directorio.
-            delete_chunks: FunciÃ³n que elimina chunks previos del indice.
-            markdown_converter: FunciÃ³n opcional para convertir PDFs a Markdown.
+            delete_chunks: Función que elimina chunks previos del indice.
+            markdown_converter: Función opcional para convertir PDFs a Markdown.
         """
         if index_documents_dir is None:
             index_documents_dir = legacy_dependencies.pop("index_pliegos_dir", None)
@@ -193,12 +337,12 @@ class DocumentosService:
             La ruta absoluta donde debe almacenarse el PDF.
         """
         safe = self.filename(filename)
-        
+
         if not safe:
             raise ValueError("Nombre de archivo invalido")
 
         if Path(safe).suffix.lower() not in ALLOWED_EXT:
-            raise ValueError("ExtensiÃ³n no permitida")
+            raise ValueError("Extensión no permitida")
 
         return self.docs_dir / safe
 
@@ -209,10 +353,10 @@ class DocumentosService:
         Args:
             stream (_type_): Stream del archivo subido.
             file_storage (_type_): Almacenamiento del archivo.
-            size (int): TamaÃ±o del fragmento a leer.
+            size (int): Tamaño del fragmento a leer.
 
         Returns:
-            bytes: El fragmento de datos leÃ­do.
+            bytes: El fragmento de datos leído.
         """
         raw_filename = getattr(file_storage, "filename", "-")
         try:
@@ -240,7 +384,7 @@ class DocumentosService:
 
     def _is_pdf_upload(self, file_storage) -> bool:  # NOSONAR
         """
-        Comprueba extensiÃ³n y firma del archivo subido sin consumir el stream.
+        Comprueba extensión y firma del archivo subido sin consumir el stream.
 
         Args:
             file_storage: Archivo recibido desde un formulario Flask-WTF.
@@ -251,7 +395,7 @@ class DocumentosService:
         """
         filename = self.filename(getattr(file_storage, "filename", ""))
         if not filename or Path(filename).suffix.lower() not in ALLOWED_EXT:
-            logger.warning("Upload rechazado: extensiÃ³n no permitida (%s).", getattr(file_storage, "filename", "-"))
+            logger.warning("Upload rechazado: extensión no permitida (%s).", getattr(file_storage, "filename", "-"))
             return False
 
         stream = getattr(file_storage, "stream", None)
@@ -261,7 +405,7 @@ class DocumentosService:
             return False
 
         # Intentar validar la firma sin consumir el stream.
-        # En algunos flujos el puntero no estÃ¡ al inicio cuando llegamos aquÃ­.
+        # En algunos flujos el puntero no está al inicio cuando llegamos aquí.
         if hasattr(stream, "seekable") and stream.seekable():
             try:
                 position = stream.tell()
@@ -314,25 +458,25 @@ class DocumentosService:
                     content_type,
                     header_bytes[:32],
                 )
-                # Ãšltimo fallback: si el navegador/werkzeug lo marca como PDF, lo aceptamos.
+                # Último fallback: si el navegador/werkzeug lo marca como PDF, lo aceptamos.
                 if "application/pdf" in (mimetype, content_type):
                     return True
             return True
 
         # Si no es seekable, no podemos comprobar firma sin consumir el stream.
-        logger.warning("Upload: stream no seekable (%s). Se acepta por extensiÃƒÂ³n.", getattr(file_storage, "filename", "-"))
+        logger.warning("Upload: stream no seekable (%s). Se acepta por extensión.", getattr(file_storage, "filename", "-"))
         return True
 
     def list_documents_paginated(self, page: int, per_page: int) -> object:
         """
-        Obtiene documentos paginados ordenados por fecha de modificaciÃ³n.
+        Obtiene documentos paginados ordenados por fecha de modificación.
 
         Args:
-            page: NÃºmero de pÃ¡gina solicitado.
-            per_page: NÃºmero de elementos por pÃ¡gina.
+            page: Número de página solicitado.
+            per_page: Número de elementos por página.
 
         Returns:
-            El objeto de paginaciÃ³n devuelto por SQLAlchemy.
+            El objeto de paginación devuelto por SQLAlchemy.
         """
 
         return Documento.query.order_by(Documento.modified_at.desc()).paginate(
@@ -374,10 +518,10 @@ class DocumentosService:
 
         Args:
             docs: Coleccion opcional de documentos a evaluar.
-                Si no se proporciona, se evaluarÃ¡n todos los documentos de la base de datos.
+                Si no se proporciona, se evaluarán todos los documentos de la base de datos.
 
         Returns:
-            El NÃºmero de documentos sin Markdown disponible.
+            El Número de documentos sin Markdown disponible.
         """
         if docs is None:
             docs = Documento.query.all()
@@ -392,7 +536,7 @@ class DocumentosService:
             files: Coleccion de archivos recibidos en una subida.
 
         Returns:
-            El nÃºmero de PDFs guardados.
+            El número de PDFs guardados.
         """
         saved = 0
         for f in files:
@@ -427,8 +571,8 @@ class DocumentosService:
         Elimina registros y relaciones de documentos que ya no existen.
 
         Returns:
-            El NÃºmero de documentos eliminados de la base de datos.
-        
+            El Número de documentos eliminados de la base de datos.
+
         Raises:
             OSError: Si ocurre un error al eliminar un PDF o sus chunks relacionados.
         """
@@ -479,7 +623,7 @@ class DocumentosService:
 
         Args:
             doc_id: Identificador del documento que se va a borrar.
-            
+
         Raises:
             OSError: Si ocurre un error al eliminar el PDF o sus chunks relacionados.
             RuntimeError: Si no se puede eliminar el documento.
@@ -547,14 +691,14 @@ class DocumentosService:
 
         Args:
             doc: Documento que se quiere convertir.
-            on_page_start: Callback opcional invocado al comenzar cada pÃ¡gina.
+            on_page_start: Callback opcional invocado al comenzar cada página.
 
         Returns:
             ``True`` si se genero un Markdown nuevo.
-            ``False`` si el documento ya tenÃ­a Markdown o no se pudo generar.   
-            
-        Raises: 
-            RuntimeError: Si no se pudo generar Markdown y no existÃ­a previamente.
+            ``False`` si el documento ya tenía Markdown o no se pudo generar.
+
+        Raises:
+            RuntimeError: Si no se pudo generar Markdown y no existía previamente.
             FileNotFoundError: Si el PDF no existe en disco.
         """
         if doc.markdown_content:
@@ -586,7 +730,7 @@ class DocumentosService:
         Separa los documentos pendientes de los ya resueltos.
 
         Returns:
-            Una tupla con la lista de pendientes y el NÃºmero de omitidos.
+            Una tupla con la lista de pendientes y el Número de omitidos.
         """
         docs = Documento.query.order_by(Documento.modified_at.desc()).all()
         pending_docs: list[Documento] = []
@@ -609,12 +753,12 @@ class DocumentosService:
 
     def _build_markdown_page_callback(self, on_page_start, doc_index: int, total_docs: int) -> callable | None:
         """
-        Crea el callback de progreso por pÃ¡gina para Markdown.
+        Crea el callback de progreso por página para Markdown.
 
         Args:
-            on_page_start: Callback externo de progreso por pÃ¡gina.
+            on_page_start: Callback externo de progreso por página.
             doc_index: Posicion del documento actual.
-            total_docs: NÃºmero total de documentos del lote.
+            total_docs: Número total de documentos del lote.
 
         Returns:
             Un callback listo para el conversor o ``None``.
@@ -625,7 +769,7 @@ class DocumentosService:
 
         def page_callback(page: int, total_pages: int) -> None:
             """
-            Callback interno que adapta la informaciÃ³n de pÃ¡gina al formato esperado por el callback externo.
+            Callback interno que adapta la información de página al formato esperado por el callback externo.
             """
             on_page_start(doc_index, total_docs, page, total_pages)
 
@@ -647,9 +791,9 @@ class DocumentosService:
         Args:
             doc: Documento que se va a procesar.
             doc_index: Posicion del documento actual.
-            total_docs: NÃºmero total de documentos del lote.
+            total_docs: Número total de documentos del lote.
             on_current_doc: Callback opcional al iniciar un documento.
-            on_page_start: Callback opcional al iniciar una pÃ¡gina.
+            on_page_start: Callback opcional al iniciar una página.
 
         Returns:
             ``converted``, ``skipped`` o ``failed`` segun el resultado.
@@ -674,7 +818,7 @@ class DocumentosService:
 
         Args:
             doc: Documento que se va a reindexar.
-            require_pdf: Si es ``True``, se lanzarÃ¡ un error si el PDF no existe en disco.
+            require_pdf: Si es ``True``, se lanzará un error si el PDF no existe en disco.
 
         Returns:
             La ruta del PDF listo para ser indexado.
@@ -694,39 +838,44 @@ class DocumentosService:
     def _index_vector_document(self, doc: Documento, index_pdf) -> int:
 
         """
-        Indexa un documento y actualiza su estado y NÃºmero de chunks.
+        Indexa un documento y actualiza su estado y Número de chunks.
 
         Args:
             doc: Documento que se va a indexar.
-            index_pdf: FunciÃ³n que genera los chunks vectoriales.
+            index_pdf: Función que genera los chunks vectoriales.
 
         Returns:
-            El NÃºmero de chunks indexados para el documento.
+            El Número de chunks indexados para el documento.
         """
         use_markdown = bool(doc.markdown_content)
         pdf_path = self._prepare_document_for_vector_update(doc, require_pdf=not use_markdown)
 
         if use_markdown:
             from .rag.PrototipoRAG import index_markdown
+            document_metadata = extract_document_metadata_from_markdown(doc.markdown_content, Path(doc.nombre).stem)
 
             vector_docs = index_markdown(
                 doc.markdown_content or "",
                 filename=Path(doc.path).name,
-                title=extract_document_title_from_markdown(doc.markdown_content, Path(doc.nombre).stem),
-                pdf_date=extract_pdf_footer_date(doc.markdown_content),
+                title=document_metadata.title,
+                pdf_date=document_metadata.date,
                 sha256=getattr(doc, "hash", "") or "",
                 document_id=doc.id,
                 numero_expediente=getattr(doc, "numero_expediente", None),
+                tipo_documento=getattr(doc, "tipo_documento", None),
+                issuing_body=document_metadata.issuing_body,
+                document_code=document_metadata.document_code,
             )
         else:
             vector_docs = index_pdf(
                 pdf_path,
                 document_id=doc.id,
                 numero_expediente=getattr(doc, "numero_expediente", None),
+                tipo_documento=getattr(doc, "tipo_documento", None),
             )
 
         if not vector_docs:
-            raise RuntimeError("index_pdf devolviÃ³ 0 chunks (PDF sin texto o ruta invÃ¡lida)")
+            raise RuntimeError("index_pdf devolvió 0 chunks (PDF sin texto o ruta inválida)")
 
         update_sql(doc, vector_docs)
         db.session.commit()
@@ -762,7 +911,7 @@ class DocumentosService:
             on_progress: Callback opcional para informar del progreso total.
             on_current_doc: Callback opcional al comenzar un documento.
             should_cancel: Callback opcional para comprobar cancelacion.
-            on_page_start: Callback opcional al comenzar una pÃ¡gina.
+            on_page_start: Callback opcional al comenzar una página.
 
         Returns:
             Un resumen con convertidos, fallidos, omitidos y total.
@@ -775,7 +924,7 @@ class DocumentosService:
                 result (str): Resultado de procesar un documento, puede ser "converted", "skipped" o "failed".
 
             Returns:
-                tuple[int, int, int]: NÃºmero de documentos convertidos, fallidos y omitidos.
+                tuple[int, int, int]: Número de documentos convertidos, fallidos y omitidos.
             """
             if result == "converted":
                 return 1, 0, 0
@@ -785,7 +934,7 @@ class DocumentosService:
 
         def _convert_one(doc: Documento, index: int, total_docs: int) -> str:
             """
-            Convierte un documento a Markdown y maneja cancelaciÃ³n.
+            Convierte un documento a Markdown y maneja cancelación.
 
             Args:
                 doc (Documento): documento que se va a procesar.
@@ -799,7 +948,7 @@ class DocumentosService:
                 str: El resultado del procesamiento del documento, que puede ser "converted", "skipped" o "failed".
             """
             if should_cancel and should_cancel():
-                raise JobCancelledError("ConversiÃ³n a Markdown cancelada por el usuario.")
+                raise JobCancelledError("Conversión a Markdown cancelada por el usuario.")
             return self._process_pending_markdown_doc(
                 doc,
                 index,
@@ -835,10 +984,10 @@ class DocumentosService:
     @staticmethod
     def _page_count_exceptions() -> tuple[type[Exception], ...]:
         """
-        Obtiene las excepciones relacionadas con el conteo de pÃ¡ginas.
+        Obtiene las excepciones relacionadas con el conteo de páginas.
 
         Returns:
-            tuple[type[Exception], ...]: Una tupla con las clases de excepciÃ³n que pueden ocurrir al contar pÃ¡ginas de un PDF.
+            tuple[type[Exception], ...]: Una tupla con las clases de excepción que pueden ocurrir al contar páginas de un PDF.
         """
         try:
             from pdf2image.exceptions import (
@@ -847,13 +996,13 @@ class DocumentosService:
                 PDFSyntaxError,
             )
         except ImportError:
-            class PDFInfoNotInstalledError(Exception):  
+            class PDFInfoNotInstalledError(Exception):
                 pass
 
-            class PDFPageCountError(Exception):  
+            class PDFPageCountError(Exception):
                 pass
 
-            class PDFSyntaxError(Exception):  
+            class PDFSyntaxError(Exception):
                 pass
 
         return (
@@ -867,7 +1016,7 @@ class DocumentosService:
 
     def _sort_docs_by_page_count(self, docs: list[Documento]) -> list[Documento]:
         """
-        Ordena los documentos por cantidad de pÃ¡ginas.
+        Ordena los documentos por cantidad de páginas.
 
         Args:
             docs (list[Documento]): documentos a ordenar.
@@ -893,7 +1042,7 @@ class DocumentosService:
         docs_with_pages.sort(key=lambda item: (item[0], str(item[1].nombre or "")))
         return [doc for _, doc in docs_with_pages]
 
-    
+
     def update_vector_db(self, on_progress=None, on_current_doc=None, should_cancel=None) -> dict[str, int]:
         """
         Actualiza la base de datos vectorial con los documentos pendientes.
@@ -917,7 +1066,7 @@ class DocumentosService:
 
         for i, doc in enumerate(docs, start=1):
             if should_cancel and should_cancel():
-                raise JobCancelledError("ActualizaciÃ³n cancelada por el usuario.")
+                raise JobCancelledError("Actualización cancelada por el usuario.")
             if on_current_doc:
                 on_current_doc(doc.nombre)
 

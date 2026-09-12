@@ -1,7 +1,7 @@
 """
 Autora: Lydia Blanco Ruiz
 Utilidades para priorizar respuestas del modelo (RAG/LLM) sobre procesos largos (OCR/Markdown).
-Cuando hay una generación RAG en curso, se marca un "busy flag" global y los procesos largos pueden 
+Cuando hay una generación RAG en curso, se marca un "busy flag" global y los procesos largos pueden
 consultar ese flag y esperar hasta que se libere.
 """
 
@@ -19,9 +19,9 @@ _rag_active_event = threading.Event()
 def is_rag_active() -> bool:
     """
     Indica si actualmente hay una generación RAG/LLM activa.
-    Los procesos largos (OCR/Markdown) pueden usar esta información para decidir esperar antes de hacer peticiones a Ollama, 
+    Los procesos largos (OCR/Markdown) pueden usar esta información para decidir esperar antes de hacer peticiones a Ollama,
     reduciendo la latencia percibida por el usuario.
-    
+
     Returns:
         bool: ``True`` si hay una generación RAG activa, ``False`` en caso contrario.
     """
@@ -62,7 +62,7 @@ async def ollama_request_slot_background_async(*, poll_timeout_s: float = 0.25):
     Variante para procesos largos (OCR/Markdown).
 
     Garantiza que si hay una consulta RAG activa, el background job espere y no
-    inicie nuevas peticiones a Ollama. Esto no puede interrumpir una peticiÃ³n ya
+    inicie nuevas peticiones a Ollama. Esto no puede interrumpir una petición ya
     en vuelo, pero evita que se lancen nuevas peticiones de OCR mientras el
     usuario espera respuesta.
     """
@@ -96,10 +96,10 @@ def wait_for_rag_idle(timeout: float | None = None) -> bool:
 async def wait_for_rag_idle_async(*, poll_timeout_s: float = 0.5) -> None:
     """
     Espera de forma async-friendly hasta que no haya RAG activo.
-    
+
     Args:
         poll_timeout_s: Intervalo en segundos para revisar el estado del flag. Por defecto 0.5s.
-    
+
     """
     while _rag_active_event.is_set():
         await asyncio.to_thread(_rag_active_event.wait, poll_timeout_s)
