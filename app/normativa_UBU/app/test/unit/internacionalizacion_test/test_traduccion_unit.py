@@ -1,7 +1,7 @@
 """
 Pruebas unitarias para el módulo de internacionalización y traducción.
-Su objetivo es verificar el correcto funcionamiento de la gestión de idiomas, la recuperación de traducciones, la localización dinámica de mensajes, 
-la traducción de formularios y la inicialización de los componentes de internacionalización dentro de Flask. Las pruebas garantizan que la aplicación pueda mostrar 
+Su objetivo es verificar el correcto funcionamiento de la gestión de idiomas, la recuperación de traducciones, la localización dinámica de mensajes,
+la traducción de formularios y la inicialización de los componentes de internacionalización dentro de Flask. Las pruebas garantizan que la aplicación pueda mostrar
 correctamente textos y mensajes en distintos idiomas, así como gestionar adecuadamente situaciones en las que faltan traducciones o configuraciones específicas.
 """
 
@@ -83,7 +83,7 @@ class TraduccionUnitTest(BaseAppTestCase):
             )
             self.assertIn(
                 "markdown.converting_doc_page",
-                tarduccion.localize_runtime_message("Convirtiendo doc.pdf... Pagina 1/3", "en"),
+                tarduccion.localize_runtime_message("Convirtiendo doc.pdf... Página 1/3", "en"),
             )
             self.assertIn(
                 "markdown.converting_doc",
@@ -189,11 +189,11 @@ class TraduccionUnitTest(BaseAppTestCase):
         self.assertEqual(valid.headers["Location"], "/target")
         with self.client.session_transaction() as client_session:
             self.assertEqual(client_session["lang"], "en")
-            
+
 class TarduccionRuntimeMessagesUnitTest(unittest.TestCase):
     def test_localize_runtime_message_translates_when_message_is_i18n_key(self):
         """
-        Verifica que los mensajes de ejecución que corresponden a claves de internacionalización 
+        Verifica que los mensajes de ejecución que corresponden a claves de internacionalización
         son traducidos correctamente al idioma solicitado utilizando el sistema de traducciones de la aplicación.
         """
         out = tarduccion.localize_runtime_message("common.email", lang="es")

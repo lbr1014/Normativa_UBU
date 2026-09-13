@@ -1,7 +1,7 @@
 """
 Autora: Lydia Blanco Ruiz
-Script con pruebas unitarias para generar_preguntas_ARES, encargado de generar automáticamente preguntas, respuestas y evidencias a partir de los documentos indexados en el 
-sistema RAG para construir conjuntos de evaluación destinados a ARES. Las pruebas verifican la limpieza y filtrado de fragmentos documentales, la generación de preguntas mediante LLM, 
+Script con pruebas unitarias para generar_preguntas_ARES, encargado de generar automáticamente preguntas, respuestas y evidencias a partir de los documentos indexados en el
+sistema RAG para construir conjuntos de evaluación destinados a ARES. Las pruebas verifican la limpieza y filtrado de fragmentos documentales, la generación de preguntas mediante LLM,
 la validación de calidad de las preguntas generadas, la eliminación de duplicados, la gestión de la paginación de documentos y la creación del fichero final de preguntas.
 """
 
@@ -70,7 +70,7 @@ class GenerarPreguntasARESUnitTest(BaseAppTestCase):
         self.assertFalse(m.good_chunk(""))
         self.assertFalse(m.good_chunk("x" * 499))
         self.assertFalse(m.good_chunk("x" * 4001))
-        self.assertFalse(m.good_chunk(("a " * 600) + ("Pagina " * 6)))
+        self.assertFalse(m.good_chunk(("a " * 600) + ("Página " * 6)))
         self.assertTrue(m.good_chunk("a" * 600))
 
     def test_iter_chunks_paginates_until_offset_none(self):

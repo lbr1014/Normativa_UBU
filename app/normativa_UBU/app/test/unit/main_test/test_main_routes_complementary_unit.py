@@ -1,8 +1,8 @@
 """
 Autora: Lydia Blanco Ruiz
-Script con pruebas unitarias complementarias para las rutas pricipales de la aplicaicón. Su objetivo es verificar ramas de ejecución menos frecuentes
-relacionadas con el historial de consultas, la generación de estadísticas de uso, la construcción de métricas para la interfaz de usuario, 
-la gestión de perfiles y la actualización de datos de usuario. Las pruebas validan el correcto funcionamiento de filtros, cálculos estadísticos, 
+Script con pruebas unitarias complementarias para las rutas principales de la aplicación. Su objetivo es verificar ramas de ejecución menos frecuentes
+relacionadas con el historial de consultas, la generación de estadísticas de uso, la construcción de métricas para la interfaz de usuario,
+la gestión de perfiles y la actualización de datos de usuario. Las pruebas validan el correcto funcionamiento de filtros, cálculos estadísticos,
 mecanismos de visualización y operaciones auxiliares utilizadas por las vistas principales de la aplicación.
 """
 
@@ -25,7 +25,7 @@ from app.test.support import BaseAppTestCase
 class MainRoutesAdditionalCoverageUnitTest(BaseAppTestCase):
     def test_apply_history_filters_date_device_model_and_invalid_date(self):
         """
-        Verifica la aplicación de filtros sobre el historial de consultas utilizando fecha, dispositivo de ejecución y modelo empleado, 
+        Verifica la aplicación de filtros sobre el historial de consultas utilizando fecha, dispositivo de ejecución y modelo empleado,
         incluyendo el tratamiento de fechas inválidas.
         """
         admin = self.create_user(email="hist-admin@example.com", is_admin=True)
@@ -121,7 +121,7 @@ class MainRoutesAdditionalCoverageUnitTest(BaseAppTestCase):
 
     def test_build_home_query_donut_admin_and_global_segments(self):
         """
-        Verifica la generación de los datos utilizados por el gráfico de consultas de la página principal tanto para administradores 
+        Verifica la generación de los datos utilizados por el gráfico de consultas de la página principal tanto para administradores
         como para usuarios normales.
         """
         admin = self.create_user(email="donut-admin@example.com", is_admin=True)
@@ -176,7 +176,7 @@ class MainRoutesAdditionalCoverageUnitTest(BaseAppTestCase):
 
     def test_apply_edit_user_form_when_email_exists(self):
         """
-        Comprueba que la actualización del perfil de usuario se rechaza cuando se intenta utilizar una dirección 
+        Comprueba que la actualización del perfil de usuario se rechaza cuando se intenta utilizar una dirección
         de correo electrónico ya registrada por otro usuario.
         """
         self.create_user(email="exists@example.com")
@@ -199,7 +199,7 @@ class MainRoutesAdditionalCoverageUnitTest(BaseAppTestCase):
 
     def test_update_profile_email_when_field_empty(self):
         """
-        Verifica que la actualización del correo electrónico se considera válida cuando el campo correspondiente se deja vacío y 
+        Verifica que la actualización del correo electrónico se considera válida cuando el campo correspondiente se deja vacío y
         no requiere modificación.
         """
         user = self.create_user(email="email-empty@example.com")

@@ -1,8 +1,8 @@
 """
 Autora: Lydia Blanco Ruiz
-Script con pruebas de integracion adicionales de las rutas principales de la aplicaicón (controllers.main.routes). Su objetivo es 
-verificar escenarios menos frecuentes relacionados con la gestión de cuentas de usuario, la eliminación masiva de consultas, 
-la visualización de imágenes de perfil y la validación de formularios de edición de usuario. 
+Script con pruebas de integración adicionales de las rutas principales de la aplicación (controllers.main.routes). Su objetivo es
+verificar escenarios menos frecuentes relacionados con la gestión de cuentas de usuario, la eliminación masiva de consultas,
+la visualización de imágenes de perfil y la validación de formularios de edición de usuario.
 Las pruebas cubren distintas situaciones de error, permisos y validaciones, reforzando la cobertura de las funcionalidades principales
 accesibles para los usuarios autenticados.
 """
@@ -17,7 +17,7 @@ from app.test.support import BaseAppTestCase
 class MainRoutesAdditionalCoverageIntegrationTest(BaseAppTestCase):
     def test_delete_own_account_invalid_form_and_missing_user(self):
         """
-        Verifica el comportamiento de la eliminación de cuentas cuando el formulario es inválido o cuando el usuario asociado 
+        Verifica el comportamiento de la eliminación de cuentas cuando el formulario es inválido o cuando el usuario asociado
         ya no existe en el sistema.
         """
         user = self.create_user(email="del-own@example.com")
@@ -82,7 +82,7 @@ class MainRoutesAdditionalCoverageIntegrationTest(BaseAppTestCase):
 
     def test_profile_image_route_uses_send_from_directory(self):
         """
-        Verifica que las imágenes de perfil almacenadas en el sistema pueden recuperarse correctamente mediante la ruta 
+        Verifica que las imágenes de perfil almacenadas en el sistema pueden recuperarse correctamente mediante la ruta
         pública correspondiente.
         """
         user = self.create_user(email="profile-img@example.com")

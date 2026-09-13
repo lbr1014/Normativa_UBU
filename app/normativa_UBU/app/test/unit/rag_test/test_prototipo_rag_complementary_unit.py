@@ -1,8 +1,8 @@
 """
 Autora: Lydia Blanco Ruiz
-Script con pruebas unitarias para el modulo PrototipoRAG, centrada en cubrir rutas de ejecución poco frecuentes relacionadas con la 
+Script con pruebas unitarias para el módulo PrototipoRAG, centrada en cubrir rutas de ejecución poco frecuentes relacionadas con la
 importación de dependencias opcionales, la serialización de datos y la indexación documental.
-Las pruebas verifican el comportamiento del sistema cuando determinadas librerías no están disponibles, la gestión de datos no serializables, 
+Las pruebas verifican el comportamiento del sistema cuando determinadas librerías no están disponibles, la gestión de datos no serializables,
 la detección del dispositivo de ejecución de Ollama y distintos casos límite durante la indexación de documentos PDF.
 """
 
@@ -48,13 +48,13 @@ def _load_prototipo_with_import_block(block_name: str):
         class SentenceTransformer:
             def __init__(self, *args, **kwargs):
                 """
-                Inicializa el SentenceTransformer salso con una longitud de secuencia por defecto.
+                Inicializa el SentenceTransformer falso con una longitud de secuencia por defecto.
                 """
                 self.max_seq_length = 512
 
             def encode(self, *args, **kwargs):
                 """
-                Devuelve un embedding para las entradas poroporcionadas.
+                Devuelve un embedding para las entradas proporcionadas.
                 """
                 return [0.0, 0.0, 0.0]
 
@@ -76,7 +76,7 @@ def _load_prototipo_with_import_block(block_name: str):
 class PrototipoRAGAdditionalCoverageUnitTest(unittest.TestCase):
     def test_import_without_torch_hits_importerror_branch(self):
         """
-        Verifica que el módulo se inicializa correctamente cuando la biblioteca torch no está disponible y se 
+        Verifica que el módulo se inicializa correctamente cuando la biblioteca torch no está disponible y se
         ejecuta la rama de recuperación correspondiente.
         """
         m = _load_prototipo_with_import_block("torch")
@@ -94,7 +94,7 @@ class PrototipoRAGAdditionalCoverageUnitTest(unittest.TestCase):
 
     def test_infer_device_from_ollama_ps_payload_skips_non_matching_model(self):
         """
-        Verifica que únicamente se analiza la información correspondiente al modelo solicitado, ignorando el resto de modelos presentes en la 
+        Verifica que únicamente se analiza la información correspondiente al modelo solicitado, ignorando el resto de modelos presentes en la
         respuesta de Ollama.
         """
         m = _load_prototipo_with_import_block("torch")
@@ -103,7 +103,7 @@ class PrototipoRAGAdditionalCoverageUnitTest(unittest.TestCase):
 
     def test_to_jsonable_handles_item_errors(self):
         """
-        Comprueba la conversión segura de estructuras de datos a formatos serializables gestionando correctamente errores producidos durante la 
+        Comprueba la conversión segura de estructuras de datos a formatos serializables gestionando correctamente errores producidos durante la
         obtención de valores internos.
         """
         m = _load_prototipo_with_import_block("torch")
@@ -111,7 +111,7 @@ class PrototipoRAGAdditionalCoverageUnitTest(unittest.TestCase):
         class WithItem:
             def item(self):
                 """
-                Lanza un error al intentar recuperar el valor del elemento.           
+                Lanza un error al intentar recuperar el valor del elemento.
                 """
                 raise ValueError("boom")
 

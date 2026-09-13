@@ -1,9 +1,9 @@
 """
 Autora: Lydia Blanco Ruiz
-Script con pruebas unitarias del servicio de documentos (DocumentosService). Su objetivo es verificar todo el ciclo de vida de los documentos 
-dentro de la aplicación. Carga y validación de archivos PDF, sincronización con el sistema de archivos, conversión a Markdown, 
-gestión de metadatos, indexación vectorial, almacenamiento de fragmentos y embeddings, eliminación de documentos y 
-mantenimiento de la consistencia entre la base de datos, el almacenamiento local y la base de datos vectorial. 
+Script con pruebas unitarias del servicio de documentos (DocumentosService). Su objetivo es verificar todo el ciclo de vida de los documentos
+dentro de la aplicación. Carga y validación de archivos PDF, sincronización con el sistema de archivos, conversión a Markdown,
+gestión de metadatos, indexación vectorial, almacenamiento de fragmentos y embeddings, eliminación de documentos y
+mantenimiento de la consistencia entre la base de datos, el almacenamiento local y la base de datos vectorial.
 Las pruebas cubren tanto escenarios normales de funcionamiento como situaciones de error, cancelación y actualización de documentos ya existentes.
 """
 
@@ -23,6 +23,9 @@ from app.main.code.services.documentos import (
     DocumentosService,
     JobCancelledError,
     _normalize_text,
+    extract_document_metadata_from_markdown,
+    extract_document_title_from_markdown,
+    extract_pdf_footer_date,
     infer_document_metadata_from_filename,
     update_sql,
 )
@@ -56,6 +59,43 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
         self.assertEqual(infer_document_metadata_from_filename("sin_metadatos.pdf"), (None, None))
         self.assertEqual(infer_document_metadata_from_filename("EXP-123__Anexo_general.pdf"), (None, None))
         self.assertEqual(_normalize_text("  Ágil   Técnico  "), "agil   tecnico")
+
+    def test_extract_document_metadata_from_generic_ubu_normativa(self):
+        """
+        Comprueba que los metadatos se extraen de normativa UBU generica y no solo de pliegos.
+        """
+        markdown = """
+Universidad de Burgos
+Secretaria General
+CSV: ABCD-1234-EFGH-5678
+
+# Reglamento de evaluacion de la Universidad de Burgos
+
+Aprobado por Consejo de Gobierno el 12 de marzo de 2024.
+
+Articulo 1. Objeto
+"""
+
+        metadata = extract_document_metadata_from_markdown(markdown, fallback_title="fallback")
+
+        self.assertEqual(metadata.title, "Reglamento de evaluacion de la Universidad de Burgos")
+        self.assertEqual(metadata.issuing_body, "Universidad de Burgos")
+        self.assertEqual(metadata.document_code, "ABCD-1234-EFGH-5678")
+        self.assertEqual(metadata.date, "12 de marzo de 2024")
+        self.assertEqual(extract_document_title_from_markdown(markdown, "fallback"), metadata.title)
+
+    def test_extract_document_metadata_ignores_administrative_headers_and_uses_fallback(self):
+        """
+        Evita que CSV, fechas y paginacion se confundan con el titulo documental.
+        """
+        markdown = """
+CODIGO SEGURO DE VERIFICACION: XYZXYZXYZ
+FECHA : 03/04/2025 12:30
+Página 1
+"""
+
+        self.assertEqual(extract_document_title_from_markdown(markdown, "archivo"), "archivo")
+        self.assertEqual(extract_pdf_footer_date(markdown), "03/04/2025")
 
     def test_resolve_pdf_path_rejects_empty_or_non_pdf_names(self):
         """
@@ -252,7 +292,7 @@ class DocumentosServiceUnitTest(BaseAppTestCase):
     def test_sync_from_folder_creates_or_updates_document_metadata(self):
         """
         Comprueba la sincronización de documentos desde el sistema de archivos y la actualización de sus metadatos.
-        Verifica que los documentos se crean o actualizan correctamente en la base de datos según su presencia en el directorio y 
+        Verifica que los documentos se crean o actualizan correctamente en la base de datos según su presencia en el directorio y
         cambios detectados en el archivo PDF, incluyendo la gestión del contenido Markdown asociado.
         """
         service = self._service()

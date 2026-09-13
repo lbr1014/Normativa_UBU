@@ -1,9 +1,9 @@
 """
 Autora: Lydia Blanco Ruiz
-Script con pruebas de integración de las rutas pricipales de la aplicación. Su objetivo es verificar las funcionalidades accesibles
+Script con pruebas de integración de las rutas principales de la aplicación. Su objetivo es verificar las funcionalidades accesibles
 para los usuarios autenticados, incluyendo la visualización de la página principal, la edición del perfil, la gestión de preferencias,
-el historial de consultas, las estadísticas de uso y la eliminación de consultas y cuentas de usuario. Las pruebas validan tanto los flujos 
-de operación habituales como distintos escenarios de validación, permisos y gestión de datos, garantizando el correcto comportamiento de las 
+el historial de consultas, las estadísticas de uso y la eliminación de consultas y cuentas de usuario. Las pruebas validan tanto los flujos
+de operación habituales como distintos escenarios de validación, permisos y gestión de datos, garantizando el correcto comportamiento de las
 funcionalidades principales de la aplicación.
 """
 
@@ -173,7 +173,7 @@ class MainRoutesIntegrationTest(BaseAppTestCase):
 
         self.assertEqual(user.theme_mode, "system")
         self.assertEqual(user.language, "es")
-        
+
     def test_rag_form_uses_user_preferred_model(self):
         """
         Verifica que el formulario de consultas RAG utiliza el modelo preferido configurado por el usuario.
@@ -246,7 +246,7 @@ class MainRoutesIntegrationTest(BaseAppTestCase):
 
     def test_stats_admin_global_selected_user_and_missing_user(self):
         """
-        Verifica la visualización de estadísticas por parte de administradores, incluyendo estadísticas globales, filtradas por usuario y 
+        Verifica la visualización de estadísticas por parte de administradores, incluyendo estadísticas globales, filtradas por usuario y
         el tratamiento de usuarios inexistentes.
         """
         admin = self.create_user(email="stats-admin@example.com", is_admin=True)
@@ -269,7 +269,7 @@ class MainRoutesIntegrationTest(BaseAppTestCase):
 
     def test_stats_admin_global_shows_user_comparison_without_queries(self):
         """
-        Comprueba que las estadísticas administrativas muestran correctamente comparativas de usuarios incluso cuando algunos 
+        Comprueba que las estadísticas administrativas muestran correctamente comparativas de usuarios incluso cuando algunos
         de ellos no tienen consultas registradas.
         """
         admin = self.create_user(email="stats-empty-admin@example.com", is_admin=True)

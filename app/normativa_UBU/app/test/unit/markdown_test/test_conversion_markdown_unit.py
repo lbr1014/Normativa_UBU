@@ -2,7 +2,7 @@
 Autora: Lydia Blanco Ruiz
 Script con pruebas unitarias para la conversión de documentos PDF a Markdown.
 Verifica el correcto funcionamiento de todas las etapas del proceso de conversión, incluyendo la configuración del entorno OCR, el procesamiento de imágenes,
-la comunicación con Ollama, la extracción de texto mediante OCR, la normalización de encabezados, el tratamiento de errores y la generación final de documentos Markdown. 
+la comunicación con Ollama, la extracción de texto mediante OCR, la normalización de encabezados, el tratamiento de errores y la generación final de documentos Markdown.
 Las pruebas cubren tanto escenarios normales de ejecución como condiciones excepcionales relacionadas con dependencias externas, concurrencia, fallos de OCR y procesamiento de archivos.
 """
 
@@ -341,6 +341,8 @@ class ConversionMarkdownUnitTest(unittest.TestCase):
         )
         self.assertIsNone(conversion._process_spanish_ordinal_heading("OTRA. Texto"))
         self.assertIsNone(conversion._process_normative_heading("Anexo a la solicitud"))
+        self.assertEqual(conversion._process_generic_normative_heading("Articulo 12. Evaluacion"), "## Articulo 12. Evaluacion")
+        self.assertEqual(conversion._process_generic_normative_heading("CAPITULO II. Organizacion"), "# CAPITULO II. Organizacion")
 
     def test_normalize_headings_converts_supported_heading_patterns(self):
         """
@@ -360,6 +362,19 @@ class ConversionMarkdownUnitTest(unittest.TestCase):
         self.assertIn("# ANEXO I. Modelo de solicitud.", normalized)
         self.assertIn("- 1. Lista", normalized)
         self.assertIn("Texto normal", normalized)
+
+    def test_normalize_headings_converts_generic_normative_patterns(self):
+        """
+        Comprueba encabezados habituales en normativa universitaria generica.
+        """
+        markdown = "PREAMBULO\nCAPITULO II. Regimen academico\nArticulo 12. Evaluacion\nRESUELVE\nTexto"
+
+        normalized = conversion.normalize_headings(markdown)
+
+        self.assertIn("# PREAMBULO", normalized)
+        self.assertIn("# CAPITULO II. Regimen academico", normalized)
+        self.assertIn("## Articulo 12. Evaluacion", normalized)
+        self.assertIn("# RESUELVE", normalized)
 
     def test_normalize_headings_converts_ordinal_heading_with_colon(self):
         """
