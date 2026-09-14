@@ -188,7 +188,6 @@ class MainRoutesAdditionalCoverageUnitTest(BaseAppTestCase):
             form.email.data = "exists@example.com"
             form.country_code.data = "ES"
             form.new_password.data = ""
-            form.theme_mode.data = "system"
             form.language.data = "es"
             form.preferred_model.data = "m"
             form.profile_image.data = None

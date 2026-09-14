@@ -126,7 +126,6 @@ class MainRoutesIntegrationTest(BaseAppTestCase):
                 "email": user.email,
                 "country_code": "ES",
                 "new_password": "",
-                "theme_mode": "light",
                 "language": "en",
                 "preferred_model": "qwen3:4b-instruct-q4_K_M",
             },
@@ -171,7 +170,7 @@ class MainRoutesIntegrationTest(BaseAppTestCase):
         """
         user = self.create_user(email="defaults@example.com")
 
-        self.assertEqual(user.theme_mode, "system")
+        self.assertEqual(user.theme_mode, "light")
         self.assertEqual(user.language, "es")
 
     def test_rag_form_uses_user_preferred_model(self):

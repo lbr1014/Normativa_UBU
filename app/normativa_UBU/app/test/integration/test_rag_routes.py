@@ -168,7 +168,7 @@ class RAGRoutesIntegrationTest(BaseAppTestCase):
         job = db.session.get(RAGQueryState, response.get_json()["job_id"])
         self.assertIn("expediente EXP-55", job.question)
         self.assertIn("doc_type=tecnico", job.question)
-        self.assertIn("cantidades economicas", job.question)
+        self.assertIn("cantidades económicas", job.question)
         self.assertEqual(job.model_name, "fake-model")
         mock_submit.assert_called_once()
 
