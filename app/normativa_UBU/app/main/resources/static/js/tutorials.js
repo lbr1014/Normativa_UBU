@@ -189,10 +189,6 @@
         popover: { title: t("tutorial.nav.users.title"), description: t("tutorial.nav.users.desc"), side: "left", align: "start" },
       },
       {
-        element: "#nav-theme",
-        popover: { title: t("tutorial.nav.theme.title"), description: t("tutorial.nav.theme.desc"), side: "left", align: "start" },
-      },
-      {
         element: "#nav-i18n",
         popover: { title: t("tutorial.nav.i18n.title"), description: t("tutorial.nav.i18n.desc"), side: "left", align: "start" },
       },

@@ -95,9 +95,32 @@
   cursor: not-allowed;
 }
 
+body[data-theme="light"] .rag-model-select{
+  background-color: #ffffff;
+  border-color: rgba(148, 163, 184, .44);
+  color: #111827;
+}
+
+body[data-theme="light"] .rag-model-select:hover,
+body[data-theme="light"] .rag-model-select:focus{
+  background-color: #ffffff;
+  border-color: rgba(var(--app-primary-rgb), .42);
+  color: #111827;
+}
+
+body[data-theme="light"] .rag-model-select:disabled{
+  background-color: #f1f5f9;
+  color: #64748b;
+}
+
 .rag-model-select option{
   background-color: var(--app-dropdown-bg);
   color: var(--app-dropdown-text);
+}
+
+body[data-theme="light"] .rag-model-select option{
+  background-color: #ffffff;
+  color: #111827;
 }
 
 .rag-status{
@@ -119,7 +142,7 @@
 .rag-form .btn-modelo{
   width: min(100%, 680px);
   min-height: 64px;
-  border-radius: 22px;
+  border-radius: var(--app-radius-md);
 }
 
 .rag-eval-card{
@@ -266,12 +289,28 @@ body[data-theme="light"] .rag-eval-ring-value{
   line-height: 1.45;
 }
 
+body[data-theme="light"] .rag-field-help{
+  color: #64748b;
+}
+
 .rag-document-choice-list{
   display: grid;
   gap: .75rem;
   max-height: 360px;
   overflow: auto;
   padding-right: .25rem;
+}
+
+body[data-theme="light"] .rag-form-block{
+  background: #ffffff;
+  border-color: rgba(148, 163, 184, .28);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, .06);
+}
+
+body[data-theme="light"] .rag-form-block-kicker{
+  background: rgba(var(--app-primary-rgb), .08);
+  border-color: rgba(var(--app-primary-rgb), .22);
+  color: var(--app-primary);
 }
 
 .rag-document-choice{
@@ -288,10 +327,21 @@ body[data-theme="light"] .rag-eval-ring-value{
   transition: border-color .18s ease, background-color .18s ease, box-shadow .18s ease;
 }
 
+body[data-theme="light"] .rag-document-choice{
+  background: #ffffff;
+  border-color: rgba(148, 163, 184, .28);
+}
+
 .rag-document-choice:hover,
 .rag-document-choice:focus-within{
   border-color: rgba(var(--app-primary-rgb), .4);
   background: rgba(var(--app-primary-rgb), .075);
+}
+
+body[data-theme="light"] .rag-document-choice:hover,
+body[data-theme="light"] .rag-document-choice:focus-within{
+  background: rgba(var(--app-primary-rgb), .06);
+  border-color: rgba(var(--app-primary-rgb), .34);
 }
 
 .rag-document-choice:focus-within{
@@ -305,6 +355,12 @@ body[data-theme="light"] .rag-eval-ring-value{
 .rag-document-choice:has(.rag-document-choice-input:checked){
   border-color: var(--app-primary);
   background: rgba(var(--app-primary-rgb), .12);
+}
+
+body[data-theme="light"] .rag-document-choice:has(.rag-document-choice-input:checked){
+  background: rgba(var(--app-primary-rgb), .08);
+  border-color: var(--app-primary);
+  box-shadow: 0 10px 22px rgba(var(--app-primary-rgb), .08);
 }
 
 .rag-document-choice-body{

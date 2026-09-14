@@ -66,13 +66,13 @@ body[data-theme="light"] .stats-scope-title {
 
 body[data-theme="light"] .stats-filter-card .form-select {
     background-color: #ffffff;
-    color: #4b0c14;
-    border-color: rgba(var(--app-primary-rgb), 0.36);
+    color: #111827;
+    border-color: rgba(148, 163, 184, 0.44);
 }
 
 body[data-theme="light"] .stats-filter-card .form-select option {
     background-color: #ffffff;
-    color: #4b0c14;
+    color: #111827;
 }
 
 body[data-theme="light"] .stats-filter-card .form-text {
@@ -269,18 +269,18 @@ body[data-theme="light"] .stats-filter-card .form-text {
 }
 
 body[data-theme="light"] .stats-comparison-selector {
-    background: rgba(var(--app-primary-rgb), 0.08);
+    background: #f8fafc;
 }
 
 body[data-theme="light"] .stats-comparison-selector .form-select {
     background-color: #ffffff;
-    color: #4b0c14;
-    border-color: rgba(var(--app-primary-rgb), 0.36);
+    color: #111827;
+    border-color: rgba(148, 163, 184, 0.44);
 }
 
 body[data-theme="light"] .stats-comparison-selector .form-select option {
     background-color: #ffffff;
-    color: #4b0c14;
+    color: #111827;
 }
 
 body[data-theme="light"] .stats-comparison-selector .form-text {

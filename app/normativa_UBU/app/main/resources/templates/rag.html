@@ -291,7 +291,7 @@
     const guidedQuestions = {
       summary: "elabora un resumen general y detallado del documento completo.",
       explain_all: "explica todos los apartados del documento de forma ordenada y comprensible.",
-      explain_section: "explica el apartado indicado del documento, aclarando su finalidad, requisitos y efectos practicos."
+      explain_section: "explica el apartado indicado del documento, aclarando su finalidad, requisitos y efectos prácticos."
     };
 
     function selectedDocumentLabel() {
@@ -322,7 +322,12 @@
         sectionEl.value = previous;
       }
       sectionEl.disabled = questionKindEl?.value !== "explain_section" || sections.length === 0;
-      if (sectionEmptyEl) sectionEmptyEl.classList.toggle("d-none", sections.length > 0);
+      if (sectionEmptyEl) {
+        sectionEmptyEl.textContent = sections.length > 0
+          ? tr("rag_default.section_tooltip")
+          : tr("rag_default.section_empty");
+        sectionEmptyEl.classList.toggle("d-none", questionKindEl?.value !== "explain_section");
+      }
     }
 
     function composeGuidedQuestion() {
@@ -331,7 +336,7 @@
       const section = (sectionEl?.value || "").trim();
       const scope = expediente ? `Para el documento seleccionado ${selectedDocumentLabel()}` : "Para la normativa disponible de forma general";
       const task = kind === "explain_section" && section
-        ? `explica el apartado "${section}" del documento, aclarando su finalidad, requisitos y efectos practicos.`
+        ? `explica el apartado "${section}" del documento, aclarando su finalidad, requisitos y efectos prácticos.`
         : guidedQuestions[kind];
       return `${scope}, ${task}`.trim();
     }

@@ -41,47 +41,11 @@ function initLightEffect(selector = ".luz") {
   }, { passive: true });
 }
 
-function getInitialTheme() {
-  const bodyTheme = document.body.dataset.theme;
-
-  if (bodyTheme && bodyTheme !== "system") {
-    return bodyTheme;
-  }
-
-  const storedTheme = localStorage.getItem("pythia_theme");
-
-  if (storedTheme) {
-    return storedTheme;
-  }
-
-  return getSystemTheme();
-}
-
-function applyTheme(theme) {
-  let resolvedTheme = theme;
-
-  if (theme === "system") {
-    resolvedTheme = getSystemTheme();
-  }
-
-  document.body.setAttribute("data-theme", resolvedTheme);
-  document.documentElement.setAttribute(
-    "data-bs-theme",
-    resolvedTheme
-  );
-}
-
 function syncProfilePreferences() {
   if (!window.profilePreferences) return;
 
-  const { theme } = window.profilePreferences;
-
-  if (theme) {
-    localStorage.setItem("pythia_theme", theme);
-
-    document.body.setAttribute("data-theme", theme);
-    document.documentElement.setAttribute("data-bs-theme", theme);
-  }
+  document.body.setAttribute("data-theme", "light");
+  document.documentElement.setAttribute("data-bs-theme", "light");
 }
 
 document.addEventListener("DOMContentLoaded", function () {
@@ -262,63 +226,15 @@ function initAdminUserSelection() {
   updateBulkState()
 }
 
-function initThemeSelector() {
+function enforceLightTheme() {
   const body = document.body;
   const root = document.documentElement;
 
   if (!body) return;
 
-  const storageKey = "pythia_theme";
-  const buttons = document.querySelectorAll(".theme-option");
-  const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-
-  function getSystemTheme() {
-    return mediaQuery.matches ? "dark" : "light";
-  }
-
-  function resolveTheme(theme) {
-    return theme === "system"
-      ? getSystemTheme()
-      : theme;
-  }
-
-  function applyTheme(theme) {
-    const resolvedTheme = resolveTheme(theme);
-
-    body.setAttribute("data-theme", resolvedTheme);
-
-    root.setAttribute("data-bs-theme", resolvedTheme);
-
-    buttons.forEach((button) => {
-      const isActive = button.dataset.themeValue === theme;
-      button.classList.toggle("active", isActive);
-      button.setAttribute("aria-pressed", isActive ? "true" : "false");
-    });
-  }
-
-  const serverTheme = body.dataset.theme;
-  const storedTheme = localStorage.getItem(storageKey);
-
-  const initialTheme = serverTheme && serverTheme !== "system" ? serverTheme : storedTheme || "system";
-
-  applyTheme(initialTheme);
-
-  buttons.forEach((button) => {
-    button.addEventListener("click", function () {
-      const theme = button.dataset.themeValue;
-      localStorage.setItem(storageKey, theme);
-      applyTheme(theme);
-    });
-  });
-
-  mediaQuery.addEventListener("change", function () {
-    const currentTheme =
-      localStorage.getItem(storageKey);
-
-    if (currentTheme === "system") {
-      applyTheme("system");
-    }
-  });
+  localStorage.removeItem("pythia_theme");
+  body.setAttribute("data-theme", "light");
+  root.setAttribute("data-bs-theme", "light");
 }
 
 function initBootstrapTooltips() {
@@ -362,7 +278,7 @@ initDeleteModal();
 
 initAdminUserSelection();
 
-initThemeSelector();
+enforceLightTheme();
 
 initBootstrapTooltips();
 

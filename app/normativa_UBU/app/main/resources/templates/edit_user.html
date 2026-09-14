@@ -109,11 +109,6 @@
           <div class="profile-form-grid">
 
             <div>
-              {{ form.theme_mode.label(class="form-label") }}
-              {{ form.theme_mode(class_="form-select form-select-lg") }}
-            </div>
-
-            <div>
               {{ form.preferred_model.label(class="form-label") }}
               {{ form.preferred_model(class_="form-select form-select-lg") }}
             </div>
@@ -149,7 +144,6 @@
 
   <script>
   window.profilePreferences = {
-    theme: "{{ current_user.theme_mode }}",
     language: "{{ current_user.language }}",
     model: "{{ current_user.preferred_model }}"
   };

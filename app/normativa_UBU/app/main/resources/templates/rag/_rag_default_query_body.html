@@ -63,11 +63,13 @@
 
       <div class="rag-field-row" data-section-field>
         {{ form.section.label(class="form-label rag-label mb-0", for=form.section.id) }}
-        {{ form.section(
-          class="form-select rag-model-select",
-          data_bs_toggle="tooltip",
-          data_bs_title=t("rag_default.section_tooltip")
-        ) }}
+        <div class="rag-model-select-shell">
+          {{ form.section(
+            class="form-select rag-model-select",
+            data_bs_toggle="tooltip",
+            data_bs_title=t("rag_default.section_tooltip")
+          ) }}
+        </div>
         <p class="rag-field-help" data-section-empty>{{ t("rag_default.section_tooltip") }}</p>
       </div>
     </section>
