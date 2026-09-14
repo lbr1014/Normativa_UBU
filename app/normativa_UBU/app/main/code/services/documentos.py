@@ -339,7 +339,7 @@ class DocumentosService:
         safe = self.filename(filename)
 
         if not safe:
-            raise ValueError("Nombre de archivo invalido")
+            raise ValueError("Nombre de archivo inválido")
 
         if Path(safe).suffix.lower() not in ALLOWED_EXT:
             raise ValueError("Extensión no permitida")
@@ -544,7 +544,7 @@ class DocumentosService:
                 continue
 
             if not self._is_pdf_upload(f):
-                logger.warning("Upload rechazado: no parece PDF valido (%s).", getattr(f, "filename", "-"))
+                logger.warning("Upload rechazado: no parece PDF válido (%s).", getattr(f, "filename", "-"))
                 continue
 
 

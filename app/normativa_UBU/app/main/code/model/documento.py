@@ -88,7 +88,22 @@ class Documento(db.Model):
         Returns:
             tuple[str | None, str | None]: Tupla con el número de expediente y el tipo de documento inferido.
         """
-        return None, None
+        stem = Path(filename or "").stem
+        if not stem:
+            return None, None
+
+        parts = [part.strip() for part in stem.split("__", maxsplit=1)]
+        expediente = parts[0] if len(parts) == 2 and parts[0] else None
+        descriptive_text = parts[1] if len(parts) == 2 else stem
+        normalized = _normalize_document_text(descriptive_text.replace("_", " ").replace("-", " "))
+
+        tipo_documento = None
+        if "tecnico" in normalized or "prescripciones tecnicas" in normalized:
+            tipo_documento = "tecnico"
+        elif "administrativo" in normalized or "administrativas" in normalized:
+            tipo_documento = "administrativo"
+
+        return expediente, tipo_documento
 
     @property
     def has_markdown(self) -> bool:
@@ -166,6 +181,7 @@ class Documento(db.Model):
         Returns:
             Documento inicializado con metadatos inferidos.
         """
+        numero_expediente, tipo_documento = cls.infer_metadata_from_filename(pdf_path.name)
         return cls(
             nombre=pdf_path.name,
             path=str(pdf_path),
@@ -176,6 +192,8 @@ class Documento(db.Model):
             markdown_content=None,
             status=status,
             error_message=None,
+            numero_expediente=numero_expediente,
+            tipo_documento=tipo_documento,
         )
 
     def refresh_file_metadata(self, pdf_path: Path, file_hash: str, modified_at: datetime) -> bool:

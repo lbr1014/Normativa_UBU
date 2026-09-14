@@ -707,7 +707,7 @@ def _apply_edit_user_form(form: EditUserForm) -> bool:
 
     current_user.country_code = normalize_country_code(form.country_code.data)
     _update_profile_password(form)
-    current_user.theme_mode = form.theme_mode.data
+    current_user.theme_mode = "light"
     current_user.language = form.language.data
     current_user.preferred_model = form.preferred_model.data
     session["lang"] = form.language.data
@@ -734,7 +734,6 @@ def edit_user() -> str | Response:
 
     if request.method == "GET":
         form = EditUserForm(obj=current_user)
-        form.theme_mode.data = current_user.theme_mode
         form.preferred_model.data = current_user.preferred_model
         form.language.data = current_user.language
     else:

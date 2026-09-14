@@ -44,7 +44,7 @@ class User(db.Model, UserMixin):
     last_login = db.Column(db.DateTime(timezone=True), nullable=True)
     login_count = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     is_admin = db.Column(db.Boolean, nullable=False, default=False)
-    theme_mode = db.Column(db.String(20), nullable=False, default="system", server_default="system")  
+    theme_mode = db.Column(db.String(20), nullable=False, default="light", server_default="light")  
     preferred_model = db.Column(db.String(50), nullable=False, default="llama3.1:8b-instruct-q4_K_M", server_default="llama3.1:8b-instruct-q4_K_M")
     language = db.Column(db.String(20), nullable=False, default="es", server_default="es")
 

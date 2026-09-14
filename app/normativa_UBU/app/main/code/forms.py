@@ -327,7 +327,6 @@ class EditUserForm(LocalizedFlaskForm):
         "country_code": COUNTRY,
         "profile_image": "user.profile_image",
         "new_password": "auth.new_password",
-        "theme_mode": "user.theme_mode",
         "language": "user.language",
         "preferred_model": "user.preferred_model",
         "submit": "common.save_changes",
@@ -352,11 +351,6 @@ class EditUserForm(LocalizedFlaskForm):
         },
     }
     i18n_choices: ClassVar[dict[str, list[tuple[str, str]]]] = {
-       "theme_mode": [
-            ("light", "user.theme.light"),
-            ("dark", "user.theme.dark"),
-            ("system", "user.theme.system"),
-        ],
         "language": [
             ("es", "user.language.es"),
             ("en", "user.language.en"),
@@ -368,7 +362,6 @@ class EditUserForm(LocalizedFlaskForm):
     country_code = SelectField("Pais", choices=COUNTRY_CHOICES, default=DEFAULT_COUNTRY_CODE, validators=[Optional()])
     profile_image = FileField("Foto de perfil", validators=[FileAllowed(["jpg", "jpeg", "png", "webp"], "validation.allowed_image_formats")])
     new_password = PasswordField("Nueva contraseña", validators=[Optional(), Length(min=8), PasswordSecurity()])
-    theme_mode = SelectField("Modo", choices=[], default="system", validators=[Optional()])
     preferred_model = SelectField("Modelo de lenguaje", choices=[], default="llama3.1:8b-instruct-q4_K_M", validators=[Optional()], validate_choice=False)
     language = SelectField("Idioma", choices=[], default="es", validators=[Optional()])
     submit = SubmitField("Guardar cambios")

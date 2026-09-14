@@ -2125,6 +2125,8 @@ def recuperacion_chunk_con_scores(
 
 def _log_qdrant_query_filter(
     query_filter: qmodels.Filter | None,
+    numero_expediente: str | None = None,
+    tipo_documento: str | None = None,
 ) -> None:
     """
     Registra información sobre el filtro de Qdrant que se va a aplicar en la consulta.
@@ -2141,8 +2143,10 @@ def _log_qdrant_query_filter(
     except (AttributeError, TypeError, ValueError):
         dump = "<unserializable-filter>"
     logger.info(
-        "Qdrant query_filter estructural aplicado: %s",
+        "Qdrant query_filter estructural aplicado: %s | expediente=%s | tipo=%s",
         dump,
+        numero_expediente or "-",
+        tipo_documento or "-",
     )
 
 
@@ -2184,11 +2188,17 @@ def _qdrant_query_points(
 
 def _qdrant_query_points_with_optional_tipo_fallback(**kwargs) -> list[qmodels.ScoredPoint]:
     """
-    Compatibilidad con tests/callers antiguos: ya no hay fallback por tipo documental.
+    Reintenta sin tipo documental cuando el filtro inicial no devuelve puntos.
     """
-    kwargs.pop("numero_expediente", None)
-    kwargs.pop("tipo_documento", None)
-    return _qdrant_query_points(**kwargs)
+    numero_expediente = kwargs.pop("numero_expediente", None)
+    tipo_documento = kwargs.pop("tipo_documento", None)
+    points = _qdrant_query_points(**kwargs)
+    if points or not tipo_documento:
+        return points
+
+    fallback_kwargs = dict(kwargs)
+    fallback_kwargs["query_filter"] = build_metadata_filter(numero_expediente=numero_expediente)
+    return _qdrant_query_points(**fallback_kwargs)
 
 
 def _filter_points_by_similarity(

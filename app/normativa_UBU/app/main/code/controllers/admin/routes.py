@@ -752,7 +752,7 @@ def upload_documents() -> ResponseReturnValue:
 
     saved = documentos_service().save_uploads(files)
     if saved == 0:
-        flash("No se ha subido ningun PDF valido.", "warning")
+        flash("No se ha subido ningún PDF válido.", "warning")
     return redirect(url_for(DOCUMENTS))
 
 
@@ -1793,5 +1793,4 @@ def view_document(doc_id: int) -> ResponseReturnValue:
         abort(404)
 
     return send_file(pdf_path, as_attachment=False, download_name=doc.nombre, mimetype="application/pdf")
-
 

@@ -458,8 +458,8 @@ def configure_default_query_form(form: RAGDefaultQueryForm) -> None:
 GUIDED_QUESTION_TEXTS = {
     "summary": "elabora un resumen general y detallado del documento completo.",
     "explain_all": "explica todos los apartados del documento de forma ordenada y comprensible.",
-    "explain_section": "explica el apartado indicado del documento, aclarando su finalidad, requisitos y efectos practicos.",
-    "amounts": "resume las cantidades economicas, presupuesto, valor estimado e importes relevantes.",
+    "explain_section": "explica el apartado indicado del documento, aclarando su finalidad, requisitos y efectos prácticos.",
+    "amounts": "resume las cantidades económicas, presupuesto, valor estimado e importes relevantes.",
 }
 
 
@@ -500,12 +500,12 @@ def build_guided_question(form: RAGDefaultQueryForm) -> str:
 
     task = GUIDED_QUESTION_TEXTS.get(question_kind, GUIDED_QUESTION_TEXTS["summary"])
     if question_kind == "explain_section" and section:
-        task = f"explica el apartado \"{section}\" del documento, aclarando su finalidad, requisitos y efectos practicos."
+        task = f"explica el apartado \"{section}\" del documento, aclarando su finalidad, requisitos y efectos prácticos."
     return f"{scope}, {task}".strip()
 
 
 def guided_document_scope(document_id: str) -> str:
-    """Devuelve una descripcion legible del documento seleccionado."""
+    """Devuelve una descripción legible del documento seleccionado."""
     if not document_id:
         return ""
     try:
