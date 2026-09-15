@@ -26,6 +26,10 @@ markdown_executor = ThreadPoolExecutor(
     max_workers=int(os.getenv("MARKDOWN_MAX_WORKERS", "1")),
     thread_name_prefix="markdown-worker",
 )
+document_executor = ThreadPoolExecutor(
+    max_workers=int(os.getenv("DOCUMENT_MAX_WORKERS", "2")),
+    thread_name_prefix="document-worker",
+)
 
 
 def shutdown_executors(*, wait: bool = False) -> None:
@@ -42,7 +46,7 @@ def shutdown_executors(*, wait: bool = False) -> None:
             return
         _shutdown_done = True
 
-    for pool in (markdown_executor, executor):
+    for pool in (document_executor, markdown_executor, executor):
         try:
             pool.shutdown(wait=wait, cancel_futures=True)
         except TypeError:

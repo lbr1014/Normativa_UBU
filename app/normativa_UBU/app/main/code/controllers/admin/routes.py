@@ -4,6 +4,8 @@ Script para las rutas de administración, incluyendo gestión de usuarios, docum
 """
 
 import smtplib
+import shutil
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -25,6 +27,7 @@ from flask.typing import ResponseReturnValue
 from flask_login import current_user, login_required
 from markupsafe import Markup
 from sqlalchemy.exc import SQLAlchemyError
+from werkzeug.utils import secure_filename
 
 from app.main.code.countries import (
     COUNTRY_BY_CODE,
@@ -44,6 +47,7 @@ from app.main.code.inetrnacionalizacion.tarduccion import (
 from app.main.code.model.job_state import JobStateMixin
 from app.main.code.services.async_tasks import (
     cancel_tracked,
+    document_executor,
     executor,
     markdown_executor,
     submit_tracked,
@@ -76,6 +80,8 @@ MIMETYPE = "text/markdown; charset=utf-8"
 STALE_JOB_MESSAGE = "Proceso interrumpido por reinicio del servicio."
 ACTIVE_STATUSES = {"queued", "running"}
 RAG_EVAL_JOB_TYPE = "rag_evaluation"
+DOCUMENT_UPLOAD_JOB_TYPE = "document_upload"
+DOCUMENT_DELETE_JOB_TYPE = "document_delete"
 
 
 def _normalize_dt_for_compare(dt: datetime | None, *, reference: datetime) -> datetime | None:
@@ -621,6 +627,15 @@ def pliegos_dir() -> Path:
     return base
 
 
+def staged_uploads_dir() -> Path:
+    """
+    Obtiene el directorio temporal donde se dejan las subidas antes de procesarlas.
+    """
+    base = pliegos_dir() / ".pending_uploads"
+    base.mkdir(parents=True, exist_ok=True)
+    return base
+
+
 def documentos_service() -> DocumentosService:
     """
     Construye el servicio de gestion documental para administracion.
@@ -634,6 +649,101 @@ def documentos_service() -> DocumentosService:
         delete_chunks=qdrant_delete_by_filename,
         markdown_converter=convert_pdf_to_markdown,
     )
+
+
+def _stage_upload_files(files: list) -> list[dict[str, str]]:
+    """
+    Copia los streams de subida a disco para que puedan procesarse fuera de la request.
+    """
+    staged_files: list[dict[str, str]] = []
+    staging_dir = staged_uploads_dir()
+    svc = documentos_service()
+
+    for file_storage in files:
+        if not file_storage or not getattr(file_storage, "filename", ""):
+            continue
+        if not svc._is_pdf_upload(file_storage):  # noqa: SLF001 - reutiliza validacion consolidada del servicio.
+            current_app.logger.warning(
+                "Upload rechazado: no parece PDF valido (%s).",
+                getattr(file_storage, "filename", "-"),
+            )
+            continue
+
+        safe_name = secure_filename(file_storage.filename or "")
+        if not safe_name:
+            continue
+        if Path(safe_name).suffix.lower() != ".pdf":
+            current_app.logger.warning(
+                "Upload rechazado: extension no permitida (%s).",
+                getattr(file_storage, "filename", "-"),
+            )
+            continue
+        staged_path = staging_dir / f"{uuid.uuid4().hex}_{safe_name}"
+        file_storage.save(staged_path)
+        staged_files.append({"filename": safe_name, "path": str(staged_path)})
+
+    return staged_files
+
+
+class _StagedUpload:
+    """
+    Adaptador minimo para que DocumentosService.save_uploads procese archivos ya guardados.
+    """
+
+    def __init__(self, filename: str, path: Path) -> None:
+        self.filename = filename
+        self.path = path
+        self.stream = path.open("rb")
+
+    def save(self, dst: Path) -> None:
+        self.stream.close()
+        shutil.move(str(self.path), str(dst))
+
+    def close(self) -> None:
+        try:
+            self.stream.close()
+        except (OSError, ValueError):
+            pass
+
+
+def upload_documents_async(*, app, staged_files: list[dict[str, str]]) -> None:
+    """
+    Procesa en segundo plano las subidas ya copiadas a staging.
+    """
+    with app.app_context():
+        staged_paths = [Path(item["path"]) for item in staged_files]
+        uploads: list[_StagedUpload] = []
+        try:
+            uploads = [_StagedUpload(item["filename"], Path(item["path"])) for item in staged_files]
+            documentos_service().save_uploads(uploads)
+        except (OSError, SQLAlchemyError, RuntimeError, ValueError):
+            db.session.rollback()
+            current_app.logger.exception("Error procesando documentos subidos en segundo plano")
+        finally:
+            for upload in uploads:
+                upload.close()
+            for path in staged_paths:
+                try:
+                    if path.exists():
+                        path.unlink()
+                except OSError:
+                    current_app.logger.exception("No se pudo limpiar upload temporal %s", path)
+            db.session.remove()
+
+
+def delete_documents_async(*, app, doc_ids: list[int]) -> None:
+    """
+    Borra documentos en segundo plano, aislando cada documento para tolerar lotes grandes.
+    """
+    with app.app_context():
+        service = documentos_service()
+        for doc_id in sorted(set(int(value) for value in doc_ids)):
+            try:
+                service.delete_document(doc_id)
+            except (OSError, SQLAlchemyError, RuntimeError):
+                db.session.rollback()
+                current_app.logger.exception("Error borrando documento %s en segundo plano", doc_id)
+        db.session.remove()
 
 
 def documents_page_url() -> str:
@@ -750,9 +860,22 @@ def upload_documents() -> ResponseReturnValue:
     if not isinstance(files, (list, tuple)):
         files = [files]
 
-    saved = documentos_service().save_uploads(files)
-    if saved == 0:
+    staged_files = _stage_upload_files(list(files))
+    if not staged_files:
         flash("No se ha subido ningún PDF válido.", "warning")
+        return redirect(url_for(DOCUMENTS))
+
+    app_obj = current_app._get_current_object()
+    job_key = uuid.uuid4().int & ((1 << 31) - 1)
+    submit_tracked(
+        document_executor,
+        job_type=DOCUMENT_UPLOAD_JOB_TYPE,
+        tracked_job_id=job_key,
+        fn=upload_documents_async,
+        app=app_obj,
+        staged_files=staged_files,
+    )
+    flash(f"Subida encolada: {len(staged_files)} documento(s) se procesaran en segundo plano.", "info")
     return redirect(url_for(DOCUMENTS))
 
 
@@ -1682,12 +1805,18 @@ def bulk_delete_documents() -> ResponseReturnValue:
     if not selected_ids:
         return redirect(request.referrer or url_for(DOCUMENTS))
 
-    try:
-        for doc_id in set(selected_ids):
-            documentos_service().delete_document(doc_id)
-    except (OSError, SQLAlchemyError, RuntimeError):
-        current_app.logger.exception("Error borrando documentos")
-        abort(500)
+    unique_ids = sorted(set(selected_ids))
+    app_obj = current_app._get_current_object()
+    job_key = uuid.uuid4().int & ((1 << 31) - 1)
+    submit_tracked(
+        document_executor,
+        job_type=DOCUMENT_DELETE_JOB_TYPE,
+        tracked_job_id=job_key,
+        fn=delete_documents_async,
+        app=app_obj,
+        doc_ids=unique_ids,
+    )
+    flash(f"Borrado encolado: {len(unique_ids)} documento(s) se eliminaran en segundo plano.", "info")
 
     return redirect(request.referrer or url_for(DOCUMENTS))
 
@@ -1706,11 +1835,16 @@ def delete_document(doc_id: int) -> ResponseReturnValue:
         Una redireccion a la pagina de documentos.
     """
     _validate_post_action()
-    try:
-        documentos_service().delete_document(doc_id)
-    except (OSError, SQLAlchemyError, RuntimeError):
-        current_app.logger.exception("Error borrando documento")
-        abort(500)
+    app_obj = current_app._get_current_object()
+    submit_tracked(
+        document_executor,
+        job_type=DOCUMENT_DELETE_JOB_TYPE,
+        tracked_job_id=doc_id,
+        fn=delete_documents_async,
+        app=app_obj,
+        doc_ids=[doc_id],
+    )
+    flash("Borrado encolado: el documento se eliminara en segundo plano.", "info")
 
     return redirect(url_for(DOCUMENTS))
 
@@ -1793,4 +1927,3 @@ def view_document(doc_id: int) -> ResponseReturnValue:
         abort(404)
 
     return send_file(pdf_path, as_attachment=False, download_name=doc.nombre, mimetype="application/pdf")
-
