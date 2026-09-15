@@ -139,6 +139,20 @@ body[data-theme="light"] .rag-model-select option{
   min-width: 190px;
 }
 
+.rag-form [data-rag-cancel]{
+  background: var(--app-primary);
+  border-color: var(--app-primary);
+  color: #ffffff;
+}
+
+.rag-form [data-rag-cancel]:hover,
+.rag-form [data-rag-cancel]:focus,
+.rag-form [data-rag-cancel]:active{
+  background: var(--app-primary-hover);
+  border-color: var(--app-primary-hover);
+  color: #ffffff;
+}
+
 .rag-form .btn-modelo{
   width: min(100%, 680px);
   min-height: 64px;

@@ -638,16 +638,16 @@ body[data-theme="light"] .main-header .last-login {
 }
 
 body[data-theme="light"] .app-btn-cancel{
-  background: rgba(var(--app-primary-rgb), 0.08);
-  border-color: rgba(var(--app-primary-rgb), 0.22);
-  color: #4b0c14;
+  background: var(--app-primary);
+  border-color: var(--app-primary);
+  color: #ffffff;
 }
 
 body[data-theme="light"] .app-btn-cancel:hover,
 body[data-theme="light"] .app-btn-cancel:focus{
-  background: rgba(var(--app-primary-rgb), 0.14);
-  border-color: rgba(var(--app-primary-rgb), 0.34);
-  color: #2f050a;
+  background: var(--app-primary-hover);
+  border-color: var(--app-primary-hover);
+  color: #ffffff;
 
   box-shadow: 0 10px 24px rgba(var(--app-primary-rgb), 0.14);
 }
