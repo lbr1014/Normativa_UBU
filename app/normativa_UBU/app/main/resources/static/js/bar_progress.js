@@ -11,6 +11,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const uploadForm = document.getElementById("uploadForm");
   const uploadInput = document.getElementById("files");
   const uploadSummary = document.getElementById("upload-file-summary");
+  const bulkDocumentsForm = document.getElementById("bulk-documents-form");
 
   let activeJob = null;
 
@@ -70,9 +71,15 @@ document.addEventListener("DOMContentLoaded", () => {
     // En el panel de subida, deshabilitamos solo los botones que disparan procesos
     uploadForm?.querySelectorAll("button").forEach((button) => {
       if (button === cancelButton) return;
-      const isProcessButton = button.form && ["markdownForm", "vectorForm"].includes(button.form.id);
+      const isProcessButton = button.form && ["uploadForm", "markdownForm", "vectorForm"].includes(button.form.id);
       if (isProcessButton) button.disabled = disabled;
     });
+
+    const bulkDeleteButton = document.getElementById("docs-bulk-delete");
+    if (bulkDeleteButton) {
+      const hasSelection = Boolean(document.querySelector(".user-row-checkbox:checked"));
+      bulkDeleteButton.disabled = disabled || !hasSelection;
+    }
   }
 
   uploadInput?.addEventListener("change", updateUploadSummary);
@@ -128,7 +135,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (activeJob) {
       localStorage.setItem("admin_active_job_type", activeJob.type);
       localStorage.setItem("admin_active_job_id", activeJob.jobId);
-      setCancelVisible(true);
+      setCancelVisible(["vector", "markdown"].includes(activeJob.type));
       return;
     }
 
@@ -184,6 +191,12 @@ document.addEventListener("DOMContentLoaded", () => {
     window.setTimeout(() => window.location.reload(), 600);
   }
 
+  function setUIDoneWithoutToast(message) {
+    setUIProgress(100, message);
+    setActiveJob(null, null);
+    window.setTimeout(() => window.location.reload(), 600);
+  }
+
   function setUICancelled(message) {
     setUIProgress(0, message);
     showToast(tr("jobs.cancelled_generic"), message || tr("jobs.cancelled_generic"), "secondary");
@@ -204,6 +217,20 @@ document.addEventListener("DOMContentLoaded", () => {
     setActiveJob(null, null);
     toggleButtons(false);
     hideProgressBox();
+  }
+
+  function setUIFailedWithoutToast(message) {
+    showProgressBox();
+    if (bar) {
+      bar.classList.remove("is-indeterminate");
+      bar.classList.remove("progress-bar-animated");
+      bar.style.width = "100%";
+    }
+    if (progressEl) progressEl.setAttribute("aria-valuenow", "100");
+    if (nativeProgressEl) nativeProgressEl.value = 100;
+    if (text) text.textContent = message;
+    setActiveJob(null, null);
+    toggleButtons(false);
   }
 
   async function fetchJson(url, options = {}) {
@@ -366,6 +393,95 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  async function pollDocumentJob(jobId) {
+    const statusUrl = `/admin/documents/operation/status/${jobId}`;
+
+    while (true) {
+      try {
+        const data = await fetchJson(statusUrl);
+        const status = data.status;
+        const hasProgress = data.progress !== null && data.progress !== undefined;
+        const progress = hasProgress ? Number(data.progress) : 0;
+        const operation = data.operation || "upload";
+        const fallback = operation === "delete"
+          ? tr("documents.delete.running", { progress })
+          : tr("documents.upload.running", { progress });
+        const message = data.message || fallback;
+
+        if (status === "running" || status === "queued") {
+          if (hasProgress) setUIProgress(progress, message);
+          else setUIIndeterminate(message);
+          await new Promise((resolve) => window.setTimeout(resolve, 1000));
+          continue;
+        }
+
+        if (status === "done") {
+          setUIDoneWithoutToast(message);
+          return;
+        }
+
+        if (status === "failed") {
+          setUIFailedWithoutToast(`${message}${errorSuffix(data.error)}`);
+          return;
+        }
+
+        setUIFailedWithoutToast(tr("documents.unknown_state"));
+        return;
+      } catch (error) {
+        setUIFailedWithoutToast(tr("documents.status_error"));
+        return;
+      }
+    }
+  }
+
+  async function startDocumentUpload(event) {
+    event.preventDefault();
+    if (!uploadForm) return;
+
+    try {
+      setUIRunning(tr("documents.upload.starting"));
+      const data = await fetchJson(uploadForm.action, {
+        method: "POST",
+        body: new FormData(uploadForm),
+      });
+
+      if (!data.job_id) {
+        setUIFailedWithoutToast(tr("documents.no_job_id"));
+        return;
+      }
+
+      setActiveJob("document", data.job_id);
+      setUIProgress(0, tr("documents.upload.starting"));
+      pollDocumentJob(data.job_id);
+    } catch (error) {
+      setUIFailedWithoutToast(tr("documents.upload.start_error"));
+    }
+  }
+
+  async function startDocumentDelete(event) {
+    event.preventDefault();
+    if (!bulkDocumentsForm) return;
+
+    try {
+      setUIRunning(tr("documents.delete.starting"));
+      const data = await fetchJson(bulkDocumentsForm.action, {
+        method: "POST",
+        body: new FormData(bulkDocumentsForm),
+      });
+
+      if (!data.job_id) {
+        setUIFailedWithoutToast(tr("documents.no_job_id"));
+        return;
+      }
+
+      setActiveJob("document", data.job_id);
+      setUIProgress(0, tr("documents.delete.starting"));
+      pollDocumentJob(data.job_id);
+    } catch (error) {
+      setUIFailedWithoutToast(tr("documents.delete.start_error"));
+    }
+  }
+
   async function cancelActiveJob() {
     if (!activeJob || !cancelButton) return;
 
@@ -394,6 +510,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   vectorForm?.addEventListener("submit", startVectorUpdate);
   markdownForm?.addEventListener("submit", startMarkdownConversion);
+  uploadForm?.addEventListener("submit", startDocumentUpload);
+  bulkDocumentsForm?.addEventListener("submit", startDocumentDelete);
   cancelButton?.addEventListener("click", cancelActiveJob);
 
   async function resumeAnyActiveJob() {
@@ -404,21 +522,23 @@ document.addEventListener("DOMContentLoaded", () => {
       setUIRunning(tr("process.resume_tracking"));
       if (savedType === "vector") return pollVectorJob(savedId);
       if (savedType === "markdown") return pollMarkdownJob(savedId);
+      if (savedType === "document") return pollDocumentJob(savedId);
     }
 
     try {
       const data = await fetchJson("/admin/jobs/active");
-      const active = data?.markdown || data?.vector;
+      const active = data?.document || data?.markdown || data?.vector;
       if (!active) return;
 
-      const pick = data.markdown || data.vector;
-      const pickedType = data.markdown ? "markdown" : "vector";
+      const pick = data.document || data.markdown || data.vector;
+      const pickedType = data.document ? "document" : (data.markdown ? "markdown" : "vector");
       const pickedId = pick?.job_id;
       if (!pickedId) return;
 
       setActiveJob(pickedType, pickedId);
       setUIRunning(tr("process.resume_tracking"));
       if (pickedType === "vector") return pollVectorJob(pickedId);
+      if (pickedType === "document") return pollDocumentJob(pickedId);
       return pollMarkdownJob(pickedId);
     } catch (error) {
       // Silencioso: si falla, simplemente no reanudamos

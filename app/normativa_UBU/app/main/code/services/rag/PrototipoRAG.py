@@ -1,6 +1,6 @@
-"""
+﻿"""
 Autora: Lydia Blanco Ruiz
-Script con la lógica de recuperación, generación, embeddings e indexación en Qdrant para el sistema RAG.
+Script con la lÃ³gica de recuperaciÃ³n, generaciÃ³n, embeddings e indexaciÃ³n en Qdrant para el sistema RAG.
 """
 
 # =========================
@@ -26,7 +26,7 @@ from typing import Any, Generic, TypeVar
 from uuid import UUID, uuid4
 
 import httpx
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from pypdf import PdfReader
 from pypdf.errors import PdfReadError, PdfStreamError
 from qdrant_client import QdrantClient
@@ -74,7 +74,7 @@ class QueryCancelledError(RuntimeError):
 
 class OllamaTimeoutError(RuntimeError):
     """
-    Error que se lanza cuando una operación con Ollama supera el tiempo de espera configurado.
+    Error que se lanza cuando una operaciÃ³n con Ollama supera el tiempo de espera configurado.
     """
 
 
@@ -117,7 +117,7 @@ def _service_url_from_env(env_name: str, default_host: str) -> str:
 
     Args:
         env_name (str): Nombre de la variable de entorno que contiene la URL o el host del servicio.
-        default_host (str): Host por defecto si la variable de entorno no está definida.
+        default_host (str): Host por defecto si la variable de entorno no estÃ¡ definida.
 
     Returns:
         str: URL completa del servicio.
@@ -139,12 +139,12 @@ QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY") or None
 
 # =========================
-# Función para medir los tiempos de ejecución
+# FunciÃ³n para medir los tiempos de ejecuciÃ³n
 # =========================
 @contextmanager
 def timed_block(name: str) -> Iterable[None]:
     """
-    Método para medir el tiempo de un bloque de código.
+    MÃ©todo para medir el tiempo de un bloque de cÃ³digo.
     Escribe el resultado en el logger.
     """
     start = time.perf_counter()
@@ -156,12 +156,12 @@ def timed_block(name: str) -> Iterable[None]:
 
 
 # =========================
-# Settings: configuración del modelo de embeddings y de la base vectorial
+# Settings: configuraciÃ³n del modelo de embeddings y de la base vectorial
 # =========================
 @dataclass
 class Settings:
     """
-    Parámetros de configuración básicos del sistema.
+    ParÃ¡metros de configuraciÃ³n bÃ¡sicos del sistema.
 
     Solo se guardan los valores necesarios para:
         Cargar el modelo de embeddings.
@@ -194,7 +194,7 @@ class Settings:
         OLLAMA_NUM_GPU_SOURCE: str = "env"
     else:
         # Por defecto pedimos a Ollama que use GPU si es posible.
-        # No lo inferimos de torch.cuda: Ollama puede estar en otra máquina/container.
+        # No lo inferimos de torch.cuda: Ollama puede estar en otra mÃ¡quina/container.
         OLLAMA_NUM_GPU: int = -1
         OLLAMA_NUM_GPU_SOURCE: str = "auto-ollama"
     OLLAMA_CONNECT_TIMEOUT_SECONDS: float = float(
@@ -242,7 +242,7 @@ settings = Settings()
 @dataclass(frozen=True)
 class StructuralChunk:
     """
-    Chunk de texto acompañado de metadatos estructurales útiles para recuperación y auditoría.
+    Chunk de texto acompaÃ±ado de metadatos estructurales Ãºtiles para recuperaciÃ³n y auditorÃ­a.
     """
 
     text: str
@@ -256,10 +256,10 @@ class StructuralChunk:
 
 def _embedding_execution_backend() -> str:
     """
-    Determina el backend de ejecución para los embeddings.
+    Determina el backend de ejecuciÃ³n para los embeddings.
 
     Returns:
-        str: Descripción del backend de ejecución, incluyendo información sobre el dispositivo y el modelo de embeddings.
+        str: DescripciÃ³n del backend de ejecuciÃ³n, incluyendo informaciÃ³n sobre el dispositivo y el modelo de embeddings.
     """
     device = settings.RAG_MODEL_DEVICE
     if device.startswith("cuda"):
@@ -275,10 +275,10 @@ def _embedding_execution_backend() -> str:
 
 def _ollama_execution_backend() -> str:
     """
-    Determina el backend de ejecución para Ollama.
+    Determina el backend de ejecuciÃ³n para Ollama.
 
     Returns:
-        str: Descripción del backend de ejecución, incluyendo información sobre el número de GPUs y la fuente.
+        str: DescripciÃ³n del backend de ejecuciÃ³n, incluyendo informaciÃ³n sobre el nÃºmero de GPUs y la fuente.
     """
     num_gpu = settings.OLLAMA_NUM_GPU
     if num_gpu == -1:
@@ -290,10 +290,10 @@ def _ollama_execution_backend() -> str:
 
 def get_ollama_execution_device() -> str:
     """
-    Determina el dispositivo de ejecución para Ollama.
+    Determina el dispositivo de ejecuciÃ³n para Ollama.
 
     Returns:
-        str: "GPU" si está configurado explícitamente, "GPU_REQ" si se solicita GPU
+        str: "GPU" si estÃ¡ configurado explÃ­citamente, "GPU_REQ" si se solicita GPU
              (pero no se puede garantizar que Ollama realmente la use), "CPU" en caso contrario.
     """
     num_gpu = int(getattr(settings, "OLLAMA_NUM_GPU", 0) or 0)
@@ -307,7 +307,7 @@ def get_ollama_execution_device() -> str:
 
 def _normalize_ollama_model_name(value: str | None) -> str:
     """
-    Normaliza un nombre de modelo de Ollama para comparaciones, eliminando espacios y convirtiendo a minúsculas.
+    Normaliza un nombre de modelo de Ollama para comparaciones, eliminando espacios y convirtiendo a minÃºsculas.
 
     Args:
         value (str | None): cadena con el nombre del modelo.
@@ -320,12 +320,12 @@ def _normalize_ollama_model_name(value: str | None) -> str:
 
 def _timeout_to_total_seconds(request_timeout: httpx.Timeout) -> float | None:
     """
-    Convierte un `httpx.Timeout` en un único timeout "total" (segundos) para usar
+    Convierte un `httpx.Timeout` en un Ãºnico timeout "total" (segundos) para usar
     con un context manager, httpx permite configurar timeouts por fase (connect/read/write/pool). Para
-    un límite total conservador, usamos el máximo de los valores definidos.
+    un lÃ­mite total conservador, usamos el mÃ¡ximo de los valores definidos.
 
     Args:
-        request_timeout: instancia de httpx.Timeout con los timeouts configurados para la petición.
+        request_timeout: instancia de httpx.Timeout con los timeouts configurados para la peticiÃ³n.
 
     Returns:
         float | None: El timeout total recomendado en segundos, o None si no se han definido timeouts.
@@ -345,13 +345,13 @@ def _timeout_to_total_seconds(request_timeout: httpx.Timeout) -> float | None:
 
 async def _fetch_ollama_ps_payload(*, request_timeout: httpx.Timeout) -> dict:
     """
-    Obtiene el payload de la API /api/ps de Ollama, que contiene información sobre los modelos cargados y su uso de VRAM.
+    Obtiene el payload de la API /api/ps de Ollama, que contiene informaciÃ³n sobre los modelos cargados y su uso de VRAM.
 
     Args:
-        request_timeout (httpx.Timeout): Timeout configurado para la petición a Ollama, que se convertirá en un timeout total para la operación.
+        request_timeout (httpx.Timeout): Timeout configurado para la peticiÃ³n a Ollama, que se convertirÃ¡ en un timeout total para la operaciÃ³n.
 
     Returns:
-        dict: el payload de la respuesta, contieniendo información sobre los modelos cargados en Ollama y su uso de VRAM.
+        dict: el payload de la respuesta, contieniendo informaciÃ³n sobre los modelos cargados en Ollama y su uso de VRAM.
     """
     total_timeout = _timeout_to_total_seconds(request_timeout)
     async with httpx.AsyncClient(base_url=OLLAMA_BASE_URL) as client:
@@ -366,14 +366,14 @@ async def _fetch_ollama_ps_payload(*, request_timeout: httpx.Timeout) -> dict:
 
 def _infer_device_from_ollama_ps_payload(payload: dict, *, target_model: str) -> str | None:
     """
-    Infere el dispositivo de ejecución (GPU o CPU) que Ollama está usando para un modelo específico, a partir del payload de /api/ps.
+    Infere el dispositivo de ejecuciÃ³n (GPU o CPU) que Ollama estÃ¡ usando para un modelo especÃ­fico, a partir del payload de /api/ps.
 
     Args:
-        payload: Diccionario con la información de los procesos/modelos cargados en Ollama, obtenido de la API /api/ps.
-        target_model: Nombre del modelo para el cual se quiere inferir el dispositivo de ejecución, ya normalizado (sin espacios y en minúsculas).
+        payload: Diccionario con la informaciÃ³n de los procesos/modelos cargados en Ollama, obtenido de la API /api/ps.
+        target_model: Nombre del modelo para el cual se quiere inferir el dispositivo de ejecuciÃ³n, ya normalizado (sin espacios y en minÃºsculas).
 
     Returns:
-        str | None: "GPU" si el modelo está usando VRAM, "CPU" si no está usando VRAM, o None si no se pudo determinar (modelo no encontrado en el payload).
+        str | None: "GPU" si el modelo estÃ¡ usando VRAM, "CPU" si no estÃ¡ usando VRAM, o None si no se pudo determinar (modelo no encontrado en el payload).
 
     """
     models = payload.get("models")
@@ -405,8 +405,8 @@ async def get_ollama_effective_execution_device(
     """
     Intenta inferir el dispositivo REAL usado por Ollama para un modelo ya cargado.
 
-    Ollama expone `/api/ps` con `size_vram` (bytes en VRAM). Si el modelo está cargado y
-    `size_vram > 0`, consideramos que está usando GPU.
+    Ollama expone `/api/ps` con `size_vram` (bytes en VRAM). Si el modelo estÃ¡ cargado y
+    `size_vram > 0`, consideramos que estÃ¡ usando GPU.
 
     Si no se puede determinar (por error, timeout o el modelo no aparece en /api/ps),
     se devuelve el valor configurado (`GPU`, `GPU_REQ`, `CPU`).
@@ -473,13 +473,13 @@ def get_rag_llm_model_choices() -> list[tuple[str, str]]:
 
 def _format_bytes(value: Any) -> str:
     """
-    Formatea un valor numérico de bytes en una cadena legible con unidades (B, KB, MB, GB, TB).
+    Formatea un valor numÃ©rico de bytes en una cadena legible con unidades (B, KB, MB, GB, TB).
 
     Args:
-        value (Any): Valor numérico que representa una cantidad de bytes. Si no es un número o es negativo, se devuelve "-".
+        value (Any): Valor numÃ©rico que representa una cantidad de bytes. Si no es un nÃºmero o es negativo, se devuelve "-".
 
     Returns:
-        str: Cadena formateada con la cantidad de bytes y su unidad correspondiente, o "-" si el valor no es válido.
+        str: Cadena formateada con la cantidad de bytes y su unidad correspondiente, o "-" si el valor no es vÃ¡lido.
     """
     if not isinstance(value, (int, float)) or value < 0:
         return "-"
@@ -496,14 +496,14 @@ def _format_bytes(value: Any) -> str:
 
 def _format_ollama_pull_progress(model_name: str, payload: dict[str, Any]) -> str:
     """
-    Formatea el progreso de la descarga de un modelo en Ollama a partir de la información recibida en el payload.
+    Formatea el progreso de la descarga de un modelo en Ollama a partir de la informaciÃ³n recibida en el payload.
 
     Args:
-        model_name: Nombre del modelo que se está descargando.
-        payload: Diccionario con la información de progreso enviada por Ollama.
+        model_name: Nombre del modelo que se estÃ¡ descargando.
+        payload: Diccionario con la informaciÃ³n de progreso enviada por Ollama.
 
     Returns:
-        Cadena formateada con el estado actual de la descarga, incluyendo porcentaje y tamaño si están disponibles.
+        Cadena formateada con el estado actual de la descarga, incluyendo porcentaje y tamaÃ±o si estÃ¡n disponibles.
     """
     status = payload.get("status") or "descargando"
     digest = (payload.get("digest") or "").strip()
@@ -523,10 +523,10 @@ def _format_ollama_pull_progress(model_name: str, payload: dict[str, Any]) -> st
 
 def _raise_if_query_cancelled(should_cancel=None) -> None:
     """
-    Lanza un error de consulta cancelada si la función should_cancel indica que se ha solicitado cancelar.
+    Lanza un error de consulta cancelada si la funciÃ³n should_cancel indica que se ha solicitado cancelar.
 
     Args:
-        should_cancel: Función que devuelve True si la consulta debe ser cancelada.
+        should_cancel: FunciÃ³n que devuelve True si la consulta debe ser cancelada.
     """
     if should_cancel and should_cancel():
         raise QueryCancelledError(QUERY_CANCELLED_MESSAGE)
@@ -534,10 +534,10 @@ def _raise_if_query_cancelled(should_cancel=None) -> None:
 
 def _raise_for_ollama_show_status(response: httpx.Response, model_name: str) -> None:
     """
-    Lanza un error si la respuesta de Ollama a la comprobación de disponibilidad del modelo no es exitosa.
+    Lanza un error si la respuesta de Ollama a la comprobaciÃ³n de disponibilidad del modelo no es exitosa.
 
     Args:
-        response: Objeto httpx.Response recibido de la petición a Ollama.
+        response: Objeto httpx.Response recibido de la peticiÃ³n a Ollama.
         model_name: Nombre del modelo que se estaba comprobando.
 
     Raises:
@@ -552,23 +552,23 @@ def _raise_for_ollama_show_status(response: httpx.Response, model_name: str) -> 
     except httpx.HTTPStatusError as exc:
         details = (response.text or "").strip()
         raise RuntimeError(
-            f"Ollama devolvió HTTP {response.status_code} comprobando el modelo '{model_name}': {details}"
+            f"Ollama devolviÃ³ HTTP {response.status_code} comprobando el modelo '{model_name}': {details}"
         ) from exc
 
 
 def _ollama_pull_read_timeout(total_timeout: float, idle_timeout: float, elapsed: float) -> float | None:
     """
-    Calcula el timeout de lectura para la operación de pull de Ollama, teniendo en cuenta el tiempo
+    Calcula el timeout de lectura para la operaciÃ³n de pull de Ollama, teniendo en cuenta el tiempo
     total permitido, el tiempo de inactividad permitido y el tiempo ya transcurrido.
 
     Args:
-        total_timeout: Tiempo máximo total permitido para la operación de pull (en segundos). Si es 0 o negativo, no hay límite total.
-        idle_timeout: Tiempo máximo permitido sin recibir datos antes de considerar que la operación está inactiva (en segundos).
-            Si es 0 o negativo, no hay límite de inactividad.
-        elapsed: Tiempo ya transcurrido desde el inicio de la operación (en segundos).
+        total_timeout: Tiempo mÃ¡ximo total permitido para la operaciÃ³n de pull (en segundos). Si es 0 o negativo, no hay lÃ­mite total.
+        idle_timeout: Tiempo mÃ¡ximo permitido sin recibir datos antes de considerar que la operaciÃ³n estÃ¡ inactiva (en segundos).
+            Si es 0 o negativo, no hay lÃ­mite de inactividad.
+        elapsed: Tiempo ya transcurrido desde el inicio de la operaciÃ³n (en segundos).
 
     Returns:
-        El timeout de lectura recomendado para la siguiente lectura de datos, o None si no hay límite de lectura.
+        El timeout de lectura recomendado para la siguiente lectura de datos, o None si no hay lÃ­mite de lectura.
     """
     read_timeout = idle_timeout if idle_timeout > 0 else None
     if total_timeout <= 0:
@@ -580,27 +580,31 @@ def _ollama_pull_read_timeout(total_timeout: float, idle_timeout: float, elapsed
 
 async def _read_ollama_pull_line(line_iterator, read_timeout: float | None, model_name: str) -> str | None:
     """
-    Lee la siguiente línea de respuesta del pull de Ollama, aplicando un timeout de lectura para detectar inactividad.
+    Lee la siguiente lÃ­nea de respuesta del pull de Ollama, aplicando un timeout de lectura para detectar inactividad.
 
     Args:
-        line_iterator (AsyncIterator): Iterador asíncrono que produce las líneas de respuesta del pull de Ollama.
-        read_timeout (float | None): Tiempo máximo permitido para esperar una línea de respuesta antes de considerar
-            que la operación está inactiva (en segundos). Si es None, no hay límite de tiempo.
+        line_iterator (AsyncIterator): Iterador asÃ­ncrono que produce las lÃ­neas de respuesta del pull de Ollama.
+        read_timeout (float | None): Tiempo mÃ¡ximo permitido para esperar una lÃ­nea de respuesta antes de considerar
+            que la operaciÃ³n estÃ¡ inactiva (en segundos). Si es None, no hay lÃ­mite de tiempo.
         model_name (str): Nombre del modelo de Ollama.
 
     Raises:
-        OllamaTimeoutError: Si no se recibe ninguna línea de respuesta dentro del tiempo de espera configurado.
+        OllamaTimeoutError: Si no se recibe ninguna lÃ­nea de respuesta dentro del tiempo de espera configurado.
 
     Returns:
-        str | None: La línea de respuesta leída o None si la iteración se ha completado.
+        str | None: La lÃ­nea de respuesta leÃ­da o None si la iteraciÃ³n se ha completado.
     """
+    next_line = line_iterator.__anext__()
     try:
-        return await asyncio.wait_for(line_iterator.__anext__(), timeout=read_timeout)
+        return await asyncio.wait_for(next_line, timeout=read_timeout)
     except StopAsyncIteration:
         return None
     except asyncio.TimeoutError as exc:
+        close = getattr(next_line, "close", None)
+        if close is not None:
+            close()
         raise OllamaTimeoutError(
-            f"La descarga del modelo '{model_name}' no avanzó durante {read_timeout:g} s."
+            f"La descarga del modelo '{model_name}' no avanzÃ³ durante {read_timeout:g} s."
         ) from exc
 
 
@@ -613,18 +617,18 @@ def _emit_ollama_pull_progress(
     on_status=None,
 ) -> tuple[str, float]:
     """"
-    Emite un mensaje de progreso de la descarga de un modelo en Ollama si ha habido un cambio significativo desde el último mensaje emitido.
+    Emite un mensaje de progreso de la descarga de un modelo en Ollama si ha habido un cambio significativo desde el Ãºltimo mensaje emitido.
 
     Args:
-        model_name: Nombre del modelo que se está descargando.
-        payload: Diccionario con la información de progreso enviada por Ollama.
-        last_progress: Último mensaje de progreso emitido.
-        last_log_at: Timestamp (en segundos) de la última vez que se emitió un mensaje de progreso.
-        log_interval: Intervalo mínimo (en segundos) entre mensajes de progreso emitidos.
-        on_status: Función opcional para recibir el mensaje de progreso formateado.
+        model_name: Nombre del modelo que se estÃ¡ descargando.
+        payload: Diccionario con la informaciÃ³n de progreso enviada por Ollama.
+        last_progress: Ãšltimo mensaje de progreso emitido.
+        last_log_at: Timestamp (en segundos) de la Ãºltima vez que se emitiÃ³ un mensaje de progreso.
+        log_interval: Intervalo mÃ­nimo (en segundos) entre mensajes de progreso emitidos.
+        on_status: FunciÃ³n opcional para recibir el mensaje de progreso formateado.
 
     Returns:
-        tuple[str, float]: El mensaje de progreso emitido y el timestamp de cuando se emitió.
+        tuple[str, float]: El mensaje de progreso emitido y el timestamp de cuando se emitiÃ³.
     """
     if not payload.get("status"):
         return last_progress, last_log_at
@@ -651,18 +655,18 @@ def _process_ollama_pull_payload(
     on_status=None,
 ) -> tuple[str, float]:
     """
-    Procesa una línea de respuesta del pull de Ollama, actualizando el progreso mostrado si es necesario
+    Procesa una lÃ­nea de respuesta del pull de Ollama, actualizando el progreso mostrado si es necesario
 
     Args:
-        model_name: Nombre del modelo que se está descargando.
-        line: Línea de respuesta del pull de Ollama.
-        last_progress: Último mensaje de progreso emitido.
-        last_log_at: Timestamp (en segundos) de la última vez que se emitió un mensaje de progreso.
-        log_interval: Intervalo mínimo (en segundos) entre mensajes de progreso emitidos.
-        on_status: Función opcional para recibir el mensaje de progreso formateado.
+        model_name: Nombre del modelo que se estÃ¡ descargando.
+        line: LÃ­nea de respuesta del pull de Ollama.
+        last_progress: Ãšltimo mensaje de progreso emitido.
+        last_log_at: Timestamp (en segundos) de la Ãºltima vez que se emitiÃ³ un mensaje de progreso.
+        log_interval: Intervalo mÃ­nimo (en segundos) entre mensajes de progreso emitidos.
+        on_status: FunciÃ³n opcional para recibir el mensaje de progreso formateado.
 
     Returns:
-        tuple[str, float]: El mensaje de progreso emitido y el timestamp de cuando se emitió.
+        tuple[str, float]: El mensaje de progreso emitido y el timestamp de cuando se emitiÃ³.
     """
     payload = json.loads(line)
     if payload.get("error"):
@@ -685,7 +689,7 @@ async def _raise_for_ollama_chat_status(resp: httpx.Response, model_name: str) -
 
     Args:
         resp (httpx.Response): La respuesta de la solicitud de chat.
-        model_name (str): El nombre del modelo con el que se realizó la solicitud.
+        model_name (str): El nombre del modelo con el que se realizÃ³ la solicitud.
 
     Raises:
         OllamaModelNotFoundError: Si el modelo no se encuentra en Ollama.
@@ -700,21 +704,21 @@ async def _raise_for_ollama_chat_status(resp: httpx.Response, model_name: str) -
             raise
         if resp.status_code == 404 and "not found" in error_detail.lower():
             raise OllamaModelNotFoundError(
-                f"El modelo '{model_name}' no está descargado en Ollama."
+                f"El modelo '{model_name}' no estÃ¡ descargado en Ollama."
             ) from exc
         raise RuntimeError(
-            f"Ollama devolvió HTTP {resp.status_code} para el modelo '{model_name}': {error_detail}"
+            f"Ollama devolviÃ³ HTTP {resp.status_code} para el modelo '{model_name}': {error_detail}"
         ) from exc
 
 
 def _extract_ollama_chat_piece(line: str) -> tuple[str | None, bool]:
-    """Extrae el mensaje de respuesta de una línea de respuesta del chat de Ollama, y si la respuesta está completa (done=True) o es un fragmento intermedio (done=False).
+    """Extrae el mensaje de respuesta de una lÃ­nea de respuesta del chat de Ollama, y si la respuesta estÃ¡ completa (done=True) o es un fragmento intermedio (done=False).
 
     Args:
-        line: Línea de respuesta del chat de Ollama.
+        line: LÃ­nea de respuesta del chat de Ollama.
 
     Returns:
-        tuple[str | None, bool]: El mensaje de respuesta extraído (o None si no se encuentra) y un booleano que indica si la respuesta está completa (True) o es un fragmento intermedio (False).
+        tuple[str | None, bool]: El mensaje de respuesta extraÃ­do (o None si no se encuentra) y un booleano que indica si la respuesta estÃ¡ completa (True) o es un fragmento intermedio (False).
     """
     payload = json.loads(line)
     message = payload.get("message") or {}
@@ -734,10 +738,10 @@ async def ensure_ollama_model_available(
     modelo del desplegable sin ejecutar manualmente `ollama pull`.
 
     Args:
-        client: Cliente HTTP asíncrono configurado para comunicarse con Ollama.
+        client: Cliente HTTP asÃ­ncrono configurado para comunicarse con Ollama.
         model_name: Nombre del modelo a comprobar/descargar.
-        should_cancel: Función opcional que indica si se ha solicitado cancelar la operación.
-        on_status: Función opcional para recibir actualizaciones de estado (cadena).
+        should_cancel: FunciÃ³n opcional que indica si se ha solicitado cancelar la operaciÃ³n.
+        on_status: FunciÃ³n opcional para recibir actualizaciones de estado (cadena).
     """
     _raise_if_query_cancelled(should_cancel)
 
@@ -749,7 +753,7 @@ async def ensure_ollama_model_available(
     _raise_for_ollama_show_status(show_response, model_name)
 
     message = f"Descargando modelo {model_name}. Puede tardar varios minutos..."
-    logger.info("Modelo %s no encontrado en Ollama. Descargando automáticamente...", model_name)
+    logger.info("Modelo %s no encontrado en Ollama. Descargando automÃ¡ticamente...", model_name)
     if on_status:
         on_status(message)
 
@@ -781,7 +785,7 @@ async def ensure_ollama_model_available(
             elapsed = time.monotonic() - started_at
             if total_timeout > 0 and elapsed >= total_timeout:
                 raise OllamaTimeoutError(
-                    f"La descarga del modelo '{model_name}' superó {total_timeout:g} s."
+                    f"La descarga del modelo '{model_name}' superÃ³ {total_timeout:g} s."
                 )
 
             read_timeout = _ollama_pull_read_timeout(total_timeout, idle_timeout, elapsed)
@@ -812,13 +816,13 @@ async def ensure_ollama_model_ready(
 
      Args:
         model_name: Nombre del modelo a garantizar.
-        should_cancel: Función opcional que indica si se ha solicitado cancelar la operación.
-        on_status: Función opcional para recibir actualizaciones de estado (cadena).
+        should_cancel: FunciÃ³n opcional que indica si se ha solicitado cancelar la operaciÃ³n.
+        on_status: FunciÃ³n opcional para recibir actualizaciones de estado (cadena).
 
      Raises:
-        QueryCancelledError: Si se ha solicitado cancelar la operación.
+        QueryCancelledError: Si se ha solicitado cancelar la operaciÃ³n.
         OllamaModelNotFoundError: Si el modelo no se encuentra en Ollama y no se puede descargar.
-        OllamaTimeoutError: Si la operación de descarga supera el tiempo de espera configurado.
+        OllamaTimeoutError: Si la operaciÃ³n de descarga supera el tiempo de espera configurado.
     """
     timeout = httpx.Timeout(
         connect=settings.OLLAMA_CONNECT_TIMEOUT_SECONDS,
@@ -840,14 +844,14 @@ async def ensure_ollama_model_ready(
 # =========================
 class EmbeddingModelSingleton:
     """
-    Capa de acceso al modelo de embeddings (patrón Singleton).
+    Capa de acceso al modelo de embeddings (patrÃ³n Singleton).
 
     - Carga el modelo de sentence-transformers.
     - Expone:
         tokenizer: para dividir el texto en tokens y hacer el splitter.
-        embedding_size: dimensión de los vectores (para configurar Qdrant).
-        max_input_length: nº máximo de tokens (para controlar el tamaño de los chunks).
-    - Permite llamar a la instancia como una función para obtener embeddings.
+        embedding_size: dimensiÃ³n de los vectores (para configurar Qdrant).
+        max_input_length: nÂº mÃ¡ximo de tokens (para controlar el tamaÃ±o de los chunks).
+    - Permite llamar a la instancia como una funciÃ³n para obtener embeddings.
     """
     _instance: EmbeddingModelSingleton|None = None
 
@@ -857,11 +861,11 @@ class EmbeddingModelSingleton:
         Si ya se ha creado una instancia, devuelve esa en lugar de crear una nueva.
 
         Args:
-            *args: Argumentos posicionales para la creación de la instancia (se ignoran si la instancia ya existe).
-            **kwargs: Argumentos de palabra clave para la creación de la instancia (se ignoran si la instancia ya existe).
+            *args: Argumentos posicionales para la creaciÃ³n de la instancia (se ignoran si la instancia ya existe).
+            **kwargs: Argumentos de palabra clave para la creaciÃ³n de la instancia (se ignoran si la instancia ya existe).
 
         Returns:
-            La instancia única del modelo de embeddings.
+            La instancia Ãºnica del modelo de embeddings.
         """
         if cls._instance is None:
             cls._instance = super().__new__(cls)
@@ -875,12 +879,12 @@ class EmbeddingModelSingleton:
     ):
         """
         Inicializa el modelo de embeddings si no se ha inicializado ya.
-        Carga el modelo de SentenceTransformers y lo pone en modo evaluación.
+        Carga el modelo de SentenceTransformers y lo pone en modo evaluaciÃ³n.
 
         Args:
             model_id: Identificador del modelo de embeddings a cargar.
             device: Dispositivo en el que cargar el modelo (e.g., "cpu", "cuda").
-            cache_dir: Directorio opcional para almacenar caché de modelos.
+            cache_dir: Directorio opcional para almacenar cachÃ© de modelos.
         """
         # Evita re-inicializar si el objeto ya estaba creado
         if hasattr(self, "_initialized"):
@@ -895,13 +899,13 @@ class EmbeddingModelSingleton:
             device=device,
             cache_folder=str(cache_dir) if cache_dir else None,
         )
-        # Modo evaluación
+        # Modo evaluaciÃ³n
         self._model.eval()
 
     @staticmethod
     def _is_cuda_out_of_memory(error: Exception) -> bool:
         """
-        Detecta si un error de ejecución es debido a falta de memoria en CUDA.
+        Detecta si un error de ejecuciÃ³n es debido a falta de memoria en CUDA.
 
         Args:
             error (Exception): El error a analizar.
@@ -914,7 +918,7 @@ class EmbeddingModelSingleton:
 
     def _clear_cuda_cache(self) -> None:
         """
-        Intenta limpiar la caché de CUDA para liberar memoria después de un error de out of memory.
+        Intenta limpiar la cachÃ© de CUDA para liberar memoria despuÃ©s de un error de out of memory.
         """
         if torch is not None and hasattr(torch, "cuda") and hasattr(torch.cuda, "empty_cache"):
             try:
@@ -925,7 +929,7 @@ class EmbeddingModelSingleton:
     def _move_to_cpu(self) -> None:
         """
         Mueve el modelo a la CPU, si se detecta que el error fue por falta de memoria en CUDA, para permitir que la
-        operación de embeddings pueda completarse aunque sea más lenta.
+        operaciÃ³n de embeddings pueda completarse aunque sea mÃ¡s lenta.
         """
         if self._device == "cpu":
             return
@@ -951,23 +955,23 @@ class EmbeddingModelSingleton:
     @cached_property
     def embedding_size(self) -> int:
         """
-        Dimensión de los vectores de embeddings.
-        Se usa al crear las colecciones de Qdrant para indicar el tamaño del vector.
+        DimensiÃ³n de los vectores de embeddings.
+        Se usa al crear las colecciones de Qdrant para indicar el tamaÃ±o del vector.
 
         Returns:
-            int: La dimensión de los vectores de embeddings.
+            int: La dimensiÃ³n de los vectores de embeddings.
         """
         return int(self._model.get_sentence_embedding_dimension())
 
     @property
     def max_input_length(self) -> int:
         """
-        Longitud máxima de tokens que admite el modelo.
+        Longitud mÃ¡xima de tokens que admite el modelo.
         Sirve para construir el splitter por tokens y evitar pasarle secuencias
-        más largas de lo permitido.
+        mÃ¡s largas de lo permitido.
 
         Returns:
-            int: El número máximo de tokens que el modelo puede procesar.
+            int: El nÃºmero mÃ¡ximo de tokens que el modelo puede procesar.
         """
         return int(getattr(self._model, "max_seq_length", 512))
 
@@ -976,7 +980,7 @@ class EmbeddingModelSingleton:
         """
         Devuelve el tokenizer asociado al modelo de embeddings.
         Este tokenizer es el que se usa para contar tokens y trocear el texto
-        en chunks de tamaño controlado.
+        en chunks de tamaÃ±o controlado.
 
         Returns:
             El tokenizer del modelo de embeddings.
@@ -990,13 +994,13 @@ class EmbeddingModelSingleton:
         Args:
             input_text: str o list[str] con el texto de entrada.
             to_list: si es True, devuelve los vectores como listas de Python,
-                     lo cual facilita su uso y serialización.
+                     lo cual facilita su uso y serializaciÃ³n.
 
         Returns:
             Vector o lista de vectores de embeddings.
 
         Raises:
-            RuntimeError: Si ocurre un error durante la generación de embeddings que no sea por falta de memoria en CUDA.
+            RuntimeError: Si ocurre un error durante la generaciÃ³n de embeddings que no sea por falta de memoria en CUDA.
             QueryCancelledError: Si se detecta que el usuario ha cancelado la consulta.
         """
         try:
@@ -1028,8 +1032,8 @@ class EmbeddingModelSingleton:
 
 class LazyEmbeddingModel:
     """
-    Carga el modelo de embeddings solo cuando alguna operación RAG lo necesita.
-    Esto permite que la aplicación Flask se inicie rápidamente sin cargar modelos ni usar memoria hasta que sea necesario.
+    Carga el modelo de embeddings solo cuando alguna operaciÃ³n RAG lo necesita.
+    Esto permite que la aplicaciÃ³n Flask se inicie rÃ¡pidamente sin cargar modelos ni usar memoria hasta que sea necesario.
     """
 
     def __init__(self) -> None:
@@ -1040,7 +1044,7 @@ class LazyEmbeddingModel:
 
     def _get_instance(self) -> EmbeddingModelSingleton:
         """
-        Obtiene la instancia del modelo de embeddings, cargándola si aún no se ha cargado.
+        Obtiene la instancia del modelo de embeddings, cargÃ¡ndola si aÃºn no se ha cargado.
 
         Returns:
             EmbeddingModelSingleton: La instancia del modelo de embeddings.
@@ -1061,7 +1065,7 @@ class LazyEmbeddingModel:
 
     def __getattr__(self, name: str) -> Any:
         """
-        Redirige el acceso a atributos al modelo de embeddings, cargándolo si es necesario.
+        Redirige el acceso a atributos al modelo de embeddings, cargÃ¡ndolo si es necesario.
 
         Args:
             name: Nombre del atributo al que se quiere acceder.
@@ -1073,7 +1077,7 @@ class LazyEmbeddingModel:
 
     def __call__(self, input_text, to_list: bool = True) -> list[float] | list[list[float]]:
         """
-        Permite llamar a la instancia como una función para obtener embeddings, redirigiendo la llamada al modelo de embeddings.
+        Permite llamar a la instancia como una funciÃ³n para obtener embeddings, redirigiendo la llamada al modelo de embeddings.
 
         Args:
             input_text (str | list[str]): Texto o lista de textos a los que se les quieren calcular los embeddings.
@@ -1085,24 +1089,24 @@ class LazyEmbeddingModel:
         return self._get_instance()(input_text, to_list=to_list)
 
 
-# Instancia única disponible para el resto del código. La carga real es perezosa
-# para que crear la aplicación Flask no descargue modelos ni contacte servicios externos.
+# Instancia Ãºnica disponible para el resto del cÃ³digo. La carga real es perezosa
+# para que crear la aplicaciÃ³n Flask no descargue modelos ni contacte servicios externos.
 embedding_model = LazyEmbeddingModel()
 
 
 # =========================
-# Conexión Qdrant
+# ConexiÃ³n Qdrant
 # =========================
 def _make_qdrant_client() -> QdrantClient:
     """
     Crea un cliente de Qdrant apuntando al servicio de Qdrant (Docker / remoto).
-    Si no hay variables de entorno, intenta una conexión por host/port.
+    Si no hay variables de entorno, intenta una conexiÃ³n por host/port.
 
     Returns:
         QdrantClient conectado al servicio de Qdrant.
 
     Raises:
-        RuntimeError: Si no se pudo conectar a Qdrant después de varios intentos.
+        RuntimeError: Si no se pudo conectar a Qdrant despuÃ©s de varios intentos.
     """
     try:
         client = (
@@ -1129,8 +1133,8 @@ def _make_qdrant_client() -> QdrantClient:
 
 class LazyQdrantClient:
     """
-    Crea el cliente Qdrant al primer uso, no durante el import del módulo.
-    Esto permite que la aplicación Flask se inicie rápidamente sin intentar conectar a Qdrant hasta que sea necesario.
+    Crea el cliente Qdrant al primer uso, no durante el import del mÃ³dulo.
+    Esto permite que la aplicaciÃ³n Flask se inicie rÃ¡pidamente sin intentar conectar a Qdrant hasta que sea necesario.
     """
 
     def __init__(self):
@@ -1141,7 +1145,7 @@ class LazyQdrantClient:
 
     def _get_client(self) -> QdrantClient:
         """
-        Obtiene el cliente de Qdrant, creándolo si aún no se ha creado.
+        Obtiene el cliente de Qdrant, creÃ¡ndolo si aÃºn no se ha creado.
 
         Returns:
             QdrantClient: El cliente de Qdrant listo para usar.
@@ -1153,37 +1157,37 @@ class LazyQdrantClient:
         if self._client is None:
             self._client = _make_qdrant_client()
         if self._client is None:
-            raise RuntimeError("Qdrant no está disponible")
+            raise RuntimeError("Qdrant no estÃ¡ disponible")
         return self._client
 
     def __getattr__(self, name: str) -> Any:
         """
-        Redirige el acceso a los métodos al cliente de Qdrant, creándolo si es necesario.
+        Redirige el acceso a los mÃ©todos al cliente de Qdrant, creÃ¡ndolo si es necesario.
 
         Args:
-            name (str): Nombre del método de Qdrant al que se quiere acceder.
+            name (str): Nombre del mÃ©todo de Qdrant al que se quiere acceder.
 
         Returns:
-            El método solicitado del cliente de Qdrant.
+            El mÃ©todo solicitado del cliente de Qdrant.
         """
         return getattr(self._get_client(), name)
 
     def close(self) -> None:
         """
-        Cierra la conexión del cliente de Qdrant si está abierta para liberar recursos.
+        Cierra la conexiÃ³n del cliente de Qdrant si estÃ¡ abierta para liberar recursos.
         """
         if self._client is not None:
             self._client.close()
             self._client = None
 
 
-# Cliente global de Qdrant. La conexión real es perezosa.
+# Cliente global de Qdrant. La conexiÃ³n real es perezosa.
 qdrant = LazyQdrantClient()
 
 @atexit.register
 def _close_qdrant() -> None:
     """
-    Cierra la conexión de Qdrant al salir del proceso para liberar recursos.
+    Cierra la conexiÃ³n de Qdrant al salir del proceso para liberar recursos.
     """
     global qdrant
     try:
@@ -1218,10 +1222,10 @@ def build_qdrant_metadata_filter(**metadata: Any) -> qmodels.Filter | None:
     Construye un filtro Qdrant con condiciones exactas sobre metadatos.
 
     Args:
-        **metadata: Claves y valores de metadatos a incluir en el filtro. Solo se incluyen aquellos pares donde el valor no es None ni una cadena vacía.
+        **metadata: Claves y valores de metadatos a incluir en el filtro. Solo se incluyen aquellos pares donde el valor no es None ni una cadena vacÃ­a.
 
     Returns:
-        qmodels.Filter con las condiciones de metadatos, o None si no se proporcionaron metadatos válidos.
+        qmodels.Filter con las condiciones de metadatos, o None si no se proporcionaron metadatos vÃ¡lidos.
     """
     must = [
         qmodels.FieldCondition(
@@ -1243,7 +1247,7 @@ def qdrant_exists_by_metadata(**metadata: Any) -> bool:
     Comprueba si existe al menos un punto que cumpla los metadatos dados.
 
      Args:
-        **metadata: Claves y valores de metadatos a buscar. Solo se incluyen aquellos pares donde el valor no es None ni una cadena vacía.
+        **metadata: Claves y valores de metadatos a buscar. Solo se incluyen aquellos pares donde el valor no es None ni una cadena vacÃ­a.
 
     Returns:
         bool: True si existe al menos un punto que cumpla los metadatos dados, False en caso contrario.
@@ -1264,20 +1268,20 @@ def qdrant_exists_by_metadata(**metadata: Any) -> bool:
 def qdrant_has_filename(filename: str) -> bool:
     """
     Comprueba si existen chunks indexados en Qdrant para un PDF concreto,
-    independientemente de su versión.
+    independientemente de su versiÃ³n.
 
     Args:
         filename: Nombre del archivo PDF a buscar en los metadatos de Qdrant.
 
     Returns:
-        True si existe al menos un chunk asociado a ese nombre de archivo; Fase si no existe ningún chunk con ese nombre de archivo en los metadatos.
+        True si existe al menos un chunk asociado a ese nombre de archivo; Fase si no existe ningÃºn chunk con ese nombre de archivo en los metadatos.
     """
     return qdrant_exists_by_metadata(filename=filename)
 
 
 def qdrant_has_same_hash(filename: str, doc_hash: str) -> bool:
     """
-    Comprueba si un PDF ya está indexado en Qdrant y además coincide con la versión actual
+    Comprueba si un PDF ya estÃ¡ indexado en Qdrant y ademÃ¡s coincide con la versiÃ³n actual
     del archivo (mismo hash SHA-256).
 
     Argumentos:
@@ -1285,7 +1289,7 @@ def qdrant_has_same_hash(filename: str, doc_hash: str) -> bool:
         doc_hash: Hash SHA-256 del contenido del PDF.
 
     Returns:
-        True si el documento ya está indexado y no ha cambiado; Fase si el documento no esta inlcuido o ha cambiado.
+        True si el documento ya estÃ¡ indexado y no ha cambiado; Fase si el documento no esta inlcuido o ha cambiado.
     """
     return qdrant_exists_by_metadata(filename=filename, sha256=doc_hash)
 
@@ -1293,7 +1297,7 @@ def qdrant_has_same_hash(filename: str, doc_hash: str) -> bool:
 def qdrant_delete_by_filename(filename: str) -> None:
     """
     Elimina de Qdrant todos los chunks asociados a un archivo PDF concreto.
-    Esta función se utiliza cuando se detecta que un PDF ha cambiado. Primero eliminan los chunks
+    Esta funciÃ³n se utiliza cuando se detecta que un PDF ha cambiado. Primero eliminan los chunks
     antiguos y luego indexa de nuevo el documento actualizado.
 
     Argumentos:
@@ -1315,7 +1319,7 @@ def qdrant_get_payloads(point_ids: list[str]) -> dict[str, dict]:
 
     Returns:
         dict[str, dict]: Diccionario con los payloads encontrados. Las claves son los identificadores de los puntos y los valores son los payloads correspondientes.
-        Si ocurre un error durante la recuperación, se devuelve un diccionario vacío.
+        Si ocurre un error durante la recuperaciÃ³n, se devuelve un diccionario vacÃ­o.
     """
     ids = [i for i in point_ids if i]
     if not ids:
@@ -1328,10 +1332,10 @@ def qdrant_get_payloads(point_ids: list[str]) -> dict[str, dict]:
             with_vectors=False,
         )
     except ValueError as e:
-        logger.warning("Qdrant sin colección (%s). Devolviendo payloads vacíos.", e)
+        logger.warning("Qdrant sin colecciÃ³n (%s). Devolviendo payloads vacÃ­os.", e)
         return {}
     except QDRANT_RECOVERABLE_ERRORS as e:
-        logger.warning("Error leyendo payloads de Qdrant: %s. Devolviendo payloads vacíos.", e)
+        logger.warning("Error leyendo payloads de Qdrant: %s. Devolviendo payloads vacÃ­os.", e)
         return {}
 
     out:  dict[str, dict] = {}
@@ -1340,7 +1344,7 @@ def qdrant_get_payloads(point_ids: list[str]) -> dict[str, dict]:
     return out
 
 # =========================
-# OVM mínimo (Object–Vector Mapping)
+# OVM mÃ­nimo (Objectâ€“Vector Mapping)
 # =========================
 T = TypeVar("T", bound="VectorBaseDocument")
 
@@ -1349,15 +1353,15 @@ class VectorBaseDocument(BaseModel, Generic[T]):
     """
     Entidad base con mapeo a Qdrant (payload + vector).
 
-    Representa la forma estándar en la que cualquier "documento embebido"
+    Representa la forma estÃ¡ndar en la que cualquier "documento embebido"
     se guarda en la base de datos vectorial:
 
-        id: identificador único (UUID).
+        id: identificador Ãºnico (UUID).
         content: texto del chunk.
         embedding: vector de floats asociado al contenido.
-        metadata: información adicional (nombre de archivo, tipo, etc.).
+        metadata: informaciÃ³n adicional (nombre de archivo, tipo, etc.).
 
-    Las subclases heredan estos campos y las operaciones de guardado/búsqueda.
+    Las subclases heredan estos campos y las operaciones de guardado/bÃºsqueda.
     """
 
     id: UUID = Field(default_factory=uuid4)
@@ -1366,32 +1370,27 @@ class VectorBaseDocument(BaseModel, Generic[T]):
     embedding: list[float] | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
-    class Config:
-        """
-        Configuración de Pydantic para permitir tipos personalizados.
-        """
-        # Permite tipos que no son estándar de Pydantic
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    # ---- utilidades de colección
+    # ---- utilidades de colecciÃ³n
     @classmethod
     def get_collection_name(cls) -> str:
         """
-        Obtiene el nombre de colección de Qdrant para esta clase.
-        Cambia los espacios por '_' y elimina las mayúsculas.
+        Obtiene el nombre de colecciÃ³n de Qdrant para esta clase.
+        Cambia los espacios por '_' y elimina las mayÃºsculas.
         """
         name = cls.__name__
         s1 = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
         return re.sub("([a-z0-9])([A-Z])", r"\1_\2", s1).lower()
 
-    # ---- creación de colección (idempotente)
+    # ---- creaciÃ³n de colecciÃ³n (idempotente)
     @classmethod
     def _ensure_collection(cls) -> None:
         """
-        Garantiza que exista la colección asociada en Qdrant.
-        Si la colección no existe, la crea usnado:
-            tamaño de vector `embedding_model.embedding_size`
-            métrica de similitud por coseno.
+        Garantiza que exista la colecciÃ³n asociada en Qdrant.
+        Si la colecciÃ³n no existe, la crea usnado:
+            tamaÃ±o de vector `embedding_model.embedding_size`
+            mÃ©trica de similitud por coseno.
         """
         collection = cls.get_collection_name()
         dim = embedding_model.embedding_size
@@ -1411,8 +1410,8 @@ class VectorBaseDocument(BaseModel, Generic[T]):
         """
         Convierte la instancia en un PointStruct de Qdrant.
         El payload incluye tanto el contenido como metadatos del modelo
-        (id, dimensión, max_input_length) para poder auditar y reproducir
-        la generación de embeddings.
+        (id, dimensiÃ³n, max_input_length) para poder auditar y reproducir
+        la generaciÃ³n de embeddings.
 
         Returns:
             qmodels.PointStruct listo para insertar en Qdrant.
@@ -1447,7 +1446,7 @@ class VectorBaseDocument(BaseModel, Generic[T]):
     def save(self) -> None:
         """
         Guarda la instancia actual en Qdrant.
-        Usa upsert, de modo que si el id ya existía lo sobrescribe.
+        Usa upsert, de modo que si el id ya existÃ­a lo sobrescribe.
         """
         type(self)._ensure_collection()
         point = self.to_point()
@@ -1461,7 +1460,7 @@ class VectorBaseDocument(BaseModel, Generic[T]):
 
         Args:
             cls: La clase de los documentos a guardar (subclase de VectorBaseDocument).
-            docs: Lista de instancias a guardar. Cada una se convertirá en un punto de Qdrant usando `to_point()`.
+            docs: Lista de instancias a guardar. Cada una se convertirÃ¡ en un punto de Qdrant usando `to_point()`.
         """
         cls._ensure_collection()
         points = [d.to_point() for d in docs]
@@ -1474,10 +1473,10 @@ class VectorBaseDocument(BaseModel, Generic[T]):
         offset: UUID | None = None,
     ) -> tuple[list[Self], UUID | None]:
         """
-        Recupera documentos de la colección usando scroll (paginación).
+        Recupera documentos de la colecciÃ³n usando scroll (paginaciÃ³n).
 
         Args:
-            limit: número máximo de documentos a devolver.
+            limit: nÃºmero mÃ¡ximo de documentos a devolver.
             offset: id a partir del cual continuar el scroll.
 
         Returns:
@@ -1496,7 +1495,7 @@ class VectorBaseDocument(BaseModel, Generic[T]):
         docs = [cls.from_record(r) for r in records]
         return docs, (UUID(next_off, version=4) if next_off else None)
 
-    # ---- búsqueda vectorial
+    # ---- bÃºsqueda vectorial
     @classmethod
     def search(
         cls,
@@ -1505,16 +1504,16 @@ class VectorBaseDocument(BaseModel, Generic[T]):
         **kwargs,
     ) -> list[Self]:
         """
-        Realiza una búsqueda vectorial en Qdrant usando el vector de consulta.
+        Realiza una bÃºsqueda vectorial en Qdrant usando el vector de consulta.
 
         Args:
             cls: La clase de los documentos a recuperar (subclase de VectorBaseDocument).
-            query_vector: El vector de embedding que se usará para la búsqueda de similitud.
-            limit: El número máximo de resultados a devolver.
+            query_vector: El vector de embedding que se usarÃ¡ para la bÃºsqueda de similitud.
+            limit: El nÃºmero mÃ¡ximo de resultados a devolver.
             **kwargs: Argumentos adicionales para la consulta de Qdrant (e.g., filtros).
 
         Returns:
-            Lista de instancias de la clase que representan los documentos más similares encontrados.
+            Lista de instancias de la clase que representan los documentos mÃ¡s similares encontrados.
         """
         cls._ensure_collection()
         records = qdrant.query_points(
@@ -1534,14 +1533,14 @@ class VectorBaseDocument(BaseModel, Generic[T]):
 # =========================
 def chunk_text(text: str, overlap_ratio: float = 0.1) -> list[str]:
     """
-    Trocea un texto largo en chunks controlando el número de tokens.
-    Añade un pequeño solapamiento (overlap)
+    Trocea un texto largo en chunks controlando el nÃºmero de tokens.
+    AÃ±ade un pequeÃ±o solapamiento (overlap)
     Para ello:
-        Se recorre el texto línea a línea.
-        Se tokeniza cada línea con el tokenizer del modelo.
-        Se van concatenando líneas hasta que el número de tokens alcanza max_len.
-        Cuando se supera el límite, se empieza un nuevo chunk.
-    Si alguna línea produce un error de tokenización, se ignora.
+        Se recorre el texto lÃ­nea a lÃ­nea.
+        Se tokeniza cada lÃ­nea con el tokenizer del modelo.
+        Se van concatenando lÃ­neas hasta que el nÃºmero de tokens alcanza max_len.
+        Cuando se supera el lÃ­mite, se empieza un nuevo chunk.
+    Si alguna lÃ­nea produce un error de tokenizaciÃ³n, se ignora.
 
     Args:
         text: El texto a trocear en chunks.
@@ -1550,16 +1549,16 @@ def chunk_text(text: str, overlap_ratio: float = 0.1) -> list[str]:
     Returns:
         Lista de strings, cada uno representando un chunk del texto original.
     """
-    # Obtiene el tokenizer del modelo y calculamos un límite de tokens
+    # Obtiene el tokenizer del modelo y calculamos un lÃ­mite de tokens
     tokenizer = embedding_model.tokenizer
-    # Márgen de seguridad, solo se usa el 80% de la capacidad del modelo
+    # MÃ¡rgen de seguridad, solo se usa el 80% de la capacidad del modelo
     max_len = int(embedding_model.max_input_length * 0.8)
 
     # Tokens que se solapan entre chunks
     overlap_tokens = max(1, int(max_len * overlap_ratio))
 
     chunks: list[str] = []
-    # Guardamos las líneas y su número de tokens para hacer el solapamiento
+    # Guardamos las lÃ­neas y su nÃºmero de tokens para hacer el solapamiento
     current: list[tuple[str, int]] = []
     current_tokens = 0
 
@@ -1568,7 +1567,7 @@ def chunk_text(text: str, overlap_ratio: float = 0.1) -> list[str]:
         if line_tokens is None:
             continue
 
-        # Si al añadir esta línea se supera el límite, se guarda el chunk actual
+        # Si al aÃ±adir esta lÃ­nea se supera el lÃ­mite, se guarda el chunk actual
         if current_tokens + line_tokens > max_len and current:
 
             # Se guarda el chunk actual
@@ -1576,11 +1575,11 @@ def chunk_text(text: str, overlap_ratio: float = 0.1) -> list[str]:
             # Se empieza un nuevo chunk con el solapamiento
             current, current_tokens = token_overlap(current, overlap_tokens)
 
-        # Añadimos la línea actual al chunk
+        # AÃ±adimos la lÃ­nea actual al chunk
         current.append((line, line_tokens))
         current_tokens += line_tokens
 
-    # Último chunk pendiente
+    # Ãšltimo chunk pendiente
     if current:
         get_chunk(chunks, current)
 
@@ -1597,7 +1596,7 @@ def chunk_text_with_structure(
     """
     Trocea texto preservando metadatos estructurales por chunk.
 
-    Inspirado en la salida JSON/chunks de marker, mantiene una jerarquía de
+    Inspirado en la salida JSON/chunks de marker, mantiene una jerarquÃ­a de
     secciones activa y la asocia a cada bloque antes de crear el chunk final.
     """
     if source != "markdown":
@@ -1625,7 +1624,7 @@ def _chunk_markdown_with_section_hierarchy(
     overlap_ratio: float = 0.1,
 ) -> list[StructuralChunk]:
     """
-    Segmenta Markdown manteniendo la jerarquía de encabezados que envuelve cada chunk.
+    Segmenta Markdown manteniendo la jerarquÃ­a de encabezados que envuelve cada chunk.
     """
     tokenizer = embedding_model.tokenizer
     max_len = int(embedding_model.max_input_length * 0.8)
@@ -1744,26 +1743,26 @@ def _clean_heading_title(text: str) -> str:
 
 def _infer_heading_level(text: str) -> int | None:
     """
-    Infere el nivel de encabezado Markdown si el chunk comienza con un título.
+    Infere el nivel de encabezado Markdown si el chunk comienza con un tÃ­tulo.
     """
     first_line = (text or "").lstrip().splitlines()[0] if (text or "").strip() else ""
     match = re.match(r"^(#{1,6})\s+", first_line)
     if match:
         return len(match.group(1))
-    if re.match(r"^\d+\.\s+[A-ZÁÉÍÓÚÜÑ0-9][A-ZÁÉÍÓÚÜÑ0-9\s,;:()/-]+$", first_line):
+    if re.match(r"^\d+\.\s+[A-ZÃÃ‰ÃÃ“ÃšÃœÃ‘0-9][A-ZÃÃ‰ÃÃ“ÃšÃœÃ‘0-9\s,;:()/-]+$", first_line):
         return 1
     if re.match(r"^\d+\.\d+\.\s+", first_line):
         return 2
     if re.match(r"^\d+\.\d+\.\d+\.\s+", first_line):
         return 3
     if re.match(
-        r"^(PRIMER[AO]|SEGUND[AO]|TERCER[AO]|CUART[AO]|QUINT[AO]|SEXT[AO]|S[EÉ]PTIM[AO]|OCTAV[AO]|NOVEN[AO]|D[ÉE]CIM[AO])[\.:]\s+",
+        r"^(PRIMER[AO]|SEGUND[AO]|TERCER[AO]|CUART[AO]|QUINT[AO]|SEXT[AO]|S[EÃ‰]PTIM[AO]|OCTAV[AO]|NOVEN[AO]|D[Ã‰E]CIM[AO])[\.:]\s+",
         first_line,
         flags=re.IGNORECASE,
     ):
         return 1
     if re.match(
-        r"^(DISPOSICI[ÓO]N\s+(ADICIONAL|TRANSITORIA|DEROGATORIA|FINAL)|ANEXO)\b",
+        r"^(DISPOSICI[Ã“O]N\s+(ADICIONAL|TRANSITORIA|DEROGATORIA|FINAL)|ANEXO)\b",
         first_line,
         flags=re.IGNORECASE,
     ):
@@ -1773,7 +1772,7 @@ def _infer_heading_level(text: str) -> int | None:
 
 def _infer_chunk_type(text: str, *, source: str = "text") -> str:
     """
-    Clasifica un chunk en tipos estructurales básicos.
+    Clasifica un chunk en tipos estructurales bÃ¡sicos.
     """
     stripped = (text or "").lstrip()
     if not stripped:
@@ -1807,7 +1806,7 @@ def _structural_metadata(chunk: StructuralChunk) -> dict[str, Any]:
 
 def extract_pdf_footer_date(text: str | None) -> str:
     """
-    Extrae la fecha documental del pie de página cuando aparece como "FECHA : dd/mm/yyyy hh:mm".
+    Extrae la fecha documental del pie de pÃ¡gina cuando aparece como "FECHA : dd/mm/yyyy hh:mm".
     """
     matches = re.findall(
         r"\bFECHA\s*:\s*(\d{1,2}/\d{1,2}/\d{4})(?:\s+\d{1,2}:\d{2})?",
@@ -1819,17 +1818,17 @@ def extract_pdf_footer_date(text: str | None) -> str:
 
 def extract_keywords(text: str, *, max_keywords: int = 12) -> list[str]:
     """
-    Extrae keywords estables para recuperación híbrida y auditoría de chunks.
+    Extrae keywords estables para recuperaciÃ³n hÃ­brida y auditorÃ­a de chunks.
     """
     normalized = _normalize_tipo_documento(text)
-    terms = re.findall(r"[a-z0-9áéíóúüñ]{3,}", normalized, flags=re.IGNORECASE)
+    terms = re.findall(r"[a-z0-9Ã¡Ã©Ã­Ã³ÃºÃ¼Ã±]{3,}", normalized, flags=re.IGNORECASE)
     counts = Counter(term for term in terms if term not in KEYWORD_STOPWORDS)
     return [term for term, _ in counts.most_common(max_keywords)]
 
 
 def _keyword_overlap_score(query_keywords: list[str], payload: dict[str, Any]) -> float:
     """
-    Calcula una señal léxica normalizada a partir de keywords y contenido del chunk.
+    Calcula una seÃ±al lÃ©xica normalizada a partir de keywords y contenido del chunk.
     """
     if not query_keywords:
         return 0.0
@@ -1848,7 +1847,7 @@ def rerank_hybrid_points(
     keyword_weight: float = DEFAULT_HYBRID_KEYWORD_WEIGHT,
 ) -> list[qmodels.ScoredPoint]:
     """
-    Reordena resultados combinando similitud vectorial con coincidencia léxica.
+    Reordena resultados combinando similitud vectorial con coincidencia lÃ©xica.
     """
     query_keywords = extract_keywords(user_query, max_keywords=16)
     total_weight = max(vector_weight + keyword_weight, 0.0001)
@@ -1875,19 +1874,19 @@ def rerank_hybrid_points(
 
 def token_len(tokenizer, text: str) -> int | None:
     """
-    Devuelve el número de tokens o None si falla la tokenización.
+    Devuelve el nÃºmero de tokens o None si falla la tokenizaciÃ³n.
 
     Args:
         tokenizer: El tokenizer del modelo de embeddings.
         text: El texto a tokenizar.
 
     Returns:
-        El número de tokens que produce el texto al ser tokenizado, o None si ocurre un error durante la tokenización.
+        El nÃºmero de tokens que produce el texto al ser tokenizado, o None si ocurre un error durante la tokenizaciÃ³n.
     """
     try:
         return len(tokenizer.tokenize(text))
     except (AttributeError, RuntimeError, TypeError, ValueError) as e:
-        logger.warning("No se puede tokenizar una línea: %s", e)
+        logger.warning("No se puede tokenizar una lÃ­nea: %s", e)
         return None
 
 def get_chunk(chunks: list[str], current: list[tuple[str, int]]) -> None:
@@ -1896,7 +1895,7 @@ def get_chunk(chunks: list[str], current: list[tuple[str, int]]) -> None:
 
     Args:
         chunks: Lista donde se acumulan los chunks finales.
-        current: Lista de tuplas (línea, tokens) que representa el chunk actual en construcción.
+        current: Lista de tuplas (lÃ­nea, tokens) que representa el chunk actual en construcciÃ³n.
 
     """
     chunk = " ".join(s for s, _ in current).strip()
@@ -1908,14 +1907,14 @@ def token_overlap(
     overlap_tokens: int,
 ) -> tuple[list[tuple[str, int]], int]:
     """
-    Calcula el solapamiento (líneas finales) y tokens solapados.
+    Calcula el solapamiento (lÃ­neas finales) y tokens solapados.
 
     Args:
-        current: Lista de tuplas (línea, tokens) que representa el chunk actual que se acaba de cerrar.
-        overlap_tokens: Número máximo de tokens que se deben solapar entre el chunk cerrado y el nuevo chunk que se va a empezar.
+        current: Lista de tuplas (lÃ­nea, tokens) que representa el chunk actual que se acaba de cerrar.
+        overlap_tokens: NÃºmero mÃ¡ximo de tokens que se deben solapar entre el chunk cerrado y el nuevo chunk que se va a empezar.
 
     Returns:
-        (overlap, tokens_in_overlap) donde overlap es la lista de tuplas (línea, tokens) que se solapan y tokens_in_overlap es el número total de tokens que suponen esas líneas.
+        (overlap, tokens_in_overlap) donde overlap es la lista de tuplas (lÃ­nea, tokens) que se solapan y tokens_in_overlap es el nÃºmero total de tokens que suponen esas lÃ­neas.
     """
     overlap: list[tuple[str, int]] = []
     tokens_in_overlap = 0
@@ -1931,13 +1930,13 @@ def token_overlap(
 
 def iter_clean_lines(text: str) -> Iterable[str]:
     """
-    Itera líneas limpias (strip) y no vacías.
+    Itera lÃ­neas limpias (strip) y no vacÃ­as.
 
     Args:
-        text: El texto a iterar por líneas.
+        text: El texto a iterar por lÃ­neas.
 
     Yields:
-        Líneas del texto que no están vacías después de aplicar strip.
+        LÃ­neas del texto que no estÃ¡n vacÃ­as despuÃ©s de aplicar strip.
     """
     for line in text.splitlines():
         line = line.strip()
@@ -1947,7 +1946,7 @@ def iter_clean_lines(text: str) -> Iterable[str]:
 
 def _normalize_tipo_documento(value: str | None) -> str:
     """
-    Compatibilidad legacy: el pipeline ya no usa tipos administrativo/técnico.
+    Compatibilidad legacy: el pipeline ya no usa tipos administrativo/tÃ©cnico.
     """
     if value is None:
         return ""
@@ -2034,16 +2033,16 @@ def recuperacion_chunk(
     level: int | None = None,
 ) -> list[VectorBaseDocument]:
     """
-    Dada una pregunta del usuario, recupera los chunks más similares desde Qdrant.
+    Dada una pregunta del usuario, recupera los chunks mÃ¡s similares desde Qdrant.
 
     Args:
         user_query: La pregunta del usuario para la que se quieren recuperar los chunks relevantes.
-        k: El número máximo de chunks a recuperar.
-        numero_expediente: (Opcional) Número de expediente para filtrar los chunks por sus metadatos.
+        k: El nÃºmero mÃ¡ximo de chunks a recuperar.
+        numero_expediente: (Opcional) NÃºmero de expediente para filtrar los chunks por sus metadatos.
         tipo_documento: (Opcional) Tipo de documento para filtrar los chunks por sus metadatos.
 
     Returns:
-        Lista de instancias de VectorBaseDocument que representan los chunks más similares encontrados en Qdrant, ordenados por similitud.
+        Lista de instancias de VectorBaseDocument que representan los chunks mÃ¡s similares encontrados en Qdrant, ordenados por similitud.
         Cada instancia incluye el contenido del chunk, su embedding y metadatos asociados.
     """
     points = recuperacion_chunk_con_scores(
@@ -2081,17 +2080,17 @@ def recuperacion_chunk_con_scores(
     min_similarity: float | None = DEFAULT_RAG_MIN_SIMILARITY,
 ) -> list[qmodels.ScoredPoint]:
     """
-    Recupera los k chunks más similares desde Qdrant, incluyendo score e id del punto.
+    Recupera los k chunks mÃ¡s similares desde Qdrant, incluyendo score e id del punto.
 
     Args:
         user_query: La pregunta del usuario para la que se quieren recuperar los chunks relevantes.
-        k: El número máximo de chunks a recuperar.
-        numero_expediente: (Opcional) Número de expediente para filtrar los chunks por sus metadatos.
+        k: El nÃºmero mÃ¡ximo de chunks a recuperar.
+        numero_expediente: (Opcional) NÃºmero de expediente para filtrar los chunks por sus metadatos.
         tipo_documento: (Opcional) Tipo de documento para filtrar los chunks por sus metadatos.
-        min_similarity: Umbral mínimo de similitud. Solo se devolverán chunks con un score superior a este valor.
+        min_similarity: Umbral mÃ­nimo de similitud. Solo se devolverÃ¡n chunks con un score superior a este valor.
 
     Returns:
-        Lista de objetos qmodels.ScoredPoint que representan los chunks más similares encontrados en Qdrant, ordenados por similitud.
+        Lista de objetos qmodels.ScoredPoint que representan los chunks mÃ¡s similares encontrados en Qdrant, ordenados por similitud.
         Cada objeto incluye el id del punto, el score de similitud, y el payload con el contenido y metadatos del chunk.
     """
     logger.info(
@@ -2129,12 +2128,12 @@ def _log_qdrant_query_filter(
     tipo_documento: str | None = None,
 ) -> None:
     """
-    Registra información sobre el filtro de Qdrant que se va a aplicar en la consulta.
+    Registra informaciÃ³n sobre el filtro de Qdrant que se va a aplicar en la consulta.
 
     Args:
-        query_filter (qmodels.Filter | None): El filtro de Qdrant que se va a aplicar en la consulta, o None si no se aplica ningún filtro.
-        numero_expediente (str | None): El número de expediente que se está utilizando como filtro en la consulta, o None si no se está filtrando por número de expediente.
-        tipo_documento (str | None): El tipo de documento que se está utilizando como filtro en la consulta, o None si no se está filtrando por tipo de documento.
+        query_filter (qmodels.Filter | None): El filtro de Qdrant que se va a aplicar en la consulta, o None si no se aplica ningÃºn filtro.
+        numero_expediente (str | None): El nÃºmero de expediente que se estÃ¡ utilizando como filtro en la consulta, o None si no se estÃ¡ filtrando por nÃºmero de expediente.
+        tipo_documento (str | None): El tipo de documento que se estÃ¡ utilizando como filtro en la consulta, o None si no se estÃ¡ filtrando por tipo de documento.
     """
     if query_filter is None:
         return
@@ -2161,14 +2160,14 @@ def _qdrant_query_points(
     reintenta la consulta sin el filtro de tipo_documento para evitar que un filtro demasiado restrictivo deje sin resultados.
 
     Args:
-        query_vector (list[float]): El vector de embedding que se usará para la búsqueda de similitud en Qdrant.
-        k (int): El número de puntos a recuperar.
-        query_filter (qmodels.Filter | None): El filtro de Qdrant que se va a aplicar en la consulta, o None si no se aplica ningún filtro.
-        numero_expediente (str | None): El número de expediente que se está utilizando como filtro en la consulta, o None si no se está filtrando por número de expediente.
-        tipo_documento (str | None): El tipo de documento que se está utilizando como filtro en la consulta, o None si no se está filtrando por tipo de documento.
+        query_vector (list[float]): El vector de embedding que se usarÃ¡ para la bÃºsqueda de similitud en Qdrant.
+        k (int): El nÃºmero de puntos a recuperar.
+        query_filter (qmodels.Filter | None): El filtro de Qdrant que se va a aplicar en la consulta, o None si no se aplica ningÃºn filtro.
+        numero_expediente (str | None): El nÃºmero de expediente que se estÃ¡ utilizando como filtro en la consulta, o None si no se estÃ¡ filtrando por nÃºmero de expediente.
+        tipo_documento (str | None): El tipo de documento que se estÃ¡ utilizando como filtro en la consulta, o None si no se estÃ¡ filtrando por tipo de documento.
 
     Returns:
-        list[qmodels.ScoredPoint]: Una lista de objetos qmodels.ScoredPoint que representan los chunks más similares encontrados en Qdrant, ordenados por similitud.
+        list[qmodels.ScoredPoint]: Una lista de objetos qmodels.ScoredPoint que representan los chunks mÃ¡s similares encontrados en Qdrant, ordenados por similitud.
         Cada objeto incluye el id del punto, el score de similitud, y el payload con el contenido y metadatos del chunk. Si no se encuentran puntos con el filtro de tipo_documento, se devuelve el resultado de la consulta sin ese filtro.
     """
 
@@ -2212,11 +2211,11 @@ def _filter_points_by_similarity(
 
     Args:
         points (list[qmodels.ScoredPoint]): La lista de puntos a filtrar, cada uno con un atributo 'score' que representa la similitud.
-        min_similarity (float | None): El umbral mínimo de similitud. Solo se devolverán los puntos cuyo 'score' sea mayor que este valor. Si es None, no se aplica ningún filtro de similitud.
-        k (int): El número máximo de puntos a devolver. Si después de aplicar el filtro de similitud quedan más de k puntos, se devolverán solo los k primeros.
+        min_similarity (float | None): El umbral mÃ­nimo de similitud. Solo se devolverÃ¡n los puntos cuyo 'score' sea mayor que este valor. Si es None, no se aplica ningÃºn filtro de similitud.
+        k (int): El nÃºmero mÃ¡ximo de puntos a devolver. Si despuÃ©s de aplicar el filtro de similitud quedan mÃ¡s de k puntos, se devolverÃ¡n solo los k primeros.
 
     Returns:
-        list[qmodels.ScoredPoint]: La lista de puntos filtrados. Si después de aplicar el filtro de similitud no quedan puntos pero la lista original no estaba vacía, se devuelve la lista original sin filtrar para asegurar que siempre se devuelva algo si había puntos disponibles.
+        list[qmodels.ScoredPoint]: La lista de puntos filtrados. Si despuÃ©s de aplicar el filtro de similitud no quedan puntos pero la lista original no estaba vacÃ­a, se devuelve la lista original sin filtrar para asegurar que siempre se devuelva algo si habÃ­a puntos disponibles.
     """
     if min_similarity is None:
         return points
@@ -2240,7 +2239,7 @@ def build_rag_prompt(
     query_profile: str = "general",
 ) -> str:
     """
-    Construye un prompt especializado según el tipo de pregunta guiada.
+    Construye un prompt especializado segÃºn el tipo de pregunta guiada.
 
     Args:
         user_query: La pregunta del usuario que se quiere responder.
@@ -2248,8 +2247,8 @@ def build_rag_prompt(
         query_profile: El perfil de pregunta que indica el tipo de respuesta esperada (e.g., "summary", "amounts", "deadlines"). Si no se especifica o no se encuentra, se usa el perfil "general".
 
     Returns:
-        Un string que representa el prompt completo para enviar al modelo de lenguaje, incluyendo instrucciones específicas basadas en el perfil de pregunta,
-        el formato de respuesta esperado, la pregunta del usuario y los fragmentos de contexto disponibles. El prompt enfatiza que solo se deben usar los fragmentos proporcionados y que no se debe inventar información.
+        Un string que representa el prompt completo para enviar al modelo de lenguaje, incluyendo instrucciones especÃ­ficas basadas en el perfil de pregunta,
+        el formato de respuesta esperado, la pregunta del usuario y los fragmentos de contexto disponibles. El prompt enfatiza que solo se deben usar los fragmentos proporcionados y que no se debe inventar informaciÃ³n.
     """
     chunk_range = f"CHUNK #1 a CHUNK #{len(context_blocks)}"
     template = PROMPT_TEMPLATES.get(query_profile) or PROMPT_TEMPLATES["general"]
@@ -2269,21 +2268,21 @@ async def ask_ollama(
     should_cancel=None,
 ) -> str:
     """
-    Envía un prompt a Ollama usando /api/chat y devuelve el texto de respuesta.
+    EnvÃ­a un prompt a Ollama usando /api/chat y devuelve el texto de respuesta.
 
     Args:
         prompt: El mensaje de entrada que se le quiere enviar a Ollama.
-        model: El modelo de Ollama a usar. Si es None, se usará el modelo por defecto configurado en settings.
-        should_cancel: Función opcional que devuelve True si se ha solicitado cancelar la consulta.
+        model: El modelo de Ollama a usar. Si es None, se usarÃ¡ el modelo por defecto configurado en settings.
+        should_cancel: FunciÃ³n opcional que devuelve True si se ha solicitado cancelar la consulta.
 
     Returns:
         La respuesta generada por Ollama como un string.
 
     Raises:
         QueryCancelledError: Si se detecta que el usuario ha cancelado la consulta.
-        OllamaModelNotFoundError: Si el modelo especificado no está disponible en Ollama.
+        OllamaModelNotFoundError: Si el modelo especificado no estÃ¡ disponible en Ollama.
         OllamaTimeoutError: Si la consulta a Ollama supera el tiempo de espera configurado.
-        RuntimeError: Si Ollama devuelve un error HTTP o si ocurre un error durante la comunicación con Ollama.
+        RuntimeError: Si Ollama devuelve un error HTTP o si ocurre un error durante la comunicaciÃ³n con Ollama.
     """
     if should_cancel and should_cancel():
         raise QueryCancelledError(QUERY_CANCELLED_MESSAGE)
@@ -2364,16 +2363,16 @@ async def ask_rag_llm(
     should_cancel=None,
 ) -> str:
     """
-    Construye el prompt RAG correspondiente y lo envía al LLM.
-    Todos los tipo de pregunta usan esta misma función; solo cambia la plantilla del prompt.
+    Construye el prompt RAG correspondiente y lo envÃ­a al LLM.
+    Todos los tipo de pregunta usan esta misma funciÃ³n; solo cambia la plantilla del prompt.
 
     Args:
         user_query: La pregunta del usuario que se quiere responder.
         context_blocks: Lista de fragmentos de texto recuperados que se pueden usar para responder.
         query_profile: El perfil de pregunta que indica el tipo de respuesta esperada (e.g., "summary", "amounts", "deadlines").
             Si no se especifica o no se encuentra, se usa el perfil "general".
-        model: El modelo de Ollama a usar para generar la respuesta. Si es None, se usará el modelo por defecto configurado en settings.
-        should_cancel: Función opcional que devuelve True si se ha solicitado cancelar la consulta.
+        model: El modelo de Ollama a usar para generar la respuesta. Si es None, se usarÃ¡ el modelo por defecto configurado en settings.
+        should_cancel: FunciÃ³n opcional que devuelve True si se ha solicitado cancelar la consulta.
 
     Returns:
         La respuesta generada por el modelo de lenguaje como un string.
@@ -2394,7 +2393,7 @@ async def ask_rag_llm(
             return await asyncio.wait_for(generation, timeout=timeout_seconds)
         except asyncio.TimeoutError as exc:
             raise OllamaTimeoutError(
-                f"Ollama ha superado el tiempo máximo de generación ({timeout_seconds:g} s)."
+                f"Ollama ha superado el tiempo mÃ¡ximo de generaciÃ³n ({timeout_seconds:g} s)."
             ) from exc
 
 
@@ -2404,16 +2403,16 @@ def obtener_chunk_de_query(
     tipo_documento: str | None = None,
 ) -> dict | None:
     """
-    Toma una pregunta de usuario, recupera el chunk más relevante de Qdrant.
+    Toma una pregunta de usuario, recupera el chunk mÃ¡s relevante de Qdrant.
 
     Args:
-        user_query: La pregunta del usuario para la que se quiere obtener el chunk más relevante.
-        numero_expediente: (Opcional) Número de expediente para filtrar los chunks por sus metadatos.
+        user_query: La pregunta del usuario para la que se quiere obtener el chunk mÃ¡s relevante.
+        numero_expediente: (Opcional) NÃºmero de expediente para filtrar los chunks por sus metadatos.
         tipo_documento: (Opcional) Tipo de documento para filtrar los chunks por sus metadatos.
 
     Returns:
-        Un diccionario con los detalles del chunk más relevante encontrado, incluyendo título del documento, nombre del archivo, índice de segmento y el texto del chunk.
-        Si no se encuentra ningún chunk relevante, devuelve None.
+        Un diccionario con los detalles del chunk mÃ¡s relevante encontrado, incluyendo tÃ­tulo del documento, nombre del archivo, Ã­ndice de segmento y el texto del chunk.
+        Si no se encuentra ningÃºn chunk relevante, devuelve None.
     """
     docs = recuperacion_chunk(
         user_query,
@@ -2447,26 +2446,26 @@ async def obtener_mejor_chunk(
     min_similarity: float | None = DEFAULT_RAG_MIN_SIMILARITY,
 ) -> dict:
     """
-    Dada una pregunta del usuario, recupera los chunks más relevantes de Qdrant y usa Ollama para generar una respuesta basada en esos chunks.
+    Dada una pregunta del usuario, recupera los chunks mÃ¡s relevantes de Qdrant y usa Ollama para generar una respuesta basada en esos chunks.
 
     Args:
         user_query: La pregunta del usuario para la que se quieren recuperar los chunks relevantes y generar una respuesta.
-        model: El modelo de Ollama a usar para generar la respuesta. Si es None, se usará el modelo por defecto configurado en settings.
-        should_cancel: Función opcional que devuelve True si se ha solicitado cancelar la consulta.
-                    Si se detecta que el usuario ha cancelado la consulta, se lanzará una QueryCancelledError.
-        on_status: Función opcional para recibir actualizaciones de estado durante el proceso. Se llamará con mensajes descriptivos de cada etapa
+        model: El modelo de Ollama a usar para generar la respuesta. Si es None, se usarÃ¡ el modelo por defecto configurado en settings.
+        should_cancel: FunciÃ³n opcional que devuelve True si se ha solicitado cancelar la consulta.
+                    Si se detecta que el usuario ha cancelado la consulta, se lanzarÃ¡ una QueryCancelledError.
+        on_status: FunciÃ³n opcional para recibir actualizaciones de estado durante el proceso. Se llamarÃ¡ con mensajes descriptivos de cada etapa
                     (preparando modelo, recuperando fragmentos, generando respuesta, etc.).
-        numero_expediente: (Opcional) Número de expediente para filtrar los chunks por sus metadatos durante la recuperación.
-        tipo_documento: (Opcional) Tipo de documento para filtrar los chunks por sus metadatos durante la recuperación.
+        numero_expediente: (Opcional) NÃºmero de expediente para filtrar los chunks por sus metadatos durante la recuperaciÃ³n.
+        tipo_documento: (Opcional) Tipo de documento para filtrar los chunks por sus metadatos durante la recuperaciÃ³n.
         query_profile: El perfil de pregunta que indica el tipo de respuesta esperada (e.g., "summary", "amounts", "deadlines").
             Si no se especifica o no se encuentra, se usa el perfil "general".
-        retrieval_k: Número máximo de chunks a recuperar. La capa de servicio decide este valor segun el tipo de pregunta.
-        min_similarity: Umbral mínimo de similitud para filtrar los chunks recuperados. Por defecto se exige score > 0.5.
+        retrieval_k: NÃºmero mÃ¡ximo de chunks a recuperar. La capa de servicio decide este valor segun el tipo de pregunta.
+        min_similarity: Umbral mÃ­nimo de similitud para filtrar los chunks recuperados. Por defecto se exige score > 0.5.
 
     Returns:
-        Un diccionario con la respuesta generada por Ollama, detalles del chunk más relevante (título del documento, nombre del archivo, índice de segmento, texto del chunk),
-        la lista de chunks recuperados con sus scores y metadatos, el modelo usado, y los filtros aplicados. Si no se encuentra ningún chunk relevante,
-        la respuesta indicará que no se encontraron fragmentos relevantes en la base de datos.
+        Un diccionario con la respuesta generada por Ollama, detalles del chunk mÃ¡s relevante (tÃ­tulo del documento, nombre del archivo, Ã­ndice de segmento, texto del chunk),
+        la lista de chunks recuperados con sus scores y metadatos, el modelo usado, y los filtros aplicados. Si no se encuentra ningÃºn chunk relevante,
+        la respuesta indicarÃ¡ que no se encontraron fragmentos relevantes en la base de datos.
     """
     user_query = (user_query or "").strip()
     model_name = resolve_rag_llm_model(model)
@@ -2538,8 +2537,8 @@ async def _prepare_ollama_model(model_name: str, *, should_cancel=None, on_statu
 
     Args:
         model_name (str): El nombre del modelo a preparar.
-        should_cancel (_type_, optional): Una función para verificar si la operación ha sido cancelada. Defaults to None.
-        on_status (_type_, optional): Una función para actualizar el estado de la operación. Defaults to None.
+        should_cancel (_type_, optional): Una funciÃ³n para verificar si la operaciÃ³n ha sido cancelada. Defaults to None.
+        on_status (_type_, optional): Una funciÃ³n para actualizar el estado de la operaciÃ³n. Defaults to None.
     """
     if on_status:
         on_status(f"Preparando modelo {model_name}...")
@@ -2560,18 +2559,18 @@ def _empty_rag_result(
     tipo_documento: str | None = None,
 ) -> dict:
     """
-    Construye un resultado de RAG vacío, indicando que no hay información disponible.
+    Construye un resultado de RAG vacÃ­o, indicando que no hay informaciÃ³n disponible.
 
     Args:
         model_name (str): El nombre del modelo de lenguaje utilizado para la consulta.
         query_profile (str): El perfil de la consulta.
-        retrieval_k (int): El número de fragmentos a recuperar.
-        min_similarity (float | None): La similitud mínima para considerar un fragmento relevante.
-        numero_expediente (str | None): El número de expediente.
+        retrieval_k (int): El nÃºmero de fragmentos a recuperar.
+        min_similarity (float | None): La similitud mÃ­nima para considerar un fragmento relevante.
+        numero_expediente (str | None): El nÃºmero de expediente.
         tipo_documento (str | None): El tipo de documento.
 
     Returns:
-        dict: El resultado de RAG vacío.
+        dict: El resultado de RAG vacÃ­o.
     """
     applied_filters = {
         key: value
@@ -2582,7 +2581,7 @@ def _empty_rag_result(
         if value not in (None, "")
     }
     return {
-        "answer": "No hay información disponible sobre tu consulta en la base de datos. Prueba con otra búsqueda o revisa que la normativa relevante esté cargada e indexada.",
+        "answer": "No hay informaciÃ³n disponible sobre tu consulta en la base de datos. Prueba con otra bÃºsqueda o revisa que la normativa relevante estÃ© cargada e indexada.",
         "title": "",
         "filename": "",
         "segment_index": -1,
@@ -2606,7 +2605,7 @@ def _to_jsonable(value: Any) -> Any:
 
     Returns:
         Any: El valor convertido a un formato JSONable. Si el valor es de un tipo primitivo (str, bool, int, float), se devuelve tal cual. Si el valor es una lista o tupla,
-        se convierte recursivamente cada elemento. Si el valor es un diccionario, se convierte recursivamente cada clave y valor. Si el valor tiene un método 'item', se intenta convertir el resultado de ese método.
+        se convierte recursivamente cada elemento. Si el valor es un diccionario, se convierte recursivamente cada clave y valor. Si el valor tiene un mÃ©todo 'item', se intenta convertir el resultado de ese mÃ©todo.
     """
     if value is None or isinstance(value, (str, bool, int)):
         return value
@@ -2626,7 +2625,7 @@ def _to_jsonable(value: Any) -> Any:
 
 def _expanded_context_for_point(point: Any, points: list[Any]) -> str:
     """
-    Amplía un chunk con vecinos recuperados del mismo bloque estructural.
+    AmplÃ­a un chunk con vecinos recuperados del mismo bloque estructural.
     """
     payload = getattr(point, "payload", None) or {}
     meta = payload.get("metadata") or {}
@@ -2670,7 +2669,7 @@ def _build_retrieved_and_context(points: list[Any], *, should_cancel=None) -> tu
 
     Args:
         points: La lista de puntos devueltos por Qdrant, cada uno con un payload que contiene el contenido del chunk y sus metadatos, y un score de similitud.
-        should_cancel: Función opcional que devuelve True si se ha solicitado cancelar la consulta. Si se detecta que el usuario ha cancelado la consulta, se lanzará una QueryCancelledError.
+        should_cancel: FunciÃ³n opcional que devuelve True si se ha solicitado cancelar la consulta. Si se detecta que el usuario ha cancelado la consulta, se lanzarÃ¡ una QueryCancelledError.
 
     Returns:
         Una tupla con dos elementos: la lista de chunks recuperados y la lista de bloques de contexto.
@@ -2738,23 +2737,23 @@ def _rag_result_from_best(
     tipo_documento: str | None = None,
 ) -> dict:
     """
-    Construye el resultado final de RAG a partir de la respuesta generada por el modelo, el chunk más relevante y la lista de chunks recuperados.
+    Construye el resultado final de RAG a partir de la respuesta generada por el modelo, el chunk mÃ¡s relevante y la lista de chunks recuperados.
 
     Args:
         answer (str): La respuesta generada por el modelo de lenguaje basada en los chunks recuperados.
         model_name (str): El nombre del modelo de lenguaje utilizado para generar la respuesta.
-        best (dict): Un diccionario con los detalles del chunk más relevante encontrado, incluyendo título del documento, nombre del archivo, índice de segmento y el texto del chunk.
+        best (dict): Un diccionario con los detalles del chunk mÃ¡s relevante encontrado, incluyendo tÃ­tulo del documento, nombre del archivo, Ã­ndice de segmento y el texto del chunk.
         retrieved (list[dict]): La lista de chunks recuperados con sus scores y metadatos, ordenados por relevancia.
-        execution_device (str): El dispositivo en el que se ejecutó la consulta.
+        execution_device (str): El dispositivo en el que se ejecutÃ³ la consulta.
         query_profile (str): El perfil de consulta utilizado.
-        retrieval_k (int): El número de chunks a recuperar.
-        min_similarity (float | None): La similitud mínima requerida para incluir un chunk en los resultados.
-        numero_expediente (str | None): El número de expediente asociado al documento, que se utiliza para filtrar los resultados.
+        retrieval_k (int): El nÃºmero de chunks a recuperar.
+        min_similarity (float | None): La similitud mÃ­nima requerida para incluir un chunk en los resultados.
+        numero_expediente (str | None): El nÃºmero de expediente asociado al documento, que se utiliza para filtrar los resultados.
         tipo_documento (str | None): El tipo de documento, que se utiliza para filtrar los resultados.
 
     Returns:
-        dict: Un diccionario con la respuesta generada por el modelo, detalles del chunk más relevante (título del documento, nombre del archivo, índice de segmento, texto del chunk), la lista de chunks recuperados con sus scores y metadatos, el modelo usado,
-        el dispositivo de ejecución, el perfil de consulta, los parámetros de recuperación y los filtros aplicados.
+        dict: Un diccionario con la respuesta generada por el modelo, detalles del chunk mÃ¡s relevante (tÃ­tulo del documento, nombre del archivo, Ã­ndice de segmento, texto del chunk), la lista de chunks recuperados con sus scores y metadatos, el modelo usado,
+        el dispositivo de ejecuciÃ³n, el perfil de consulta, los parÃ¡metros de recuperaciÃ³n y los filtros aplicados.
     """
     applied_filters = {
         key: value
@@ -2786,17 +2785,17 @@ def index_pdf(
     tipo_documento: str | None = None,
 ) -> list[VectorBaseDocument]:
     """
-    Esta función indexa un PDF para ello lee el texto, lo trocea en chunks, calcula embeddings y guarda los puntos en Qdrant.
+    Esta funciÃ³n indexa un PDF para ello lee el texto, lo trocea en chunks, calcula embeddings y guarda los puntos en Qdrant.
 
     Args:
         pdf_path: Ruta al archivo PDF que se va a indexar.
-        document_id: (Opcional) Identificador numérico del documento, que se incluirá en los metadatos de cada chunk. Útil para trazabilidad y auditoría.
-        numero_expediente: (Opcional) Número de expediente asociado al documento, que se incluirá en los metadatos de cada chunk. Permite filtrar por expediente en las consultas.
+        document_id: (Opcional) Identificador numÃ©rico del documento, que se incluirÃ¡ en los metadatos de cada chunk. Ãštil para trazabilidad y auditorÃ­a.
+        numero_expediente: (Opcional) NÃºmero de expediente asociado al documento, que se incluirÃ¡ en los metadatos de cada chunk. Permite filtrar por expediente en las consultas.
     Returns:
         Lista de instancias de VectorBaseDocument que representan los chunks indexados del PDF. Cada instancia incluye el contenido del chunk, su embedding y metadatos asociados
-        (nombre de archivo, título, hash, número de expediente, tipo de documento, etc.).
-        Si ocurre un error durante el proceso de indexación (lectura del PDF, chunking, generación de embeddings, guardado en Qdrant),
-        se devuelve una lista vacía y se registran los errores correspondientes.
+        (nombre de archivo, tÃ­tulo, hash, nÃºmero de expediente, tipo de documento, etc.).
+        Si ocurre un error durante el proceso de indexaciÃ³n (lectura del PDF, chunking, generaciÃ³n de embeddings, guardado en Qdrant),
+        se devuelve una lista vacÃ­a y se registran los errores correspondientes.
     """
     with timed_block(f"total {pdf_path.name}"):
         logger.info("Procesando %s ...", pdf_path.name)
@@ -2818,7 +2817,7 @@ def index_pdf(
             return []
 
         if not full_text.strip():
-            logger.warning("%s: sin texto extraído.", pdf_path.name)
+            logger.warning("%s: sin texto extraÃ­do.", pdf_path.name)
             return []
 
         # 2) Chunking
@@ -2834,7 +2833,7 @@ def index_pdf(
             return []
 
         if not chunks:
-            logger.warning("%s: sin chunks válidos", pdf_path.name)
+            logger.warning("%s: sin chunks vÃ¡lidos", pdf_path.name)
             return []
 
         # 3) Embeddings
@@ -2845,7 +2844,7 @@ def index_pdf(
         # Seguridad si no coinciden longitudes
         if len(vectors) != len(chunks):
             logger.error(
-                "%s: nº chunks (%d) != nº embeddings (%d)",
+                "%s: nÂº chunks (%d) != nÂº embeddings (%d)",
                 pdf_path.name, len(chunks), len(vectors)
             )
             return []
@@ -2909,17 +2908,17 @@ def index_markdown(
 
     Args:
         markdown_content: El contenido del documento en formato Markdown que se va a indexar.
-        filename: El nombre del archivo original del documento, que se incluirá en los metadatos de cada chunk. Es un campo obligatorio para mantener la trazabilidad.
-        document_id: (Opcional) Identificador numérico del documento, que se incluirá en los metadatos de cada chunk. Útil para trazabilidad y auditoría.
-        numero_expediente: (Opcional) Número de expediente asociado al documento, que se incluirá en los metadatos de cada chunk. Permite filtrar por expediente en las consultas.
-        sha256: (Opcional) Hash SHA256 del documento original, que se incluirá en los metadatos de cada chunk. Permite verificar la integridad del documento y detectar cambios.
-        title: (Opcional) Título del documento, que se incluirá en los metadatos de cada chunk. Si no se proporciona, se usará el nombre del archivo sin extensión como título.
+        filename: El nombre del archivo original del documento, que se incluirÃ¡ en los metadatos de cada chunk. Es un campo obligatorio para mantener la trazabilidad.
+        document_id: (Opcional) Identificador numÃ©rico del documento, que se incluirÃ¡ en los metadatos de cada chunk. Ãštil para trazabilidad y auditorÃ­a.
+        numero_expediente: (Opcional) NÃºmero de expediente asociado al documento, que se incluirÃ¡ en los metadatos de cada chunk. Permite filtrar por expediente en las consultas.
+        sha256: (Opcional) Hash SHA256 del documento original, que se incluirÃ¡ en los metadatos de cada chunk. Permite verificar la integridad del documento y detectar cambios.
+        title: (Opcional) TÃ­tulo del documento, que se incluirÃ¡ en los metadatos de cada chunk. Si no se proporciona, se usarÃ¡ el nombre del archivo sin extensiÃ³n como tÃ­tulo.
 
     Returns:
         Lista de instancias de VectorBaseDocument que representan los chunks indexados del contenido Markdown. Cada instancia incluye el contenido del chunk, su embedding y metadatos asociados
-        (nombre de archivo, título, hash, número de expediente, tipo de documento, etc.).
-        Si ocurre un error durante el proceso de indexación (chunking, generación de embeddings, guardado en Qdrant),
-        se devuelve una lista vacía y se registran los errores correspondientes.
+        (nombre de archivo, tÃ­tulo, hash, nÃºmero de expediente, tipo de documento, etc.).
+        Si ocurre un error durante el proceso de indexaciÃ³n (chunking, generaciÃ³n de embeddings, guardado en Qdrant),
+        se devuelve una lista vacÃ­a y se registran los errores correspondientes.
     """
     if not (markdown_content or "").strip():
         return []
@@ -2935,7 +2934,7 @@ def index_markdown(
         return []
 
     if not chunks:
-        logger.warning("%s: sin chunks válidos (Markdown vacío tras limpieza)", filename)
+        logger.warning("%s: sin chunks vÃ¡lidos (Markdown vacÃ­o tras limpieza)", filename)
         return []
 
     with timed_block(f"embeddings-md {filename}"):
@@ -2944,7 +2943,7 @@ def index_markdown(
 
     if len(vectors) != len(chunks):
         logger.error(
-            "%s: nº chunks markdown (%d) != nº embeddings (%d)",
+            "%s: nÂº chunks markdown (%d) != nÂº embeddings (%d)",
             filename,
             len(chunks),
             len(vectors),
@@ -2997,14 +2996,14 @@ def index_documents_dir(documents_dir: Path) -> dict:
         documents_dir: Ruta al directorio que contiene los archivos PDF a indexar.
 
     Returns:
-        Un diccionario con un resumen del proceso de indexación, incluyendo el número total de PDFs procesados, cuántos fueron nuevos, cuántos fueron modificados (reindexados),
-        cuántos fueron omitidos por no tener cambios, cuántos tuvieron errores o no tenían texto, y el número total de chunks guardados en Qdrant.
+        Un diccionario con un resumen del proceso de indexaciÃ³n, incluyendo el nÃºmero total de PDFs procesados, cuÃ¡ntos fueron nuevos, cuÃ¡ntos fueron modificados (reindexados),
+        cuÃ¡ntos fueron omitidos por no tener cambios, cuÃ¡ntos tuvieron errores o no tenÃ­an texto, y el nÃºmero total de chunks guardados en Qdrant.
     """
     if not documents_dir.exists():
         logger.error("No se encuentra la carpeta %s", documents_dir)
         raise SystemExit(1)
 
-    # Asegura colección antes de empezar
+    # Asegura colecciÃ³n antes de empezar
     VectorBaseDocument._ensure_collection()
 
     summary = {
@@ -3023,12 +3022,12 @@ def index_documents_dir(documents_dir: Path) -> dict:
         filename = pdf_path.name
         doc_hash = pdf_sha256(pdf_path)
 
-        # Si está y coincide hash no lo añade
+        # Si estÃ¡ y coincide hash no lo aÃ±ade
         if qdrant_has_same_hash(filename, doc_hash):
             summary["pdfs_omitidos"] += 1
             continue
 
-        # Si está pero hash distinto, borrar los chunks antiguos y genera los nuevos
+        # Si estÃ¡ pero hash distinto, borrar los chunks antiguos y genera los nuevos
         if qdrant_has_filename(filename):
             logger.info("%s ha cambiado => reindexando", filename)
             qdrant_delete_by_filename(filename)
@@ -3036,7 +3035,7 @@ def index_documents_dir(documents_dir: Path) -> dict:
         else:
             summary["pdfs_nuevos"] += 1
 
-        # Si no esta lo añade
+        # Si no esta lo aÃ±ade
         docs = index_pdf(pdf_path)
         n_chunks = len(docs)
         if n_chunks > 0:
@@ -3062,7 +3061,7 @@ def cli_main(documents_dir: Path | None = None) -> dict:
         documents_dir: Directorio opcional con PDFs; por defecto `./documentos`.
 
     Returns:
-        dict: Resumen de indexación.
+        dict: Resumen de indexaciÃ³n.
     """
     logging.basicConfig(
         level=logging.INFO,
@@ -3082,3 +3081,4 @@ def cli_main(documents_dir: Path | None = None) -> dict:
 
 if __name__ == "__main__":
     cli_main()
+

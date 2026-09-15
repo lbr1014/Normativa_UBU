@@ -10,6 +10,8 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import select
+
 from app.main.code.extensions import db
 
 MADRID_TZ = ZoneInfo("Europe/Madrid")
@@ -301,15 +303,15 @@ class Documento(db.Model):
         from app.main.code.model.consulta_chunk import ConsultaChunk
         from app.main.code.model.embedding import Embedding
 
-        chunk_ids_subq = db.session.query(Chunk.id).filter(Chunk.document_id == self.id).subquery()
+        chunk_ids = select(Chunk.id).where(Chunk.document_id == self.id)
 
         ConsultaChunk.query.filter(
-            ConsultaChunk.chunk_id.in_(chunk_ids_subq)
+            ConsultaChunk.chunk_id.in_(chunk_ids)
         ).delete(synchronize_session=False)
         db.session.commit()
 
         Embedding.query.filter(
-            Embedding.chunk_id.in_(chunk_ids_subq)
+            Embedding.chunk_id.in_(chunk_ids)
         ).delete(synchronize_session=False)
         db.session.commit()
 

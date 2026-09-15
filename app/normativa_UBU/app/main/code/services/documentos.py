@@ -267,15 +267,12 @@ def infer_document_metadata_from_filename(filename: str) -> tuple[str | None, st
         Una tupla con el Número de expediente y el tipo de documento.
     """
     inferred = Documento.infer_metadata_from_filename(filename)
-    if inferred is None:
+    if not isinstance(inferred, tuple):
         return None, None
-    if isinstance(inferred, tuple):
-        if len(inferred) == 2:
-            return inferred[0], inferred[1]
-        if len(inferred) == 1:
-            return inferred[0], None
-        if len(inferred) > 2:
-            return inferred[0], inferred[1]
+    if len(inferred) == 1:
+        return inferred[0], None
+    if len(inferred) > 2:
+        return inferred[0], inferred[1]
     return None, None
 
 class DocumentosService:
@@ -628,7 +625,7 @@ class DocumentosService:
             OSError: Si ocurre un error al eliminar el PDF o sus chunks relacionados.
             RuntimeError: Si no se puede eliminar el documento.
         """
-        doc = Documento.query.get(doc_id)
+        doc = db.session.get(Documento, doc_id)
         if not doc:
             return
 

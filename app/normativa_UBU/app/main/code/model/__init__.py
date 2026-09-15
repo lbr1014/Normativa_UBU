@@ -6,6 +6,7 @@ Script para exportar las entidades SQLAlchemy de la aplicación desde un único 
 from .chunk import Chunk
 from .consulta import Consulta
 from .consulta_chunk import ConsultaChunk
+from .document_operation_state import DocumentOperationState
 from .documento import Documento
 from .embedding import Embedding
 from .job_state import State
@@ -19,6 +20,7 @@ __all__ = [
     "Chunk",
     "Consulta",
     "ConsultaChunk",
+    "DocumentOperationState",
     "Documento",
     "Embedding",
     "MarkdownConversionState",

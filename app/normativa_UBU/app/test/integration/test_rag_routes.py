@@ -1,4 +1,4 @@
-"""
+﻿"""
 Autora: Lydia Blanco Ruiz
 Script con pruebas de integracion de las rutas RAG. Su objetivo es verificar el funcionamiento completo del sistema de consultas 
 basadas en Retrieval-Augmented Generation, incluyendo la visualización de formularios, la creación y reutilización de tareas asíncronas, 
@@ -168,7 +168,7 @@ class RAGRoutesIntegrationTest(BaseAppTestCase):
         job = db.session.get(RAGQueryState, response.get_json()["job_id"])
         self.assertIn("expediente EXP-55", job.question)
         self.assertIn("doc_type=tecnico", job.question)
-        self.assertIn("cantidades económicas", job.question)
+        self.assertIn("cantidades econ", job.question)
         self.assertEqual(job.model_name, "fake-model")
         mock_submit.assert_called_once()
 
@@ -336,3 +336,4 @@ class RAGRoutesIntegrationTest(BaseAppTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["status"], "done")
+

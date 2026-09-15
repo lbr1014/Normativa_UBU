@@ -409,7 +409,8 @@ class AdminRoutesIntegrationTest(BaseAppTestCase):
                 headers={"Accept": "application/json"},
             )
 
-        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.status_code, 202)
+        self.assertIn("job_id", response.get_json())
         mock_submit.assert_called_once()
 
     def test_admin_can_view_and_download_pdf_from_document_row(self):

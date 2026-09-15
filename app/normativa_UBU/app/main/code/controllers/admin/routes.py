@@ -1,6 +1,6 @@
-"""
+﻿"""
 Autora: Lydia Blanco Ruiz
-Script para las rutas de administración, incluyendo gestión de usuarios, documentos y procesos en segundo plano con estado y cancelación.
+Script para las rutas de administraciÃ³n, incluyendo gestiÃ³n de usuarios, documentos y procesos en segundo plano con estado y cancelaciÃ³n.
 """
 
 import smtplib
@@ -58,6 +58,7 @@ from app.main.code.services.markdown_conversion_state import (
 from app.main.code.services.vector_update_state import send_update_finished_email
 
 from ...model.documento import Documento
+from ...model.document_operation_state import DocumentOperationState
 from ...model.markdown_conversion_state import MarkdownConversionState
 from ...model.rag_evaluation_state import RAGEvaluationState
 from ...model.user import User
@@ -135,7 +136,7 @@ def _mark_job_as_stale(job: Any) -> None:
     Marca un job como interrumpido por reinicio del servicio.
 
     Args:
-        job: Instancia del job a actualizar, que idealmente debería implementar un método mark_failed(message) o atributos status, error y finished_at.
+        job: Instancia del job a actualizar, que idealmente deberÃ­a implementar un mÃ©todo mark_failed(message) o atributos status, error y finished_at.
 
     Returns:
         None. El job se actualiza para reflejar que fue interrumpido por el reinicio.
@@ -165,13 +166,13 @@ def active_jobs_status() -> ResponseReturnValue:
 
     def _latest_active(model: Any) -> Any:
         """
-        Obtiene el job activo más reciente de un modelo dado.
+        Obtiene el job activo mÃ¡s reciente de un modelo dado.
 
         Args:
-            model (Any): Modelo SQLAlchemy del que obtener el job activo más reciente.
+            model (Any): Modelo SQLAlchemy del que obtener el job activo mÃ¡s reciente.
 
         Returns:
-            Any: La instancia del job activo más reciente o ``None`` si no hay ninguno. Si el job activo es antiguo, se marca como fallido y se devuelve ``None``.
+            Any: La instancia del job activo mÃ¡s reciente o ``None`` si no hay ninguno. Si el job activo es antiguo, se marca como fallido y se devuelve ``None``.
         """
 
         job = (
@@ -186,12 +187,18 @@ def active_jobs_status() -> ResponseReturnValue:
             return None
         return job
 
+    document = _latest_active(DocumentOperationState)
     markdown = _latest_active(MarkdownConversionState)
     vector = _latest_active(VectorUpdateState)
     rag_eval = _latest_active(RAGEvaluationState)
 
     return jsonify(
         {
+            "document": (
+                {"job_id": document.id, "status": document.status, "operation": document.operation}
+                if document
+                else None
+            ),
             "markdown": {"job_id": markdown.id, "status": markdown.status} if markdown else None,
             "vector": {"job_id": vector.id, "status": vector.status} if vector else None,
             "rag_evaluation": {"job_id": rag_eval.id, "status": rag_eval.status} if rag_eval else None,
@@ -706,18 +713,62 @@ class _StagedUpload:
             pass
 
 
-def upload_documents_async(*, app, staged_files: list[dict[str, str]]) -> None:
+def upload_documents_async(*, app, job_id: int, staged_files: list[dict[str, str]], lang: str = "es") -> None:
     """
     Procesa en segundo plano las subidas ya copiadas a staging.
     """
     with app.app_context():
+        job = db.session.get(DocumentOperationState, job_id)
+        if not job:
+            return
         staged_paths = [Path(item["path"]) for item in staged_files]
         uploads: list[_StagedUpload] = []
         try:
-            uploads = [_StagedUpload(item["filename"], Path(item["path"])) for item in staged_files]
-            documentos_service().save_uploads(uploads)
+            _mark_job_running(job, message=translate_for(lang, "documents.upload.starting"))
+            db.session.commit()
+
+            service = documentos_service()
+            total = len(staged_files)
+            saved = 0
+            failed = 0
+            for index, item in enumerate(staged_files, start=1):
+                filename = item["filename"]
+                try:
+                    job.set_message(translate_for(lang, "documents.upload.processing", name=filename))
+                    _set_job_progress(job, index - 1, total)
+                    db.session.commit()
+                    upload = _StagedUpload(filename, Path(item["path"]))
+                    uploads.append(upload)
+                    saved += service.save_uploads([upload])
+                except (OSError, SQLAlchemyError, RuntimeError, ValueError):
+                    failed += 1
+                    db.session.rollback()
+                    job = db.session.get(DocumentOperationState, job_id)
+                    if not job:
+                        return
+                    current_app.logger.exception("Error procesando documento subido %s", filename)
+                finally:
+                    job = db.session.get(DocumentOperationState, job_id)
+                    if job:
+                        _set_job_progress(job, index, total)
+                        db.session.commit()
+
+            job = db.session.get(DocumentOperationState, job_id)
+            if not job:
+                return
+            if saved == 0 and failed:
+                _mark_job_failed(job, RuntimeError(translate_for(lang, "documents.upload.failed")), message=translate_for(lang, "documents.upload.failed"))
+            elif failed:
+                _mark_job_done(job, message=translate_for(lang, "documents.upload.done_with_failures", count=saved, failed=failed))
+            else:
+                _mark_job_done(job, message=translate_for(lang, "documents.upload.done", count=saved))
+            db.session.commit()
         except (OSError, SQLAlchemyError, RuntimeError, ValueError):
             db.session.rollback()
+            job = db.session.get(DocumentOperationState, job_id)
+            if job:
+                _mark_job_failed(job, translate_for(lang, "documents.upload.failed"), message=translate_for(lang, "documents.upload.failed"))
+                db.session.commit()
             current_app.logger.exception("Error procesando documentos subidos en segundo plano")
         finally:
             for upload in uploads:
@@ -731,18 +782,58 @@ def upload_documents_async(*, app, staged_files: list[dict[str, str]]) -> None:
             db.session.remove()
 
 
-def delete_documents_async(*, app, doc_ids: list[int]) -> None:
+def delete_documents_async(*, app, job_id: int, doc_ids: list[int], lang: str = "es") -> None:
     """
     Borra documentos en segundo plano, aislando cada documento para tolerar lotes grandes.
     """
     with app.app_context():
+        job = db.session.get(DocumentOperationState, job_id)
+        if not job:
+            return
         service = documentos_service()
-        for doc_id in sorted(set(int(value) for value in doc_ids)):
+        ids = sorted(set(int(value) for value in doc_ids))
+        deleted = 0
+        failed = 0
+        try:
+            _mark_job_running(job, message=translate_for(lang, "documents.delete.starting"))
+            db.session.commit()
+        except (SQLAlchemyError, RuntimeError):
+            db.session.rollback()
+            current_app.logger.exception("Error iniciando borrado de documentos en segundo plano")
+            db.session.remove()
+            return
+
+        for index, doc_id in enumerate(ids, start=1):
             try:
+                job = db.session.get(DocumentOperationState, job_id)
+                if not job:
+                    return
+                doc = db.session.get(Documento, doc_id)
+                name = doc.nombre if doc else str(doc_id)
+                job.set_message(translate_for(lang, "documents.delete.processing", name=name))
+                _set_job_progress(job, index - 1, len(ids))
+                db.session.commit()
                 service.delete_document(doc_id)
+                deleted += 1
             except (OSError, SQLAlchemyError, RuntimeError):
+                failed += 1
                 db.session.rollback()
                 current_app.logger.exception("Error borrando documento %s en segundo plano", doc_id)
+            finally:
+                job = db.session.get(DocumentOperationState, job_id)
+                if job:
+                    _set_job_progress(job, index, len(ids))
+                    db.session.commit()
+
+        job = db.session.get(DocumentOperationState, job_id)
+        if job:
+            if deleted == 0 and failed:
+                _mark_job_failed(job, RuntimeError(translate_for(lang, "documents.delete.failed")), message=translate_for(lang, "documents.delete.failed"))
+            elif failed:
+                _mark_job_done(job, message=translate_for(lang, "documents.delete.done_with_failures", count=deleted, failed=failed))
+            else:
+                _mark_job_done(job, message=translate_for(lang, "documents.delete.done", count=deleted))
+            db.session.commit()
         db.session.remove()
 
 
@@ -862,21 +953,63 @@ def upload_documents() -> ResponseReturnValue:
 
     staged_files = _stage_upload_files(list(files))
     if not staged_files:
-        flash("No se ha subido ningún PDF válido.", "warning")
+        flash("No se ha subido ningÃºn PDF vÃ¡lido.", "warning")
         return redirect(url_for(DOCUMENTS))
 
+    lang = get_locale()
+    job = DocumentOperationState(
+        operation="upload",
+        status="queued",
+        progress=0,
+        message=translate_for(lang, JOBS_QUEUED_SHORT),
+        cancel_requested=False,
+        error=None,
+    )
+    db.session.add(job)
+    db.session.commit()
+
     app_obj = current_app._get_current_object()
-    job_key = uuid.uuid4().int & ((1 << 31) - 1)
     submit_tracked(
         document_executor,
         job_type=DOCUMENT_UPLOAD_JOB_TYPE,
-        tracked_job_id=job_key,
+        tracked_job_id=job.id,
         fn=upload_documents_async,
         app=app_obj,
+        job_id=job.id,
         staged_files=staged_files,
+        lang=lang,
     )
-    flash(f"Subida encolada: {len(staged_files)} documento(s) se procesaran en segundo plano.", "info")
+
+    if wants_json_response():
+        return jsonify({"job_id": job.id}), 202
     return redirect(url_for(DOCUMENTS))
+
+
+@admin_bp.get("/documents/operation/status/<int:job_id>")
+@login_required
+@admin_required
+def document_operation_status(job_id: int) -> ResponseReturnValue:
+    """
+    Devuelve el estado de una operaciÃ³n documental asÃ­ncrona.
+    """
+    job = db.session.get(DocumentOperationState, job_id)
+    if not job:
+        abort(404)
+
+    boot_at = current_app.config.get("APP_BOOT_AT")
+    if _job_is_stale_since_boot(job, boot_at=boot_at):
+        _mark_job_as_stale(job)
+        db.session.commit()
+
+    return jsonify(
+        {
+            "status": job.status,
+            "operation": job.operation,
+            "progress": job.progress,
+            "message": localize_runtime_message(job.message),
+            "error": job.error,
+        }
+    )
 
 
 @admin_bp.post("/documents/markdown/convert")
@@ -937,7 +1070,7 @@ def cancel_markdown_conversion(job_id: int) -> ResponseReturnValue:
     if invalid:
         return invalid
 
-    job = MarkdownConversionState.query.get_or_404(job_id)
+    job = db.get_or_404(MarkdownConversionState, job_id)
 
     if job.status in {"done", "failed", "cancelled"}:
         return jsonify({"status": job.status, "message": t(JOBS_ALREADY_FINISHED)}), 200
@@ -966,7 +1099,7 @@ def markdown_conversion_status(job_id: int) -> ResponseReturnValue:
     Returns:
         Una respuesta JSON con progreso, mensaje y error del job.
     """
-    job = MarkdownConversionState.query.get(job_id)
+    job = db.session.get(MarkdownConversionState, job_id)
     if not job:
         abort(404)
 
@@ -1026,7 +1159,7 @@ def _markdown_page_base_message(job, lang: str) -> str:
         El mensaje base sin informacion de pagina.
     """
     current_message = job.message or translate_for(lang, "markdown.converting_default")
-    return current_message.split(" Pádina ", 1)[0].split(" Page ", 1)[0]
+    return current_message.split(" PÃ¡dina ", 1)[0].split(" Page ", 1)[0]
 
 
 def _build_markdown_callbacks(job, lang: str):
@@ -1182,7 +1315,7 @@ def _handle_markdown_exception(app, job_id: int, user_email: str, docs_url: str,
     Gestiona un error inesperado en un job de Markdown.
 
     Args:
-        app: Aplicación Flask activa.
+        app: AplicaciÃ³n Flask activa.
         job_id: Identificador del job fallido.
         user_email: Correo del usuario que inicio el job.
         docs_url: URL de la pagina de documentos.
@@ -1194,7 +1327,7 @@ def _handle_markdown_exception(app, job_id: int, user_email: str, docs_url: str,
     """
     db.session.rollback()
     try:
-        job = MarkdownConversionState.query.get(job_id)
+        job = db.session.get(MarkdownConversionState, job_id)
         if not job:
             raise exc
         _mark_job_failed(job, exc, message=translate_for(lang, "markdown.failed"))
@@ -1217,7 +1350,7 @@ def markdown_async(app, job_id: int, user_email: str, docs_url: str, lang: str =
     Ejecuta en segundo plano la conversion de documentos a Markdown.
 
     Args:
-        app: Aplicación Flask activa.
+        app: AplicaciÃ³n Flask activa.
         job_id: Identificador del job de conversion.
         user_email: Correo del usuario que inicio el job.
         docs_url: URL de la pagina de documentos.
@@ -1227,7 +1360,7 @@ def markdown_async(app, job_id: int, user_email: str, docs_url: str, lang: str =
         None.
     """
     with app.app_context():
-        job = MarkdownConversionState.query.get(job_id)
+        job = db.session.get(MarkdownConversionState, job_id)
         if not job:
             return
 
@@ -1255,7 +1388,7 @@ def markdown_async(app, job_id: int, user_email: str, docs_url: str, lang: str =
             _finish_markdown_job(job, stats, user_email, docs_url, lang)
         except JobCancelledError:
             db.session.rollback()
-            job = MarkdownConversionState.query.get(job_id)
+            job = db.session.get(MarkdownConversionState, job_id)
             if job:
                 _cancel_markdown_job(job, lang)
         except ADMIN_RECOVERABLE_ERRORS as exc:
@@ -1269,10 +1402,10 @@ def markdown_async(app, job_id: int, user_email: str, docs_url: str, lang: str =
 @admin_required
 def run_rag_evaluation_job() -> ResponseReturnValue:
     """
-    Lanza la evaluación del RAG (ARES + RAGAS) en segundo plano.
+    Lanza la evaluaciÃ³n del RAG (ARES + RAGAS) en segundo plano.
 
     Returns:
-        JSON con el job_id (si se solicita JSON) o redirección con flash.
+        JSON con el job_id (si se solicita JSON) o redirecciÃ³n con flash.
     """
     invalid = _validate_post_action(json_response=wants_json_response())
     if invalid:
@@ -1298,7 +1431,7 @@ def run_rag_evaluation_job() -> ResponseReturnValue:
     if wants_json_response():
         return jsonify({"job_id": job.id}), 202
 
-    flash("Evaluación del RAG encolada. Puedes consultar el estado desde el panel de jobs.", "info")
+    flash("EvaluaciÃ³n del RAG encolada. Puedes consultar el estado desde el panel de jobs.", "info")
     return redirect(url_for("main.historial"))
 
 
@@ -1307,16 +1440,16 @@ def run_rag_evaluation_job() -> ResponseReturnValue:
 @admin_required
 def rag_evaluation_status(job_id: int) -> ResponseReturnValue:
     """
-    Devuelve el estado actual de un job de evaluación del RAG.
+    Devuelve el estado actual de un job de evaluaciÃ³n del RAG.
 
     Args:
-        job_id (int): Identificador del job de evaluación del RAG.
+        job_id (int): Identificador del job de evaluaciÃ³n del RAG.
 
     Returns:
-        ResponseReturnValue: Respuesta JSON con el estado actual del job, incluyendo progreso, mensaje, error y rutas a los resultados si están disponibles.
+        ResponseReturnValue: Respuesta JSON con el estado actual del job, incluyendo progreso, mensaje, error y rutas a los resultados si estÃ¡n disponibles.
     """
 
-    job = RAGEvaluationState.query.get(job_id)
+    job = db.session.get(RAGEvaluationState, job_id)
     if not job:
         abort(404)
 
@@ -1344,7 +1477,7 @@ def rag_evaluation_status(job_id: int) -> ResponseReturnValue:
 @admin_required
 def download_rag_evaluation_artifact(job_id: int, artifact: str) -> ResponseReturnValue:
     """
-    Descarga un artefacto (archivo de resultados) generado por la evaluación del RAG.
+    Descarga un artefacto (archivo de resultados) generado por la evaluaciÃ³n del RAG.
     Pueden ser:
         - results
         - rows
@@ -1354,13 +1487,13 @@ def download_rag_evaluation_artifact(job_id: int, artifact: str) -> ResponseRetu
         - ares_dataset_tsv
 
     Args:
-        job_id (int): Identificador del job de evaluación del RAG.
+        job_id (int): Identificador del job de evaluaciÃ³n del RAG.
         artifact (str): Nombre del artefacto a descargar.
 
     Returns:
         ResponseReturnValue: Archivo para descargar o error 404/400 si no se encuentra o es una ruta no permitida.
     """
-    job = RAGEvaluationState.query.get_or_404(job_id)
+    job = db.get_or_404(RAGEvaluationState, job_id)
     mapping = {
         "results": job.results_json_path,
         "rows": job.row_results_json_path,
@@ -1388,16 +1521,16 @@ def download_rag_evaluation_artifact(job_id: int, artifact: str) -> ResponseRetu
 
 def rag_evaluation_async(*, app, job_id: int, lang: str) -> None:
     """
-    Ejecuta la evaluación del RAG dentro de un contexto de aplicación Flask.
+    Ejecuta la evaluaciÃ³n del RAG dentro de un contexto de aplicaciÃ³n Flask.
 
     Args:
-        app: Aplicación Flask activa.
-        job_id: Identificador del job de evaluación del RAG.
-        lang: Código de idioma activo para mensajes traducidos.
+        app: AplicaciÃ³n Flask activa.
+        job_id: Identificador del job de evaluaciÃ³n del RAG.
+        lang: CÃ³digo de idioma activo para mensajes traducidos.
     """
     with app.app_context():
         try:
-            job = RAGEvaluationState.query.get(job_id)
+            job = db.session.get(RAGEvaluationState, job_id)
             if not job:
                 return
 
@@ -1418,14 +1551,14 @@ def rag_evaluation_async(*, app, job_id: int, lang: str) -> None:
             job.ares_questions_json_path = str(artifacts.ares_questions_json_path)
             job.ares_dataset_json_path = str(artifacts.ares_dataset_json_path)
             job.ares_dataset_tsv_path = str(artifacts.ares_dataset_tsv_path)
-            job.mark_done(message="Evaluación finalizada.")
+            job.mark_done(message="EvaluaciÃ³n finalizada.")
             db.session.commit()
         except Exception as exc:
             db.session.rollback()
-            job = RAGEvaluationState.query.get(job_id)
+            job = db.session.get(RAGEvaluationState, job_id)
             if job:
-                current_app.logger.exception("Fallo en evaluación RAG job_id=%s", job_id)
-                job.mark_failed(exc, message="La evaluación del RAG ha fallado.")
+                current_app.logger.exception("Fallo en evaluaciÃ³n RAG job_id=%s", job_id)
+                job.mark_failed(exc, message="La evaluaciÃ³n del RAG ha fallado.")
                 db.session.commit()
         finally:
             db.session.remove()
@@ -1489,7 +1622,7 @@ def cancel_vector_db(job_id: int) -> ResponseReturnValue:
     if invalid:
         return invalid
 
-    job = VectorUpdateState.query.get_or_404(job_id)
+    job = db.get_or_404(VectorUpdateState, job_id)
 
     if job.status in {"done", "failed", "cancelled"}:
         return jsonify({"status": job.status, "message": t(JOBS_ALREADY_FINISHED)}), 200
@@ -1509,7 +1642,7 @@ def documentos_async(app, job_id: int, user_email: str, docs_url: str, lang: str
     Ejecuta en segundo plano la indexacion vectorial de documentos.
 
     Args:
-        app: Aplicación Flask activa.
+        app: AplicaciÃ³n Flask activa.
         job_id: Identificador del job vectorial.
         user_email: Correo del usuario que inicio el job.
         docs_url: URL de la pagina de documentos.
@@ -1519,7 +1652,7 @@ def documentos_async(app, job_id: int, user_email: str, docs_url: str, lang: str
         None.
     """
     with app.app_context():
-        job = VectorUpdateState.query.get(job_id)
+        job = db.session.get(VectorUpdateState, job_id)
         if not job:
             return
 
@@ -1600,14 +1733,14 @@ def documentos_async(app, job_id: int, user_email: str, docs_url: str, lang: str
             )
         except JobCancelledError:
             db.session.rollback()
-            job = VectorUpdateState.query.get(job_id)
+            job = db.session.get(VectorUpdateState, job_id)
             if job:
                 _mark_job_cancelled(job)
                 db.session.commit()
         except ADMIN_RECOVERABLE_ERRORS as exc:
             db.session.rollback()
             try:
-                job = VectorUpdateState.query.get(job_id)
+                job = db.session.get(VectorUpdateState, job_id)
                 if not job:
                     raise
                 _mark_job_failed(job, exc)
@@ -1641,7 +1774,7 @@ def vector_db_status(job_id: int) -> ResponseReturnValue:
     Returns:
         Una respuesta JSON con progreso, documento actual y error del job.
     """
-    job = VectorUpdateState.query.get(job_id)
+    job = db.session.get(VectorUpdateState, job_id)
     if not job:
         abort(404)
 
@@ -1692,7 +1825,7 @@ def _keywords_from_metadata(metadata: dict) -> str:
 
 def _document_title_from_metadata(metadata: dict, document: Documento | None) -> str:
     """
-    Devuelve el título real del documento, evitando usar el nombre del PDF como título.
+    Devuelve el tÃ­tulo real del documento, evitando usar el nombre del PDF como tÃ­tulo.
     """
     metadata_title = str(metadata.get("title") or "").strip()
     if document is None:
@@ -1806,18 +1939,32 @@ def bulk_delete_documents() -> ResponseReturnValue:
         return redirect(request.referrer or url_for(DOCUMENTS))
 
     unique_ids = sorted(set(selected_ids))
+    lang = get_locale()
+    job = DocumentOperationState(
+        operation="delete",
+        status="queued",
+        progress=0,
+        message=translate_for(lang, JOBS_QUEUED_SHORT),
+        cancel_requested=False,
+        error=None,
+    )
+    db.session.add(job)
+    db.session.commit()
+
     app_obj = current_app._get_current_object()
-    job_key = uuid.uuid4().int & ((1 << 31) - 1)
     submit_tracked(
         document_executor,
         job_type=DOCUMENT_DELETE_JOB_TYPE,
-        tracked_job_id=job_key,
+        tracked_job_id=job.id,
         fn=delete_documents_async,
         app=app_obj,
+        job_id=job.id,
         doc_ids=unique_ids,
+        lang=lang,
     )
-    flash(f"Borrado encolado: {len(unique_ids)} documento(s) se eliminaran en segundo plano.", "info")
 
+    if wants_json_response():
+        return jsonify({"job_id": job.id}), 202
     return redirect(request.referrer or url_for(DOCUMENTS))
 
 
@@ -1835,17 +1982,32 @@ def delete_document(doc_id: int) -> ResponseReturnValue:
         Una redireccion a la pagina de documentos.
     """
     _validate_post_action()
+    lang = get_locale()
+    job = DocumentOperationState(
+        operation="delete",
+        status="queued",
+        progress=0,
+        message=translate_for(lang, JOBS_QUEUED_SHORT),
+        cancel_requested=False,
+        error=None,
+    )
+    db.session.add(job)
+    db.session.commit()
+
     app_obj = current_app._get_current_object()
     submit_tracked(
         document_executor,
         job_type=DOCUMENT_DELETE_JOB_TYPE,
-        tracked_job_id=doc_id,
+        tracked_job_id=job.id,
         fn=delete_documents_async,
         app=app_obj,
+        job_id=job.id,
         doc_ids=[doc_id],
+        lang=lang,
     )
-    flash("Borrado encolado: el documento se eliminara en segundo plano.", "info")
 
+    if wants_json_response():
+        return jsonify({"job_id": job.id}), 202
     return redirect(url_for(DOCUMENTS))
 
 
@@ -1862,7 +2024,7 @@ def download_document(doc_id: int) -> ResponseReturnValue:
     Returns:
         Una respuesta de archivo para descarga.
     """
-    doc = Documento.query.get_or_404(doc_id)
+    doc = db.get_or_404(Documento, doc_id)
     fmt = (request.args.get("format") or "pdf").strip().lower()
 
     if fmt == "markdown":
@@ -1892,7 +2054,7 @@ def view_document(doc_id: int) -> ResponseReturnValue:
     Returns:
         Una respuesta de archivo en modo visualizacion.
     """
-    doc = Documento.query.get_or_404(doc_id)
+    doc = db.get_or_404(Documento, doc_id)
     fmt = (request.args.get("format") or "pdf").strip().lower()
 
     if fmt == "markdown":
@@ -1927,3 +2089,5 @@ def view_document(doc_id: int) -> ResponseReturnValue:
         abort(404)
 
     return send_file(pdf_path, as_attachment=False, download_name=doc.nombre, mimetype="application/pdf")
+
+

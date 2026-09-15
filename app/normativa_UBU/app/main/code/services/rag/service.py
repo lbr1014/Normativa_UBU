@@ -410,7 +410,7 @@ def _document_for_retrieved_item(item: dict, metadata: dict) -> Documento | None
     document_id = item.get("document_id") or metadata.get("document_id")
     if document_id is not None:
         try:
-            document = Documento.query.get(int(document_id))
+            document = db.session.get(Documento, int(document_id))
             if document is not None:
                 return document
         except (TypeError, ValueError):

@@ -120,12 +120,15 @@ class ConversionMarkdownUnitTest(unittest.TestCase):
         self.assertEqual(imported.DEFAULT_NUM_GPU, 2)
         self.assertEqual(imported.OLLAMA_NUM_GPU_SOURCE, "env")
 
-        sys.modules["app.main.code.services.markdown.Conversion_markdown"] = conversion
-
         import runpy
 
-        with patch.object(sys, "argv", ["Conversion_markdown.py"]), self.assertRaises(SystemExit):
-            runpy.run_module("app.main.code.services.markdown.Conversion_markdown", run_name="__main__")
+        module_name = "app.main.code.services.markdown.Conversion_markdown"
+        sys.modules.pop(module_name, None)
+        try:
+            with patch.object(sys, "argv", ["Conversion_markdown.py"]), self.assertRaises(SystemExit):
+                runpy.run_module(module_name, run_name="__main__")
+        finally:
+            sys.modules[module_name] = conversion
 
     def test_import_auto_gpu_configuration_requests_gpu_when_env_is_missing_even_without_cuda(self):
         """
