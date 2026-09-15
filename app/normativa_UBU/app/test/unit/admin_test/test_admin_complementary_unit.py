@@ -78,14 +78,13 @@ class AdminRoutesAdditionalCoverageUnitTest(BaseAppTestCase):
         fake_form.validate_on_submit.return_value = True
         fake_form.files.data = MagicMock(filename="one.pdf")
         fake_service = MagicMock()
-        fake_service.save_uploads.return_value = 1
         with patch("app.main.code.controllers.admin.routes.PdfUploadForm", return_value=fake_form), patch(
             "app.main.code.controllers.admin.routes.documentos_service", return_value=fake_service
-        ):
+        ), patch("app.main.code.controllers.admin.routes.submit_tracked") as mock_submit:
             resp = self.client.post("/admin/documents/upload", follow_redirects=False)
         self.assertEqual(resp.status_code, 302)
-        args, _kwargs = fake_service.save_uploads.call_args
-        self.assertEqual(len(args[0]), 1)
+        mock_submit.assert_called_once()
+        self.assertEqual(len(mock_submit.call_args.kwargs["staged_files"]), 1)
 
     def test_status_endpoints_mark_jobs_stale(self):
         """
@@ -220,12 +219,11 @@ class AdminRoutesAdditionalCoverageUnitTest(BaseAppTestCase):
 
     def test_bulk_delete_documents_handles_error(self):
         """
-        Comprueba que los errores producidos durante la eliminación masiva de documentos son gestionados adecuadamente.
+        Comprueba que el borrado masivo se encola con identificadores unicos.
         """
-        with patch("app.main.code.controllers.admin.routes.documentos_service") as mock_svc, patch.object(
-            self.app.logger, "exception"
-        ):
-            mock_svc.return_value.delete_document.side_effect = RuntimeError("boom")
+        with patch("app.main.code.controllers.admin.routes.submit_tracked") as mock_submit:
             resp = self.client.post("/admin/documents/bulk-delete", data={"selected_doc_ids": ["1", "1"]})
-        self.assertEqual(resp.status_code, 500)
+        self.assertEqual(resp.status_code, 302)
+        mock_submit.assert_called_once()
+        self.assertEqual(mock_submit.call_args.kwargs["doc_ids"], [1])
 

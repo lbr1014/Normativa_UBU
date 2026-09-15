@@ -177,9 +177,9 @@ class AdminRoutesAdditionalCoverageIntegrationTest(BaseAppTestCase):
         empty = self.client.post("/admin/documents/bulk-delete", data={"selected_doc_ids": []}, follow_redirects=False)
         self.assertEqual(empty.status_code, 302)
 
-        fake_service = MagicMock()
-        with patch("app.main.code.controllers.admin.routes.documentos_service", return_value=fake_service):
+        with patch("app.main.code.controllers.admin.routes.submit_tracked") as mock_submit:
             ok = self.client.post("/admin/documents/bulk-delete", data={"selected_doc_ids": ["1", "1"]}, follow_redirects=False)
         self.assertEqual(ok.status_code, 302)
-        fake_service.delete_document.assert_called_once_with(1)
+        mock_submit.assert_called_once()
+        self.assertEqual(mock_submit.call_args.kwargs["doc_ids"], [1])
 

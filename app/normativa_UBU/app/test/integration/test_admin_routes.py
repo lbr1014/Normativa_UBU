@@ -144,7 +144,9 @@ class AdminRoutesIntegrationTest(BaseAppTestCase):
         """
         fake_service = MagicMock()
 
-        with patch("app.main.code.controllers.admin.routes.documentos_service", return_value=fake_service):
+        with patch("app.main.code.controllers.admin.routes.documentos_service", return_value=fake_service), patch(
+            "app.main.code.controllers.admin.routes.submit_tracked"
+        ) as mock_submit:
             response = self.client.post(
                 "/admin/documents/upload",
                 data={"files": (BytesIO(b"%PDF-1.4"), "nuevo.pdf")},
@@ -153,7 +155,8 @@ class AdminRoutesIntegrationTest(BaseAppTestCase):
             )
 
         self.assertEqual(response.status_code, 302)
-        fake_service.save_uploads.assert_called_once()
+        fake_service.save_uploads.assert_not_called()
+        mock_submit.assert_called_once()
 
     def test_admin_upload_documents_redirects_on_invalid_form_or_no_valid_pdf(self):
         """
@@ -385,11 +388,12 @@ class AdminRoutesIntegrationTest(BaseAppTestCase):
         """
         fake_service = MagicMock()
 
-        with patch("app.main.code.controllers.admin.routes.documentos_service", return_value=fake_service):
+        with patch("app.main.code.controllers.admin.routes.submit_tracked") as mock_submit:
             response = self.client.post("/admin/documents/123/delete", follow_redirects=False)
 
         self.assertEqual(response.status_code, 302)
-        fake_service.delete_document.assert_called_once_with(123)
+        mock_submit.assert_called_once()
+        self.assertEqual(mock_submit.call_args.kwargs["doc_ids"], [123])
 
     def test_admin_delete_document_returns_500_when_service_fails(self):
         """
@@ -398,16 +402,15 @@ class AdminRoutesIntegrationTest(BaseAppTestCase):
         fake_service = MagicMock()
         fake_service.delete_document.side_effect = RuntimeError("boom")
 
-        with patch("app.main.code.controllers.admin.routes.documentos_service", return_value=fake_service), patch.object(
-            self.app.logger, "exception"
-        ):
+        with patch("app.main.code.controllers.admin.routes.submit_tracked") as mock_submit:
             response = self.client.post(
                 "/admin/documents/123/delete",
                 follow_redirects=False,
                 headers={"Accept": "application/json"},
             )
 
-        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.status_code, 302)
+        mock_submit.assert_called_once()
 
     def test_admin_can_view_and_download_pdf_from_document_row(self):
         """
